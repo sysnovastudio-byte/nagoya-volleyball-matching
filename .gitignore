@@ -1,0 +1,68 @@
+# ===== 秘密情報（絶対にコミットしない） =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.ppk
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+credentials*.json
+service-account*.json
+*secret*.json
+.npmrc
+.dev.vars
+.dev.vars.*
+
+# ===== データベースのダンプ（個人情報を含み得る） =====
+*.dump
+*.backup
+*.bak
+/backups/
+/dumps/
+
+# ===== Supabase CLI のローカル生成物 =====
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# ===== Cloudflare / Wrangler =====
+.wrangler/
+
+# ===== Node.js / ビルド成果物 =====
+node_modules/
+dist/
+dist-ssr/
+build/
+coverage/
+.vite/
+*.local
+*.tsbuildinfo
+.eslintcache
+
+# ===== Playwright（認証状態・実行結果） =====
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+playwright/.auth/
+
+# ===== ログ =====
+logs/
+*.log
+
+# ===== Claude Code の個人設定 =====
+.claude/settings.local.json
+CLAUDE.local.md
+
+# ===== OS / エディタ =====
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
