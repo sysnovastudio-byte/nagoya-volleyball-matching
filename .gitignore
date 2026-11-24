@@ -24,6 +24,13 @@ service-account*.json
 /backups/
 /dumps/
 
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
 # ===== Supabase CLI のローカル生成物 =====
 supabase/.branches/
 supabase/.temp/
