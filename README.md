@@ -25,14 +25,14 @@
 
 詳細は [機能一覧](docs/04_機能一覧.md) を参照してください。
 
-## 技術構成（推奨・最終確定前）
+## 技術構成
 
 | 区分 | 技術 |
 |---|---|
 | フロントエンド | React / TypeScript / Vite |
 | 画面 | Tailwind CSS / shadcn/ui |
 | バックエンド | Supabase（PostgreSQL / Auth / Storage / Realtime） |
-| 公開環境 | Cloudflare Pages（Workers Static Assetsと比較検討中） |
+| 公開環境 | Cloudflare Workers Static Assets |
 | テスト | Playwright |
 | 開発 | Git / GitHub / Claude Code |
 
@@ -94,6 +94,7 @@ nagoya-volleyball-matching/
 | [08_開発ルール](docs/08_開発ルール.md) | Git、コーディング、テスト、秘密情報 |
 | [09_未決定事項](docs/09_未決定事項.md) | 決まっていない事項と決定記録 |
 | [10_画面一覧](docs/10_画面一覧.md) | 画面、機能IDとの対応、画面遷移 |
+| [11_詳細仕様](docs/11_詳細仕様.md) | 決定した詳細仕様（数値、選択肢、運用） |
 
 ## 今後の開発予定
 
