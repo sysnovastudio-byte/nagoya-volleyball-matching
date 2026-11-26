@@ -7,6 +7,11 @@ import {
   type DevApplicationRecord,
   type DevEventRecord,
 } from './devEvents';
+import {
+  createDevConversations,
+  type DevConversationRecord,
+  type DevMessageRecord,
+} from './devConversations';
 import { createDevUsers, type DevUser } from './devUsers';
 import { markDevModule } from './marker';
 
@@ -29,9 +34,13 @@ export interface DevDatabase {
   agreements: { userId: string; document: AgreementDocument; version: string; agreedAt: Date }[];
   /** 新規登録して、メール認証を待っている利用者のID。新しいものが後ろ */
   pendingVerifications: string[];
+  /** 会話（docs/06の4-7）とメッセージ（4-8） */
+  conversations: DevConversationRecord[];
+  messages: DevMessageRecord[];
 }
 
 export function createDevDatabase(now: Date): DevDatabase {
+  const { conversations, messages } = createDevConversations(now);
   return {
     users: createDevUsers(),
     events: createDevEvents(now),
@@ -40,6 +49,8 @@ export function createDevDatabase(now: Date): DevDatabase {
     eventCreations: [],
     agreements: [],
     pendingVerifications: [],
+    conversations,
+    messages,
   };
 }
 
