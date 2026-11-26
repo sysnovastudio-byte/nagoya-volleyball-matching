@@ -83,7 +83,7 @@ export function createDevConversationRepository({
       if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
       if (!user.profile) return Promise.resolve({ status: 'rejected', reason: 'profileRequired' });
       const record = db.events.find((event) => event.id === eventId);
-      // 主催者からの開始（MSG-06）は、サイクル1では作らない
+      // 主催者からの開始（MSG-06）は、startConversationWithApplicant で行う
       if (!record || record.hostId === user.id) {
         return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
       }
@@ -116,6 +116,54 @@ export function createDevConversationRepository({
         eventId,
         hostId: record.hostId,
         inquirerId: user.id,
+        startedBy: user.id,
+        createdAt: current,
+        lastMessageAt: null,
+      };
+      db.conversations.push(conversation);
+      return Promise.resolve({ status: 'opened', conversationId: conversation.id });
+    },
+
+    startConversationWithApplicant: (applicationId) => {
+      const user = currentUser();
+      if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
+      if (!user.profile) return Promise.resolve({ status: 'rejected', reason: 'profileRequired' });
+      const application = db.applications.find((item) => item.id === applicationId);
+      const record = application && db.events.find((event) => event.id === application.eventId);
+      // 自分の募集の申請だけ。他人の募集の申請は、ない場合と同じに扱う
+      if (!application || !record || record.hostId !== user.id) {
+        return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
+      }
+
+      // すでにある会話は、期限などを判定する前に返す（docs/06の5-0）
+      const existing = db.conversations.find(
+        (conversation) =>
+          conversation.eventId === record.id && conversation.inquirerId === application.userId,
+      );
+      if (existing) return Promise.resolve({ status: 'opened', conversationId: existing.id });
+
+      // 【未実装】ブロックと、新しい会話の回数（1日10件）の判定は、ここに加える（サイクル3）
+      const current = now();
+      // 相手の最新の申請が、承認待ち・承認済みであること（docs/11の3-1）
+      const latest = db.applications.findLast(
+        (item) => item.eventId === record.id && item.userId === application.userId,
+      );
+      const allowed =
+        latest?.id === application.id &&
+        (application.status === 'pending' || application.status === 'approved') &&
+        // 退会した人とは始めない
+        findDevUser(db, application.userId) !== undefined &&
+        // 送信できる期間内で、非表示でない（DB-10）
+        !record.hidden &&
+        current <= sendableUntil(record.endsAt);
+      if (!allowed) return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
+
+      const conversation: DevConversationRecord = {
+        id: `dev-conv-new-${db.conversations.length + 1}`,
+        eventId: record.id,
+        hostId: user.id,
+        inquirerId: application.userId,
+        // 始めた人の一覧だけに、メッセージのない会話を示す（DB-29）
         startedBy: user.id,
         createdAt: current,
         lastMessageAt: null,

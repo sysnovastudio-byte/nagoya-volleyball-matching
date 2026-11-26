@@ -8,6 +8,7 @@ import { useResource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
+import { StartApplicantConversationButton } from '../conversations/StartApplicantConversationButton';
 import { EventStateBadge } from '../events/EventStateBadge';
 import { EVENT_LIMITS } from '../events/eventRules';
 import { ageGroupLabel } from '../profiles/profileRules';
@@ -48,8 +49,8 @@ function tabOf(applicant: Applicant): Tab {
 }
 
 /**
- * SCR-008 申請者一覧（APP-02〜05・APP-11）。主催者だけが見られる。スマートフォンはカード、PC（1024px以上）は表。
- * 会話の開始（MSG-06）は、PR 2-5 で加える。
+ * SCR-008 申請者一覧（APP-02〜05・APP-11・MSG-06）。主催者だけが見られる。
+ * スマートフォンはカード、PC（1024px以上）は表。
  */
 export function ApplicantsPage() {
   const { eventId = '' } = useParams();
@@ -283,47 +284,63 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
           applicants={shown}
           renderActions={(applicant) => {
             const isConfirming = confirming?.id === applicant.applicationId;
+            // 主催者からの会話は、承認待ち・承認済みの人とだけ始められる（docs/11の3-1）
+            const conversation = (applicant.status === 'pending' ||
+              applicant.status === 'approved') &&
+              !applicant.profile.isWithdrawn && (
+                <StartApplicantConversationButton
+                  applicationId={applicant.applicationId}
+                  name={displayName(applicant.profile)}
+                  eventEndsAt={event.endsAt}
+                />
+              );
             if (applicant.status === 'approved') {
               return (
-                <RevokeActions
+                <>
+                  <RevokeActions
+                    name={displayName(applicant.profile)}
+                    visible={event.canDecide}
+                    busy={busyId === applicant.applicationId}
+                    disabled={busyId !== null}
+                    confirming={isConfirming && confirming.kind === 'revoke'}
+                    onAsk={() => {
+                      setConfirming({ id: applicant.applicationId, kind: 'revoke' });
+                    }}
+                    onCancel={() => {
+                      setConfirming(null);
+                    }}
+                    onRevoke={(reason) => void revoke(applicant, reason)}
+                  />
+                  {conversation}
+                </>
+              );
+            }
+            return (
+              <>
+                <DecisionActions
                   name={displayName(applicant.profile)}
-                  visible={event.canDecide}
+                  visible={event.canDecide && applicant.status === 'pending'}
+                  canApprove={!isFull || expandTo !== null}
+                  expandTo={expandTo}
                   busy={busyId === applicant.applicationId}
                   disabled={busyId !== null}
-                  confirming={isConfirming && confirming.kind === 'revoke'}
-                  onAsk={() => {
-                    setConfirming({ id: applicant.applicationId, kind: 'revoke' });
+                  confirming={isConfirming ? confirming.kind : null}
+                  onApprove={() => {
+                    // 定員を増やす場合は、確認してから承認する
+                    if (expandTo === null) void decide(applicant, 'approve');
+                    else setConfirming({ id: applicant.applicationId, kind: 'expand' });
+                  }}
+                  onConfirmApprove={() => void decide(applicant, 'approve')}
+                  onAskReject={() => {
+                    setConfirming({ id: applicant.applicationId, kind: 'reject' });
                   }}
                   onCancel={() => {
                     setConfirming(null);
                   }}
-                  onRevoke={(reason) => void revoke(applicant, reason)}
+                  onReject={() => void decide(applicant, 'reject')}
                 />
-              );
-            }
-            return (
-              <DecisionActions
-                name={displayName(applicant.profile)}
-                visible={event.canDecide && applicant.status === 'pending'}
-                canApprove={!isFull || expandTo !== null}
-                expandTo={expandTo}
-                busy={busyId === applicant.applicationId}
-                disabled={busyId !== null}
-                confirming={isConfirming ? confirming.kind : null}
-                onApprove={() => {
-                  // 定員を増やす場合は、確認してから承認する
-                  if (expandTo === null) void decide(applicant, 'approve');
-                  else setConfirming({ id: applicant.applicationId, kind: 'expand' });
-                }}
-                onConfirmApprove={() => void decide(applicant, 'approve')}
-                onAskReject={() => {
-                  setConfirming({ id: applicant.applicationId, kind: 'reject' });
-                }}
-                onCancel={() => {
-                  setConfirming(null);
-                }}
-                onReject={() => void decide(applicant, 'reject')}
-              />
+                {conversation}
+              </>
             );
           }}
         />
@@ -409,7 +426,9 @@ function ApplicantCollection({ applicants, renderActions }: ApplicantCollectionP
               <td className="px-4 py-3 whitespace-nowrap">
                 <StatusBadge applicant={applicant} />
               </td>
-              <td className="w-64 px-4 py-3">{renderActions(applicant)}</td>
+              <td className="w-64 px-4 py-3">
+                <div className="flex flex-col items-start gap-2">{renderActions(applicant)}</div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -501,7 +520,7 @@ function ApplicantCard({ applicant, children }: ApplicantCardProps) {
           </p>
         </div>
       </div>
-      <div className="mt-3 empty:hidden">{children}</div>
+      <div className="mt-3 flex flex-col items-start gap-2 empty:hidden">{children}</div>
     </li>
   );
 }

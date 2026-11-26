@@ -1655,6 +1655,42 @@ describe('主催者に質問する（SCR-006）', () => {
   });
 });
 
+describe('主催者からの会話の開始（SCR-008）', () => {
+  it('承認待ちの申請者と会話を始め、会話へ移る', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    await user.click(await screen.findByRole('button', { name: 'こはるさんと会話を始める' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'こはる' })).toBeInTheDocument();
+    expect(db.conversations.at(-1)).toMatchObject({
+      eventId: HOSTED_EVENT,
+      inquirerId: 'dev-user-minor',
+      startedBy: HOST,
+    });
+  });
+
+  it('承認済みの人にも示し、却下した人には示さない', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    await screen.findByRole('region', { name: '定員と承認済みの数' });
+    await user.click(screen.getByRole('button', { name: /承認済み/ }));
+    expect(screen.getByRole('button', { name: 'ひなたさんと会話を始める' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /そのほか/ }));
+    expect(screen.queryByRole('button', { name: /と会話を始める$/ })).not.toBeInTheDocument();
+  });
+
+  it('送信できる期間を過ぎた募集では、示さない', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/dev-b-ended/applicants', { userId: HOST });
+
+    await screen.findByRole('region', { name: '定員と承認済みの数' });
+    await user.click(screen.getByRole('button', { name: /承認済み/ }));
+    expect(screen.queryByRole('button', { name: /と会話を始める$/ })).not.toBeInTheDocument();
+  });
+});
+
 describe('会話一覧（SCR-010）', () => {
   it('当事者の会話だけを、相手・募集・日時で示す。非表示の募集はタイトルを出さない', async () => {
     renderApp('/conversations', { userId: 'dev-user-a' });

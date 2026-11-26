@@ -11,7 +11,7 @@ import { useConversationRepository } from './repositoryContext';
  * 主催者との会話を開くか（表示のためだけの判定）。開始できるかは窓口（本番はDB）が決める（DB-10）。
  * - 申請前・承認待ちなど：開催開始まで。中止の募集では出さない
  * - 承認済み：送信できる期間内（終了日時の7日後まで）
- * - 主催者には、自分の募集で出さない（主催者からの開始 MSG-06 は作らない）
+ * - 主催者には、自分の募集で出さない（主催者からは、申請者一覧で始める。MSG-06）
  */
 export function canOpenHostConversation(event: EventDetail, now: Date) {
   if (event.isHost) return false;
