@@ -42,7 +42,7 @@ function renderApp(
       session.setUserId(next);
     });
   };
-  return { db, switchUser };
+  return { db, session, switchUser };
 }
 
 /** 日本時間で、今日から数えた日の時刻を datetime-local の形で返す。 */
@@ -95,9 +95,7 @@ describe('要ログインの画面', () => {
   it('未ログインならログイン画面へ移り、ログインすると元の画面に戻る', async () => {
     const { switchUser } = renderApp('/events/new');
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'ログインは準備中です' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'ログイン' })).toBeInTheDocument();
 
     switchUser('dev-user-a');
 
@@ -352,9 +350,7 @@ describe('設定', () => {
   it('未ログインで開くと、ログイン画面へ移る', async () => {
     const { switchUser } = renderApp('/settings');
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'ログインは準備中です' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'ログイン' })).toBeInTheDocument();
     switchUser('dev-user-a');
     expect(await screen.findByRole('button', { name: 'ログアウト' })).toBeInTheDocument();
   });
@@ -609,5 +605,142 @@ describe('申請者一覧（PC）', () => {
 
     expect(await screen.findByRole('button', { name: 'こはるさんを承認する' })).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('ログイン（SCR-001）', () => {
+  it('ダミーの利用者でログインすることを示し、送信すると元の画面に戻る', async () => {
+    const user = userEvent.setup();
+    renderApp('/login?next=%2Factivity');
+
+    expect(await screen.findByText(/ダミーの利用者でログインします/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/メールアドレス/), 'test@example.com');
+    await user.type(screen.getByLabelText(/パスワード/), 'password');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請と募集' }),
+    ).toBeInTheDocument();
+  });
+
+  it('入力の形式が違う場合は、送らずに項目の近くに示す', async () => {
+    const user = userEvent.setup();
+    const { session } = renderApp('/login');
+
+    await user.type(await screen.findByLabelText(/メールアドレス/), 'test');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    expect(screen.getByText('メールアドレスの形式で入力してください。')).toBeInTheDocument();
+    expect(screen.getByText('パスワードを入力してください。')).toBeInTheDocument();
+    expect(session.getUserId()).toBeNull();
+  });
+
+  it('外部のサイトへの戻り先は受け付けず、ホームに戻る', async () => {
+    const user = userEvent.setup();
+    renderApp('/login?next=https%3A%2F%2Fexample.com%2F');
+
+    await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
+    await user.type(screen.getByLabelText(/パスワード/), 'password');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'バレーしたい人、集まれ！' }),
+    ).toBeInTheDocument();
+  });
+
+  it('パスワード再設定は、準備中と示すだけ', async () => {
+    renderApp('/login');
+
+    expect(
+      await screen.findByText('パスワードを忘れた場合の再設定は、準備中です。'),
+    ).toBeInTheDocument();
+    // 上部の帯とログイン画面の両方にある
+    for (const link of screen.getAllByRole('link', { name: '新規登録' })) {
+      expect(link).toHaveAttribute('href', '/signup');
+    }
+  });
+});
+
+describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
+  async function fillSignUp(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
+    await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
+    await user.click(screen.getByLabelText('18歳以上'));
+    await user.click(screen.getByLabelText('利用規約に同意します'));
+    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
+    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+  }
+
+  it('同意の欄は3つが別々で、最初はすべて未選択', async () => {
+    renderApp('/signup');
+
+    const boxes = [
+      await screen.findByLabelText('利用規約に同意します'),
+      screen.getByLabelText('プライバシーポリシーに同意します'),
+      screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/),
+    ];
+    for (const box of boxes) expect(box).not.toBeChecked();
+    expect(screen.getByLabelText('18歳以上')).not.toBeChecked();
+    expect(screen.getByLabelText('18歳未満（保護者の同意あり）')).not.toBeChecked();
+    expect(screen.getByText(/版：\s*仮-0/)).toBeInTheDocument();
+  });
+
+  it('18歳未満を選ぶと、保護者の同意の確認を出し、未選択なら登録しない', async () => {
+    const user = userEvent.setup();
+    renderApp('/signup');
+    await fillSignUp(user);
+
+    await user.click(screen.getByLabelText('18歳未満（保護者の同意あり）'));
+    const consent = screen.getByLabelText('保護者が規約等を確かめ、利用に同意しています');
+    expect(consent).not.toBeChecked();
+    await user.click(screen.getByRole('button', { name: '登録する' }));
+
+    expect(screen.getByText('18歳未満の方は、保護者の同意が必要です。')).toBeInTheDocument();
+    expect(consent).toHaveFocus();
+  });
+
+  it('同意しないと登録しない', async () => {
+    const user = userEvent.setup();
+    renderApp('/signup');
+    await fillSignUp(user);
+    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
+
+    await user.click(screen.getByRole('button', { name: '登録する' }));
+
+    expect(screen.getByText('プライバシーポリシーへの同意が必要です。')).toBeInTheDocument();
+    expect(screen.queryByText('利用規約への同意が必要です。')).not.toBeInTheDocument();
+  });
+
+  it('登録 → 認証 → プロフィール入力へ進む', async () => {
+    const user = userEvent.setup();
+    const { session } = renderApp('/signup');
+    await fillSignUp(user);
+
+    await user.click(screen.getByRole('button', { name: '登録する' }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '認証メールを送りました' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/リンクの有効期限は、送ってから1時間です/)).toBeInTheDocument();
+    expect(session.getUserId()).toBeNull();
+
+    await user.click(screen.getByRole('link', { name: '認証に成功するリンク' }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'メールアドレスを確認しました' }),
+    ).toBeInTheDocument();
+    expect(session.getUserId()).toBe('dev-registered-1');
+    expect(screen.getByRole('link', { name: 'プロフィールを入力する' })).toHaveAttribute(
+      'href',
+      '/profile/edit',
+    );
+  });
+
+  it.each([
+    ['dev-verify-expired', 'リンクの有効期限が切れています'],
+    ['dev-verify-invalid', 'このリンクは使えません'],
+    ['', 'このリンクは使えません'],
+  ])('認証のリンク（%s）の案内', async (token, heading) => {
+    renderApp(`/auth/confirm?token=${token}`);
+
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
   });
 });

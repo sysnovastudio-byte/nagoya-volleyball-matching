@@ -1,9 +1,11 @@
 import { createRoutesFromElements, Route } from 'react-router';
 import { ActivityPage } from '../features/applications/ActivityPage';
 import { ApplicantsPage } from '../features/applications/ApplicantsPage';
+import { ConfirmEmailPage, VerificationSentPage } from '../features/auth/EmailVerificationPages';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireLogin } from '../features/auth/RequireLogin';
 import { SessionProvider } from '../features/auth/SessionProvider';
+import { SignUpPage } from '../features/auth/SignUpPage';
 import { CreateEventPage } from '../features/events/CreateEventPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventListPage } from '../features/events/EventListPage';
@@ -31,7 +33,9 @@ export const appRoutes = createRoutesFromElements(
     <Route index element={<EventListPage />} />
     <Route path="events/:eventId" element={<EventDetailPage />} />
     <Route path="login" element={<LoginPage />} />
-    <Route path="signup" element={<PendingPage title="新規登録" />} />
+    <Route path="signup" element={<SignUpPage />} />
+    <Route path="signup/sent" element={<VerificationSentPage />} />
+    <Route path="auth/confirm" element={<ConfirmEmailPage />} />
 
     {/* 要ログインの画面。仮の画面は、作るときに置き換える */}
     <Route element={<RequireLogin />}>

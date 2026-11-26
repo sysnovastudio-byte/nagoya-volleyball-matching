@@ -28,6 +28,10 @@ export default function DevBar() {
             }}
             className="min-h-11 rounded-lg border border-white bg-ink px-2 text-white"
           >
+            {/* 新規登録したダミーの利用者は、帯の選択肢にないため加える */}
+            {userId !== null && !DEV_PERSONAS.some((persona) => persona.userId === userId) && (
+              <option value={userId}>新規登録したダミーの利用者</option>
+            )}
             {DEV_PERSONAS.map((persona) => (
               <option key={persona.label} value={persona.userId ?? GUEST_VALUE}>
                 {persona.label}

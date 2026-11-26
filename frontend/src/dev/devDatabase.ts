@@ -1,3 +1,4 @@
+import type { AgreementDocument } from '../features/auth/types';
 import type { EventLocation, EventState } from '../features/events/types';
 import {
   createDevApplications,
@@ -24,6 +25,10 @@ export interface DevDatabase {
   applications: DevApplicationRecord[];
   /** 募集の作成の記録。回数の上限に使う（docs/06の4-16の rate_limit_events） */
   eventCreations: { userId: string; at: Date }[];
+  /** 規約等への同意の記録（docs/06の4-17）。日時はダミー */
+  agreements: { userId: string; document: AgreementDocument; version: string; agreedAt: Date }[];
+  /** 新規登録して、メール認証を待っている利用者のID。新しいものが後ろ */
+  pendingVerifications: string[];
 }
 
 export function createDevDatabase(now: Date): DevDatabase {
@@ -33,6 +38,8 @@ export function createDevDatabase(now: Date): DevDatabase {
     locations: createDevLocations(),
     applications: createDevApplications(now),
     eventCreations: [],
+    agreements: [],
+    pendingVerifications: [],
   };
 }
 
