@@ -52,7 +52,7 @@ export function useEventList() {
 
   useEffect(() => {
     let active = true;
-    repository.list().then(
+    repository.listEvents().then(
       (result) => {
         if (active) dispatch({ type: 'loaded', result });
       },
@@ -73,7 +73,7 @@ export function useEventList() {
     if (state.status !== 'ready' || state.nextCursor === null || state.more === 'loading') return;
     dispatch({ type: 'moreStarted' });
     try {
-      const result = await repository.list(state.nextCursor);
+      const result = await repository.listEvents(state.nextCursor);
       dispatch({ type: 'moreLoaded', result });
     } catch {
       dispatch({ type: 'moreFailed' });

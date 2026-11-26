@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 
-type Tone = 'main' | 'neutral';
+type Tone = 'main' | 'neutral' | 'accent';
 
 const TONES: Record<Tone, string> = {
   main: 'bg-main-tint text-main-strong',
   neutral: 'bg-line text-sub',
+  // 白い文字はコントラストが足りないため使わない（docs/11の5-2）
+  accent: 'bg-accent text-ink',
 };
 
 interface BadgeProps {

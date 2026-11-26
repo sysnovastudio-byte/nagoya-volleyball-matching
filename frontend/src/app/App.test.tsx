@@ -2,11 +2,13 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
+import { AuthRepositoryContext } from '../features/auth/repositoryContext';
+import type { AuthRepository } from '../features/auth/types';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
-import type { EventRepository, PublicEvent } from '../features/events/types';
+import type { EventDetail, EventRepository } from '../features/events/types';
 import { App } from './App';
 
-const EVENT: PublicEvent = {
+const EVENT: EventDetail = {
   id: 'event-1',
   title: 'テスト用の募集',
   startsAt: '2026-12-05T04:00:00Z',
@@ -20,23 +22,35 @@ const EVENT: PublicEvent = {
   fee: 500,
   hostNickname: 'そら',
   state: 'open',
+  isHost: false,
+};
+
+/** 未ログインのまま変わらない窓口。 */
+const guestAuth: AuthRepository = {
+  getViewer: () => Promise.resolve(null),
+  onViewerChange: () => () => undefined,
+  signOut: () => Promise.resolve(),
 };
 
 function createRepository(overrides: Partial<EventRepository> = {}): EventRepository {
   return {
-    list: () => Promise.resolve({ items: [EVENT], nextCursor: null }),
-    get: (id) => Promise.resolve(id === EVENT.id ? EVENT : null),
+    listEvents: () => Promise.resolve({ items: [EVENT], nextCursor: null }),
+    getEvent: (id) => Promise.resolve(id === EVENT.id ? EVENT : null),
+    getLocation: () => Promise.resolve(null),
+    createEvent: () => Promise.reject(new Error('使わない')),
     ...overrides,
   };
 }
 
 function renderApp(path: string, repository = createRepository()) {
   render(
-    <EventRepositoryContext value={repository}>
-      <MemoryRouter initialEntries={[path]}>
-        <App />
-      </MemoryRouter>
-    </EventRepositoryContext>,
+    <AuthRepositoryContext value={guestAuth}>
+      <EventRepositoryContext value={repository}>
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+        </MemoryRouter>
+      </EventRepositoryContext>
+    </AuthRepositoryContext>,
   );
 }
 
@@ -59,7 +73,7 @@ describe('募集一覧', () => {
   it('募集がない場合の案内を表示する', async () => {
     renderApp(
       '/',
-      createRepository({ list: () => Promise.resolve({ items: [], nextCursor: null }) }),
+      createRepository({ listEvents: () => Promise.resolve({ items: [], nextCursor: null }) }),
     );
 
     expect(await screen.findByText('募集はまだありません')).toBeInTheDocument();
@@ -68,10 +82,10 @@ describe('募集一覧', () => {
   it('失敗した場合は、やり直せる', async () => {
     const user = userEvent.setup();
     const list = vi
-      .fn<EventRepository['list']>()
+      .fn<EventRepository['listEvents']>()
       .mockRejectedValueOnce(new Error('失敗'))
       .mockResolvedValue({ items: [EVENT], nextCursor: null });
-    renderApp('/', createRepository({ list }));
+    renderApp('/', createRepository({ listEvents: list }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('募集を読み込めませんでした');
     await user.click(screen.getByRole('button', { name: 'もう一度読み込む' }));
@@ -83,10 +97,10 @@ describe('募集一覧', () => {
     const user = userEvent.setup();
     const next = { ...EVENT, id: 'event-2', title: '続きの募集' };
     const list = vi
-      .fn<EventRepository['list']>()
+      .fn<EventRepository['listEvents']>()
       .mockResolvedValueOnce({ items: [EVENT], nextCursor: EVENT.id })
       .mockResolvedValueOnce({ items: [next], nextCursor: null });
-    renderApp('/', createRepository({ list }));
+    renderApp('/', createRepository({ listEvents: list }));
 
     await user.click(await screen.findByRole('button', { name: '続きを読み込む' }));
 
@@ -116,11 +130,22 @@ describe('募集詳細（未ログイン）', () => {
     expect(await screen.findByText('参加が承認された人だけに表示されます。')).toBeInTheDocument();
   });
 
-  it('受付中は、ログインと新規登録へ移動できる', async () => {
+  it('受付中は、ログインと新規登録へ移動できる。ログイン後の戻り先を付ける', async () => {
     renderApp('/events/event-1');
 
     const links = await screen.findAllByRole('link', { name: 'ログインして申請する' });
-    for (const link of links) expect(link).toHaveAttribute('href', '/login');
+    for (const link of links) {
+      expect(link).toHaveAttribute('href', '/login?next=%2Fevents%2Fevent-1');
+    }
+  });
+
+  it('主催者向けの住所と操作は出さない', async () => {
+    const getLocation = vi.fn<EventRepository['getLocation']>();
+    renderApp('/events/event-1', createRepository({ getLocation }));
+
+    await screen.findByRole('heading', { level: 1, name: EVENT.title });
+    expect(screen.queryByRole('link', { name: '申請者を見る' })).not.toBeInTheDocument();
+    expect(getLocation).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -130,7 +155,7 @@ describe('募集詳細（未ログイン）', () => {
   ] as const)('%s では申請の操作を出さず、理由を示す', async (state, reason) => {
     renderApp(
       '/events/event-1',
-      createRepository({ get: () => Promise.resolve({ ...EVENT, state }) }),
+      createRepository({ getEvent: () => Promise.resolve({ ...EVENT, state }) }),
     );
 
     expect((await screen.findAllByText(reason)).length).toBeGreaterThan(0);
@@ -146,7 +171,15 @@ describe('募集詳細（未ログイン）', () => {
 
 describe('まだない画面', () => {
   it('準備中であることを示す', () => {
+    renderApp('/signup');
+
+    expect(screen.getByText('新規登録は準備中です')).toBeInTheDocument();
+  });
+
+  it('ログイン画面では、開発用の帯で切り替えるよう案内する', () => {
     renderApp('/login');
+
+    expect(screen.getByText(/開発用の帯で利用者を切り替えてください/)).toBeInTheDocument();
 
     expect(screen.getByText('ログインは準備中です')).toBeInTheDocument();
   });

@@ -1,16 +1,16 @@
-import type { PublicEvent } from '../types';
+import type { EventLocation, PublicEvent } from '../features/events/types';
+import { markDevModule } from './marker';
 
-/**
- * 【開発専用】架空の募集。本番のデータではない。
- * 本番用のビルドに入っていないことを scripts/check-dist.mjs が確かめるための目印。
- */
-export const DEV_DATA_MARKER = 'DEV-ONLY-DUMMY-DATA';
+markDevModule('DEV-ONLY-DUMMY-DATA:devEvents');
 
-/** 保存されている募集の形。画面に返す前に、状態と残り枠を計算する。 */
-export interface DevEventRecord extends Omit<PublicEvent, 'remaining' | 'state'> {
+/** 【開発専用】保存されている募集の形。画面に返す前に、状態・残り枠・主催者の名前を決める。 */
+export interface DevEventRecord extends Omit<PublicEvent, 'remaining' | 'state' | 'hostNickname'> {
+  hostId: string;
   approvedCount: number;
   status: 'open' | 'closed' | 'cancelled';
   hidden: boolean;
+  /** 作成した画面から送られた二重送信の防止の値。最初からある募集は null */
+  clientRequestId: string | null;
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -29,7 +29,7 @@ function jst(now: Date, daysFromNow: number, hour: number, minute = 0) {
   return new Date(utc - JST_OFFSET_MS).toISOString();
 }
 
-/** 住所・連絡先・実在の人や団体を含めない。 */
+/** 架空の募集。実在の住所・連絡先・人や団体を含めない。 */
 export function createDevEvents(now: Date): DevEventRecord[] {
   return [
     {
@@ -45,9 +45,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 12,
       approvedCount: 9,
       fee: 500,
-      hostNickname: 'そら',
+      hostId: 'dev-user-b',
       status: 'open',
       hidden: false,
+      clientRequestId: null,
     },
     {
       id: 'dev-easy-morning',
@@ -61,9 +62,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 10,
       approvedCount: 10,
       fee: 300,
-      hostNickname: 'はる',
+      hostId: 'dev-host-haru',
       status: 'open',
       hidden: false,
+      clientRequestId: null,
     },
     {
       id: 'dev-weekday-night',
@@ -77,9 +79,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 14,
       approvedCount: 13,
       fee: 700,
-      hostNickname: 'みなと',
+      hostId: 'dev-host-minato',
       status: 'open',
       hidden: false,
+      clientRequestId: null,
     },
     {
       id: 'dev-spike-practice',
@@ -93,9 +96,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 8,
       approvedCount: 6,
       fee: 600,
-      hostNickname: 'つばさ',
+      hostId: 'dev-host-tsubasa',
       status: 'closed',
       hidden: false,
+      clientRequestId: null,
     },
     {
       id: 'dev-family-morning',
@@ -109,9 +113,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 16,
       approvedCount: 10,
       fee: 0,
-      hostNickname: 'ゆい',
+      hostId: 'dev-host-yui',
       status: 'open',
       hidden: false,
+      clientRequestId: null,
     },
     // ここから下は、未ログインの一覧に出ないことを確かめるためのもの
     {
@@ -126,9 +131,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 10,
       approvedCount: 4,
       fee: 400,
-      hostNickname: 'そら',
+      hostId: 'dev-user-b',
       status: 'open',
       hidden: false,
+      clientRequestId: null,
     },
     {
       id: 'dev-ended',
@@ -142,9 +148,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 10,
       approvedCount: 8,
       fee: 400,
-      hostNickname: 'はる',
+      hostId: 'dev-host-haru',
       status: 'open',
       hidden: false,
+      clientRequestId: null,
     },
     {
       id: 'dev-cancelled',
@@ -158,9 +165,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 10,
       approvedCount: 2,
       fee: 400,
-      hostNickname: 'みなと',
+      hostId: 'dev-host-minato',
       status: 'cancelled',
       hidden: false,
+      clientRequestId: null,
     },
     {
       id: 'dev-hidden',
@@ -174,9 +182,42 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 10,
       approvedCount: 2,
       fee: 400,
-      hostNickname: 'つばさ',
+      hostId: 'dev-host-tsubasa',
       status: 'open',
       hidden: true,
+      clientRequestId: null,
     },
   ];
+}
+
+/**
+ * 架空の住所。番地の形にせず、実在の場所と取り違えないようにする。
+ * 住所のない募集は作らない（docs/06の4-4）ため、すべての募集に用意する。
+ */
+export function createDevLocations(): Map<string, EventLocation> {
+  const ids = [
+    'dev-beginner-afternoon',
+    'dev-easy-morning',
+    'dev-weekday-night',
+    'dev-spike-practice',
+    'dev-family-morning',
+    'dev-ongoing',
+    'dev-ended',
+    'dev-cancelled',
+    'dev-hidden',
+  ];
+  const letters = 'ABCDEFGHI';
+  return new Map(
+    ids.map((id, index) => {
+      const letter = letters.charAt(index);
+      return [
+        id,
+        {
+          venueName: `ダミー体育館${letter}`,
+          address: `ダミー住所${letter}（架空）`,
+          note: index === 0 ? 'ダミーの集合場所（架空）。入口の前に集まります。' : null,
+        },
+      ];
+    }),
+  );
 }
