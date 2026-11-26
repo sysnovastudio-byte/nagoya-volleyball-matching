@@ -1120,3 +1120,53 @@ describe('募集の絞り込み（EVT-05）', () => {
     );
   });
 });
+
+describe('ヘッダーのニックネームと設定への入口', () => {
+  it('ログイン中は、ヘッダーにニックネームを示し、プロフィールへ移れる', async () => {
+    renderApp('/', { userId: 'dev-user-a' });
+
+    const header = await screen.findByRole('banner');
+    const link = await within(header).findByRole('link', { name: 'ログイン中：あおい' });
+    expect(link).toHaveAttribute('href', '/profile');
+  });
+
+  it('プロフィール未登録なら、登録へ移る', async () => {
+    renderApp('/', { userId: 'dev-user-no-profile' });
+
+    const header = await screen.findByRole('banner');
+    expect(
+      await within(header).findByRole('link', { name: 'ログイン中：プロフィール未登録' }),
+    ).toHaveAttribute('href', '/profile/edit');
+  });
+
+  it('未ログインでは、ニックネームを出さない', async () => {
+    renderApp('/');
+
+    const header = await screen.findByRole('banner');
+    await within(header).findByRole('link', { name: 'ログイン' });
+    expect(within(header).queryByText(/ログイン中/)).not.toBeInTheDocument();
+  });
+
+  it('プロフィールを保存すると、ヘッダーのニックネームも変わる', async () => {
+    const user = userEvent.setup();
+    renderApp('/profile/edit', { userId: 'dev-user-a' });
+
+    const nickname = await screen.findByLabelText(/ニックネーム/);
+    await user.clear(nickname);
+    await user.type(nickname, 'あおい2');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(
+      await within(screen.getByRole('banner')).findByRole('link', { name: 'ログイン中：あおい2' }),
+    ).toBeInTheDocument();
+  });
+
+  it('本人のプロフィールの下に、設定への入口がある', async () => {
+    const user = userEvent.setup();
+    renderApp('/profile', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('link', { name: /^設定/ }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: '設定' })).toBeInTheDocument();
+  });
+});
