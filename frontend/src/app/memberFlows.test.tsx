@@ -113,8 +113,9 @@ describe('要ログインの画面', () => {
     await user.click(await screen.findByRole('button', { name: 'ログアウト' }));
 
     expect(await screen.findByRole('link', { name: 'ログイン' })).toBeInTheDocument();
+    // 上部の表示が先に変わり、ホームへの移動はその後に起きるため、見出しも待つ
     expect(
-      screen.getByRole('heading', { level: 1, name: 'バレーしたい人、集まれ！' }),
+      await screen.findByRole('heading', { level: 1, name: 'バレーしたい人、集まれ！' }),
     ).toBeInTheDocument();
   });
 });
@@ -558,5 +559,55 @@ describe('プロフィール', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'プロフィールが登録されていません' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('申請者一覧（PC）', () => {
+  /** 1024px以上の画面として扱う。 */
+  function asPc() {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) =>
+        ({
+          matches: query === '(min-width: 1024px)',
+          media: query,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+        }) as unknown as MediaQueryList,
+    );
+  }
+
+  it('1024px以上では、申請者を表で示し、表の中で承認できる', async () => {
+    asPc();
+    try {
+      const user = userEvent.setup();
+      renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+      const table = await screen.findByRole('table', { name: '申請者' });
+      expect(
+        within(table)
+          .getAllByRole('columnheader')
+          .map((header) => header.textContent),
+      ).toEqual(['ニックネーム', '経験レベル', '自己紹介', '申請日時', '状態', '操作']);
+      const row = within(table).getByRole('row', { name: /こはる/ });
+      expect(row).toHaveTextContent('未経験者');
+      expect(row).toHaveTextContent('承認待ち');
+      // カードと二重に置かない
+      expect(screen.getAllByRole('button', { name: 'こはるさんを承認する' })).toHaveLength(1);
+
+      await user.click(within(row).getByRole('button', { name: 'こはるさんを承認する' }));
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'こはるさんの参加を承認しました。',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('スマートフォンでは、表を使わない', async () => {
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    expect(await screen.findByRole('button', { name: 'こはるさんを承認する' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { NotFoundPage } from '../../app/NotFoundPage';
+import { PC_QUERY, useMediaQuery } from '../../app/useMediaQuery';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
@@ -34,7 +35,7 @@ function tabOf(applicant: Applicant): Tab {
 }
 
 /**
- * SCR-008 申請者一覧（APP-02〜05）。主催者だけが見られる。
+ * SCR-008 申請者一覧（APP-02〜05）。主催者だけが見られる。スマートフォンはカード、PC（1024px以上）は表。
  * 承認の取り消し（APP-11）と会話の開始（MSG-06）は、サイクル1では作らない（docs/10の7-3）。
  */
 export function ApplicantsPage() {
@@ -180,7 +181,7 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
   };
 
   return (
-    <div className="mx-auto w-full max-w-200 px-4 pt-2 pb-8">
+    <div className="mx-auto w-full max-w-200 px-4 pt-2 pb-8 lg:max-w-280">
       <Link
         to={`/events/${event.id}`}
         className="inline-flex min-h-11 items-center font-bold text-main-strong hover:underline"
@@ -246,12 +247,12 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
       {shown.length === 0 ? (
         <p className="py-8 text-center text-muted">{EMPTY_MESSAGES[tab]}</p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-3">
-          {shown.map((applicant) => (
-            <ApplicantItem
-              key={applicant.applicationId}
-              applicant={applicant}
-              canDecide={event.canDecide}
+        <ApplicantCollection
+          applicants={shown}
+          renderActions={(applicant) => (
+            <DecisionActions
+              name={displayName(applicant.profile)}
+              visible={event.canDecide && applicant.status === 'pending'}
               canApprove={!isFull}
               busy={busyId === applicant.applicationId}
               disabled={busyId !== null}
@@ -265,44 +266,132 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
               }}
               onReject={() => void decide(applicant, 'reject')}
             />
-          ))}
-        </ul>
+          )}
+        />
       )}
     </div>
   );
 }
 
-interface ApplicantItemProps {
-  applicant: Applicant;
-  canDecide: boolean;
-  canApprove: boolean;
-  busy: boolean;
-  disabled: boolean;
-  confirming: boolean;
-  onApprove: () => void;
-  onAskReject: () => void;
-  onCancelReject: () => void;
-  onReject: () => void;
-}
-
 const STATUS_LABELS = { pending: '承認待ち', approved: '承認済み', rejected: '却下' } as const;
 
-function ApplicantItem({
-  applicant,
-  canDecide,
-  canApprove,
-  busy,
-  disabled,
-  confirming,
-  onApprove,
-  onAskReject,
-  onCancelReject,
-  onReject,
-}: ApplicantItemProps) {
+interface ApplicantCollectionProps {
+  applicants: Applicant[];
+  renderActions: (applicant: Applicant) => ReactNode;
+}
+
+/** スマートフォンはカード、PCは表で示す（docs/11の5-1）。同じ内容を二重に置かないよう、どちらか一方だけを出す。 */
+function ApplicantCollection({ applicants, renderActions }: ApplicantCollectionProps) {
+  const isPc = useMediaQuery(PC_QUERY);
+
+  if (!isPc) {
+    return (
+      <ul className="mt-4 flex flex-col gap-3">
+        {applicants.map((applicant) => (
+          <ApplicantCard key={applicant.applicationId} applicant={applicant}>
+            {renderActions(applicant)}
+          </ApplicantCard>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="mt-4 overflow-x-auto rounded-2xl border border-line bg-surface">
+      <table className="w-full border-collapse text-left">
+        <caption className="sr-only">申請者</caption>
+        <thead className="border-b border-line text-sub">
+          <tr>
+            <th scope="col" className="px-4 py-3 font-medium">
+              ニックネーム
+            </th>
+            <th scope="col" className="px-4 py-3 font-medium whitespace-nowrap">
+              経験レベル
+            </th>
+            <th scope="col" className="px-4 py-3 font-medium">
+              自己紹介
+            </th>
+            <th scope="col" className="px-4 py-3 font-medium whitespace-nowrap">
+              申請日時
+            </th>
+            <th scope="col" className="px-4 py-3 font-medium">
+              状態
+            </th>
+            <th scope="col" className="px-4 py-3 font-medium">
+              操作
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {applicants.map((applicant) => (
+            <tr
+              key={applicant.applicationId}
+              className="border-b border-line align-top last:border-b-0"
+            >
+              <th scope="row" className="px-4 py-3 text-left">
+                <span className="flex items-center gap-2">
+                  <Avatar />
+                  <ApplicantName applicant={applicant} />
+                </span>
+              </th>
+              <td className="px-4 py-3 font-bold whitespace-nowrap">
+                {experienceLabel(applicant.profile) ?? '－'}
+              </td>
+              <td className="max-w-96 min-w-48 px-4 py-3 break-words whitespace-pre-line">
+                <ApplicantBio applicant={applicant} />
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap text-sub">
+                {formatAppliedAt(applicant.appliedAt)}
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <StatusBadge applicant={applicant} />
+              </td>
+              <td className="w-64 px-4 py-3">{renderActions(applicant)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ApplicantName({ applicant }: { applicant: Applicant }) {
   const { profile } = applicant;
   const name = displayName(profile);
-  const experience = experienceLabel(profile);
-  const showActions = canDecide && applicant.status === 'pending';
+  return profile.isWithdrawn ? (
+    <span className="font-bold">{name}</span>
+  ) : (
+    <Link
+      to={`/users/${profile.userId}`}
+      className="inline-flex min-h-11 items-center font-bold text-main-strong underline"
+    >
+      {name}
+    </Link>
+  );
+}
+
+function ApplicantBio({ applicant }: { applicant: Applicant }) {
+  const { profile } = applicant;
+  if (profile.isWithdrawn) return null;
+  return profile.bio ?? <span className="text-muted">自己紹介はありません。</span>;
+}
+
+function StatusBadge({ applicant }: { applicant: Applicant }) {
+  return (
+    <Badge tone={applicant.status === 'approved' ? 'main' : 'neutral'}>
+      {STATUS_LABELS[applicant.status]}
+    </Badge>
+  );
+}
+
+interface ApplicantCardProps {
+  applicant: Applicant;
+  /** 承認・却下の操作 */
+  children: ReactNode;
+}
+
+function ApplicantCard({ applicant, children }: ApplicantCardProps) {
+  const experience = experienceLabel(applicant.profile);
 
   return (
     <li className="rounded-2xl border border-line bg-surface p-4">
@@ -310,19 +399,8 @@ function ApplicantItem({
         <Avatar />
         <div className="min-w-0 grow">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {profile.isWithdrawn ? (
-              <p className="font-bold">{name}</p>
-            ) : (
-              <Link
-                to={`/users/${profile.userId}`}
-                className="inline-flex min-h-11 items-center font-bold text-main-strong underline"
-              >
-                {name}
-              </Link>
-            )}
-            <Badge tone={applicant.status === 'approved' ? 'main' : 'neutral'}>
-              {STATUS_LABELS[applicant.status]}
-            </Badge>
+            <ApplicantName applicant={applicant} />
+            <StatusBadge applicant={applicant} />
           </div>
           <dl className="mt-1 text-sub">
             {experience && (
@@ -336,54 +414,84 @@ function ApplicantItem({
               <dd>{formatAppliedAt(applicant.appliedAt)}</dd>
             </div>
           </dl>
-          {!profile.isWithdrawn && (
-            <p className="mt-2 break-words whitespace-pre-line">
-              {profile.bio ?? <span className="text-muted">自己紹介はありません。</span>}
-            </p>
-          )}
+          <p className="mt-2 break-words whitespace-pre-line">
+            <ApplicantBio applicant={applicant} />
+          </p>
         </div>
       </div>
-
-      {showActions &&
-        (confirming ? (
-          <div
-            role="group"
-            aria-label={`${name}さんの申請の却下の確認`}
-            className="mt-3 rounded-xl border border-danger p-3"
-          >
-            <p className="mb-2 font-bold">
-              却下すると、{name}さんはこの募集にもう申請できません。却下しますか？
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="danger" size="small" disabled={disabled} onClick={onReject}>
-                {busy ? '却下しています' : '却下する'}
-              </Button>
-              <Button variant="secondary" size="small" disabled={disabled} onClick={onCancelReject}>
-                やめる
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              size="small"
-              disabled={disabled || !canApprove}
-              aria-label={`${name}さんを承認する`}
-              onClick={onApprove}
-            >
-              {busy ? '承認しています' : '承認する'}
-            </Button>
-            <Button
-              variant="secondary"
-              size="small"
-              disabled={disabled}
-              aria-label={`${name}さんの申請を却下する`}
-              onClick={onAskReject}
-            >
-              却下する
-            </Button>
-          </div>
-        ))}
+      <div className="mt-3 empty:hidden">{children}</div>
     </li>
+  );
+}
+
+interface DecisionActionsProps {
+  name: string;
+  /** 承認待ちで、承認・却下できる期間の場合だけ出す */
+  visible: boolean;
+  canApprove: boolean;
+  busy: boolean;
+  disabled: boolean;
+  confirming: boolean;
+  onApprove: () => void;
+  onAskReject: () => void;
+  onCancelReject: () => void;
+  onReject: () => void;
+}
+
+/** 承認・却下。却下は取り消せないため確認を挟む（docs/11の5-1）。 */
+function DecisionActions({
+  name,
+  visible,
+  canApprove,
+  busy,
+  disabled,
+  confirming,
+  onApprove,
+  onAskReject,
+  onCancelReject,
+  onReject,
+}: DecisionActionsProps) {
+  if (!visible) return null;
+  if (confirming) {
+    return (
+      <div
+        role="group"
+        aria-label={`${name}さんの申請の却下の確認`}
+        className="rounded-xl border border-danger p-3"
+      >
+        <p className="mb-2 font-bold">
+          却下すると、{name}さんはこの募集にもう申請できません。却下しますか？
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="danger" size="small" disabled={disabled} onClick={onReject}>
+            {busy ? '却下しています' : '却下する'}
+          </Button>
+          <Button variant="secondary" size="small" disabled={disabled} onClick={onCancelReject}>
+            やめる
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        size="small"
+        disabled={disabled || !canApprove}
+        aria-label={`${name}さんを承認する`}
+        onClick={onApprove}
+      >
+        {busy ? '承認しています' : '承認する'}
+      </Button>
+      <Button
+        variant="secondary"
+        size="small"
+        disabled={disabled}
+        aria-label={`${name}さんの申請を却下する`}
+        onClick={onAskReject}
+      >
+        却下する
+      </Button>
+    </div>
   );
 }
