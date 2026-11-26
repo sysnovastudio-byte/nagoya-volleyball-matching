@@ -26,6 +26,7 @@ const EVENT: EventDetail = {
   state: 'open',
   isHost: false,
   myApplication: null,
+  hostSummary: null,
 };
 
 /** 未ログインのまま変わらない窓口。 */
@@ -45,6 +46,7 @@ function createRepository(overrides: Partial<EventRepository> = {}): EventReposi
     getLocation: () => Promise.resolve(null),
     createEvent: () => Promise.reject(new Error('使わない')),
     getMyEvents: () => Promise.resolve([]),
+    cancelEvent: () => Promise.reject(new Error('使わない')),
     ...overrides,
   };
 }

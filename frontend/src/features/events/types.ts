@@ -58,6 +58,8 @@ export interface EventDetail extends PublicEvent {
     /** キャンセル・取り下げの後で、申請が合計3回に達していない（docs/11の2-2） */
     canReapply: boolean;
   } | null;
+  /** 主催者だけに返す、申請の人数。主催者以外は null */
+  hostSummary: { approvedCount: number; pendingCount: number } | null;
 }
 
 /** 主催した募集（docs/06の6-5の get_my_events）。非表示の募集は開催日時だけ（docs/11の4-4）。 */
@@ -104,6 +106,16 @@ export interface CreateEventInput {
   location: EventLocation;
 }
 
+/** 中止を断る理由。 */
+export type CancelEventRejection =
+  /** ない、主催者でない、非表示 */
+  | 'notFound'
+  /** 開催開始後、またはすでに中止した */
+  | 'notCancellable';
+
+export type CancelEventResult =
+  { status: 'cancelled' } | { status: 'rejected'; reason: CancelEventRejection };
+
 /** 作成を断る理由。画面は理由に応じて案内する。 */
 export type CreateEventRejection =
   'notLoggedIn' | 'profileRequired' | 'minor' | 'rateLimited' | 'invalid';
@@ -114,7 +126,8 @@ export type CreateEventResult =
 /**
  * 募集の取得・作成の窓口。画面はこの形だけに依存する。
  * 見ている人は、窓口が内部でログイン状態から決める。画面から利用者のIDを渡さない。
- * 将来は、docs/06の6-5の関数（list_events・get_event・create_event・get_my_events）を呼ぶ実装に置き換える。
+ * 将来は、docs/06の6-5の関数（list_events・get_event・create_event・get_my_events・cancel_event）を
+ * 呼ぶ実装に置き換える。
  */
 export interface EventRepository {
   /**
@@ -130,4 +143,9 @@ export interface EventRepository {
   createEvent(input: CreateEventInput): Promise<CreateEventResult>;
   /** 自分が主催した募集。終了・中止・非表示も含め、開催日時の順に返す。未ログインは空を返す。 */
   getMyEvents(): Promise<MyEvent[]>;
+  /**
+   * 自分が主催する募集を中止する（CND-03、docs/06の6-5の cancel_event）。開催開始前だけで、元に戻せない。
+   * 承認待ち・承認済みの人へ通知する。申請の状態は変えない（docs/06の5-12）
+   */
+  cancelEvent(eventId: string): Promise<CancelEventResult>;
 }

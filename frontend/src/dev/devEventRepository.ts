@@ -10,6 +10,7 @@ import type {
 } from '../features/events/types';
 import { countApplications, devEventState, findDevUser, type DevDatabase } from './devDatabase';
 import type { DevEventRecord } from './devEvents';
+import { notifyEventCancelled } from './devNotifications';
 import type { DevSession } from './devSession';
 import { markDevModule } from './marker';
 
@@ -117,6 +118,12 @@ export function createDevEventRepository({
                 applications.length < MAX_ATTEMPTS,
             }
           : null,
+        hostSummary: isHost
+          ? {
+              approvedCount: countApplications(db, record.id, 'approved'),
+              pendingCount: countApplications(db, record.id, 'pending'),
+            }
+          : null,
       };
       return Promise.resolve(detail);
     },
@@ -182,6 +189,25 @@ export function createDevEventRepository({
       db.locations.set(id, { ...input.location });
       db.eventCreations.push({ userId: user.id, at: current });
       return Promise.resolve({ status: 'created', eventId: id });
+    },
+
+    cancelEvent: (eventId) => {
+      const user = currentUser();
+      const record = db.events.find((event) => event.id === eventId);
+      // 他人の募集・非表示の募集は、ない場合と同じに扱う
+      if (!user || !record || record.hostId !== user.id || record.hidden) {
+        return Promise.resolve({ status: 'rejected', reason: 'notFound' });
+      }
+      const current = now();
+      const state = devEventState(db, record, current);
+      // 開催開始前だけ。中止は元に戻せない（docs/11の2-1）
+      if (state !== 'open' && state !== 'full' && state !== 'closed') {
+        return Promise.resolve({ status: 'rejected', reason: 'notCancellable' });
+      }
+      record.status = 'cancelled';
+      // 承認待ち・承認済みの人へ1件ずつ通知する（NTF-04）。申請の状態は変えない
+      notifyEventCancelled(db, record, current);
+      return Promise.resolve({ status: 'cancelled' });
     },
 
     getMyEvents: () => {

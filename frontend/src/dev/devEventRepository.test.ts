@@ -172,10 +172,11 @@ describe('募集の詳細', () => {
     const event = await setup({ userId: HOST_ID }).repository.getEvent(HOSTED_EVENT);
 
     expect(Object.keys(event ?? {}).sort()).toEqual(
-      [...PUBLIC_KEYS, 'isHost', 'myApplication'].sort(),
+      [...PUBLIC_KEYS, 'hostSummary', 'isHost', 'myApplication'].sort(),
     );
     expect(event?.isHost).toBe(true);
     expect(event?.myApplication).toBeNull();
+    expect(event?.hostSummary).toEqual({ approvedCount: 9, pendingCount: 3 });
   });
 
   it('見ている人の申請の状態を返す', async () => {
@@ -386,5 +387,82 @@ describe('主催した募集', () => {
 
   it('未ログインには空を返す', async () => {
     expect(await setup().repository.getMyEvents()).toEqual([]);
+  });
+});
+
+describe('募集の中止（CND-03）', () => {
+  it('主催者が中止すると、承認待ち・承認済みの人へ1件ずつ通知し、申請の状態は変えない', async () => {
+    const { db, repository } = setup({ userId: HOST_ID });
+    const applications = db.applications.filter((item) => item.eventId === HOSTED_EVENT);
+    const statuses = applications.map((item) => item.status);
+
+    expect(await repository.cancelEvent(HOSTED_EVENT)).toEqual({ status: 'cancelled' });
+
+    expect((await repository.getEvent(HOSTED_EVENT))?.state).toBe('cancelled');
+    expect(applications.map((item) => item.status)).toEqual(statuses);
+    const notified = db.notifications
+      .filter((item) => item.type === 'event_cancelled')
+      .map((item) => item.userId)
+      .sort();
+    expect(notified).toEqual(
+      applications
+        .filter((item) => item.status === 'pending' || item.status === 'approved')
+        .map((item) => item.userId)
+        .sort(),
+    );
+    // 住所の文字を通知に持たない
+    expect(JSON.stringify(db.notifications)).not.toContain('ダミー住所');
+    // 主催者は中止の後も住所を見られる（docs/11の2-1）
+    expect(await repository.getLocation(HOSTED_EVENT)).not.toBeNull();
+  });
+
+  it('中止の後は、一覧に出ず、承認済みの参加者は住所を見られない', async () => {
+    const { db, session, repository } = setup({ userId: HOST_ID });
+    const approved = db.applications.find(
+      (item) => item.eventId === HOSTED_EVENT && item.status === 'approved',
+    );
+    if (!approved) throw new Error('承認済みの申請がありません。');
+    await repository.cancelEvent(HOSTED_EVENT);
+
+    session.setUserId(approved.userId);
+    expect(await repository.getLocation(HOSTED_EVENT)).toBeNull();
+    expect((await repository.listEvents()).items.map((item) => item.id)).not.toContain(
+      HOSTED_EVENT,
+    );
+  });
+
+  it('元に戻せず、2回目は断る。通知も増えない', async () => {
+    const { db, repository } = setup({ userId: HOST_ID });
+    await repository.cancelEvent(HOSTED_EVENT);
+    const count = db.notifications.length;
+
+    expect(await repository.cancelEvent(HOSTED_EVENT)).toEqual({
+      status: 'rejected',
+      reason: 'notCancellable',
+    });
+    expect(db.notifications).toHaveLength(count);
+  });
+
+  it('主催者でない人は、中止できない', async () => {
+    const { repository } = setup({ userId: 'dev-user-a' });
+
+    expect(await repository.cancelEvent(HOSTED_EVENT)).toEqual({
+      status: 'rejected',
+      reason: 'notFound',
+    });
+    expect((await repository.getEvent(HOSTED_EVENT))?.state).toBe('open');
+  });
+
+  it('開催が始まった募集と、非表示の募集は中止できない', async () => {
+    const { repository } = setup({ userId: HOST_ID });
+
+    expect(await repository.cancelEvent('dev-ongoing')).toEqual({
+      status: 'rejected',
+      reason: 'notCancellable',
+    });
+    expect(await repository.cancelEvent('dev-b-hidden')).toEqual({
+      status: 'rejected',
+      reason: 'notFound',
+    });
   });
 });

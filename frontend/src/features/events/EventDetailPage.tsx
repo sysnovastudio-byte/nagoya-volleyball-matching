@@ -17,6 +17,7 @@ import { useApplicationRepository } from '../applications/repositoryContext';
 import { MAX_ATTEMPTS, type ApplyRejection } from '../applications/types';
 import { loginPath } from '../auth/loginRedirect';
 import { useViewer } from '../auth/sessionContext';
+import { CancelEventAction } from './CancelEventAction';
 import { EventStateBadge } from './EventStateBadge';
 import { areaLabel, formatDateTimeRange, formatFee, levelsLabel } from './format';
 import type { EventDetail as EventDetailData, EventState, PublicEvent } from './types';
@@ -235,8 +236,20 @@ interface EventActionsProps {
 /** 立場ごとの操作（docs/10の5-3）。1つだけを目立たせる。 */
 function EventActions({ event, apply }: EventActionsProps) {
   if (event.isHost) {
-    // 件数の表示・編集・締切・中止は、限定公開までに加える
-    return <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>;
+    // 編集（一般公開の前、M-02）と締切・再開（公開後、M-03）は、MVPでは置かない
+    return (
+      <div className="flex flex-col gap-2">
+        {event.hostSummary && (
+          <p className="text-center text-sub">
+            承認待ち <span className="font-bold text-ink">{event.hostSummary.pendingCount}</span>
+            人・承認済み{' '}
+            <span className="font-bold text-ink">{event.hostSummary.approvedCount}</span>人
+          </p>
+        )}
+        <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>
+        <CancelEventAction event={event} onChanged={apply.onChanged} />
+      </div>
+    );
   }
   if (event.myApplication) {
     return <MyApplicationStatus event={event} apply={apply} />;
@@ -342,9 +355,11 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
             同じ募集への申請は合計{MAX_ATTEMPTS}回までのため、もう申請できません。
           </p>
         )}
-        {(mine.status === 'cancelled' || mine.status === 'retracted') && closedReason && (
-          <p className="text-sub">{closedReason}</p>
-        )}
+        {/* 中止は申請の状態によらず示す。キャンセル・取り下げの後は、再申請できない理由として示す */}
+        {closedReason &&
+          (event.state === 'cancelled' ||
+            mine.status === 'cancelled' ||
+            mine.status === 'retracted') && <p className="text-sub">{closedReason}</p>}
       </div>
       {canReapplyNow && (
         <>

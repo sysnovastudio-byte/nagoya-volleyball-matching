@@ -10,6 +10,7 @@ const notConnectedRepository: EventRepository = {
   getLocation: notConnected,
   createEvent: notConnected,
   getMyEvents: notConnected,
+  cancelEvent: notConnected,
 };
 
 /**
@@ -28,6 +29,7 @@ function createRepository(): EventRepository {
       getLocation: async (eventId) => (await repository()).getLocation(eventId),
       createEvent: async (input) => (await repository()).createEvent(input),
       getMyEvents: async () => (await repository()).getMyEvents(),
+      cancelEvent: async (eventId) => (await repository()).cancelEvent(eventId),
     };
   }
   return notConnectedRepository;
