@@ -769,21 +769,42 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
-    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
+    await user.click(screen.getByLabelText('利用規約・プライバシーポリシーに同意する'));
+    await user.click(
+      screen.getByLabelText('通報されたメッセージを、運営者が確認することに同意する'),
+    );
   }
 
   it('同意の欄は2つが別々で、最初はすべて未選択', async () => {
     renderApp('/signup');
 
     const boxes = [
-      await screen.findByLabelText('利用規約とプライバシーポリシーに同意する'),
-      screen.getByLabelText('通報時のメッセージ確認に同意する'),
+      await screen.findByLabelText('利用規約・プライバシーポリシーに同意する'),
+      screen.getByLabelText('通報されたメッセージを、運営者が確認することに同意する'),
     ];
     for (const box of boxes) expect(box).not.toBeChecked();
     expect(screen.getByLabelText('18歳以上')).not.toBeChecked();
     expect(screen.getByLabelText('18歳未満（保護者の同意あり）')).not.toBeChecked();
     expect(screen.getByText(/版：\s*仮-0/)).toBeInTheDocument();
+  });
+
+  it('1つ目は「読む」のリンクと「同意する」、リンクは新しいタブで仮の文章を開く', async () => {
+    renderApp('/signup');
+
+    const link = await screen.findByRole('link', { name: /利用規約・プライバシーポリシーを読む/ });
+    expect(link).toHaveAttribute('href', '/terms');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(screen.getByText('同意する')).toBeInTheDocument();
+  });
+
+  it('規約等の仮の画面を示す', async () => {
+    renderApp('/terms');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '利用規約・プライバシーポリシー' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '利用規約' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'プライバシーポリシー' })).toBeInTheDocument();
   });
 
   it('18歳未満を選ぶと、保護者の同意の確認を出し、未選択なら登録しない', async () => {
@@ -804,11 +825,15 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     const user = userEvent.setup();
     renderApp('/signup');
     await fillSignUp(user);
-    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
+    await user.click(
+      screen.getByLabelText('通報されたメッセージを、運営者が確認することに同意する'),
+    );
 
     await user.click(screen.getByRole('button', { name: '登録する' }));
 
-    expect(screen.getByText('通報時のメッセージ確認への同意が必要です。')).toBeInTheDocument();
+    expect(
+      screen.getByText('通報されたメッセージを運営者が確認することへの同意が必要です。'),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText('利用規約とプライバシーポリシーへの同意が必要です。'),
     ).not.toBeInTheDocument();
@@ -879,8 +904,10 @@ describe('プロフィール登録・編集（SCR-014）', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
-    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
+    await user.click(screen.getByLabelText('利用規約・プライバシーポリシーに同意する'));
+    await user.click(
+      screen.getByLabelText('通報されたメッセージを、運営者が確認することに同意する'),
+    );
     await user.click(screen.getByRole('button', { name: '登録する' }));
     await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
     await user.click(await screen.findByRole('link', { name: 'プロフィールを入力する' }));
@@ -984,8 +1011,10 @@ describe('指摘の不具合', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
-    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
+    await user.click(screen.getByLabelText('利用規約・プライバシーポリシーに同意する'));
+    await user.click(
+      screen.getByLabelText('通報されたメッセージを、運営者が確認することに同意する'),
+    );
     await user.click(screen.getByRole('button', { name: '登録する' }));
     await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
     expect(session.getUserId()).toBe('dev-registered-2');

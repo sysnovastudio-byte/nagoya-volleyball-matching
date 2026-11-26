@@ -52,8 +52,8 @@ export const EMPTY_SIGN_UP_FORM: SignUpFormValues = {
 };
 
 const AGREEMENT_ERRORS: Record<ConsentKey, string> = {
-  termsAndPrivacy: '利用規約とプライバシーポリシーへの同意が必要です。',
-  messageReview: '通報時のメッセージ確認への同意が必要です。',
+  termsAndPrivacy: '利用規約・プライバシーポリシーへの同意が必要です。',
+  messageReview: '通報されたメッセージを運営者が確認することへの同意が必要です。',
 };
 
 export function checkSignUpForm(values: SignUpFormValues): SignUpFieldErrors {

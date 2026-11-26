@@ -17,20 +17,26 @@ export type ConsentKey = 'termsAndPrivacy' | 'messageReview';
 
 export interface ConsentItem {
   key: ConsentKey;
-  /** 同意の欄の文言 */
+  /** 同意の欄に見える文言 */
   label: string;
+  /** 読み上げで使う、何に同意するかが分かる文言 */
+  accessibleLabel: string;
+  /** 文書を読むリンク（新しいタブで開く）。ない場合は欄の文言だけを示す */
+  readLink: { to: string; text: string } | null;
   documents: readonly AgreementText[];
 }
 
 /**
- * 同意の欄は2つ（docs/11の7-2）。どちらも未選択の状態から、別々に同意してもらう。
+ * 同意の欄は2つ（docs/11の7-2、文言は2026-11-26の決定）。どちらも未選択の状態から、別々に同意してもらう。
  * 通報時のメッセージ確認は、通信の秘密に関わるため、個別の同意として分ける（Q-34）。
  * 同意の記録は、文書ごとに版と日時を残す（docs/06の4-17）。
  */
 export const CONSENTS: readonly ConsentItem[] = [
   {
     key: 'termsAndPrivacy',
-    label: '利用規約とプライバシーポリシーに同意する',
+    label: '同意する',
+    accessibleLabel: '利用規約・プライバシーポリシーに同意する',
+    readLink: { to: '/terms', text: '利用規約・プライバシーポリシーを読む' },
     documents: [
       {
         document: 'terms',
@@ -46,7 +52,9 @@ export const CONSENTS: readonly ConsentItem[] = [
   },
   {
     key: 'messageReview',
-    label: '通報時のメッセージ確認に同意する',
+    label: '通報されたメッセージを、運営者が確認することに同意する',
+    accessibleLabel: '通報されたメッセージを、運営者が確認することに同意する',
+    readLink: null,
     documents: [
       {
         document: 'message_review',

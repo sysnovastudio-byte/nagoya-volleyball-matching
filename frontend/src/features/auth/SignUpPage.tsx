@@ -231,18 +231,23 @@ function SignUpForm() {
           </p>
           {CONSENTS.map((consent) => (
             <div key={consent.key} className="rounded-xl border border-line p-3">
-              {consent.documents.map((document) => (
-                <details key={document.document} className="mb-1">
-                  <summary className="flex min-h-11 cursor-pointer items-center font-bold text-main-strong">
-                    {document.title}（仮の文章）を読む
-                  </summary>
-                  <p className="pb-2 text-sub">{document.body}</p>
-                </details>
-              ))}
+              {consent.readLink && (
+                // 入力中の内容を失わないよう、新しいタブで開く
+                <a
+                  href={consent.readLink.to}
+                  target="_blank"
+                  rel="noopener"
+                  className="flex min-h-11 items-center font-bold text-main-strong underline"
+                >
+                  {consent.readLink.text}
+                  <span className="sr-only">（新しいタブで開きます）</span>
+                </a>
+              )}
               <CheckboxField
                 id={fieldId(consent.key)}
                 checked={values.agreements[consent.key]}
                 error={errors[consent.key]}
+                accessibleLabel={consent.accessibleLabel}
                 onChange={(checked) => {
                   setAgreement(consent.key, checked);
                 }}
@@ -271,12 +276,21 @@ function SignUpForm() {
 interface CheckboxFieldProps {
   id: string;
   checked: boolean;
+  /** 見える文言だけでは何に同意するかが分からない場合の、読み上げの文言 */
+  accessibleLabel?: string;
   error: string | undefined;
   onChange: (checked: boolean) => void;
   children: ReactNode;
 }
 
-function CheckboxField({ id, checked, error, onChange, children }: CheckboxFieldProps) {
+function CheckboxField({
+  id,
+  checked,
+  accessibleLabel,
+  error,
+  onChange,
+  children,
+}: CheckboxFieldProps) {
   const errorId = `${id}-error`;
   return (
     <div className="flex flex-col gap-1">
@@ -285,6 +299,7 @@ function CheckboxField({ id, checked, error, onChange, children }: CheckboxField
           id={id}
           type="checkbox"
           checked={checked}
+          aria-label={accessibleLabel}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
           onChange={(event) => {
