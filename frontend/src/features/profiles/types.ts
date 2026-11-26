@@ -20,7 +20,7 @@ export type PublicProfile =
   | { userId: string; isWithdrawn: true };
 
 /**
- * プロフィールの取得の窓口。将来は docs/06の6-5の get_profiles を呼ぶ実装に置き換える。
+ * プロフィールの取得の窓口。将来は docs/06の6-5の get_profiles と get_my_profile【提案・未承認】を呼ぶ実装に置き換える。
  * 自分のプロフィールは、窓口が内部でログイン状態から決める。画面から自分のIDを渡さない。
  */
 export interface ProfileRepository {

@@ -95,7 +95,7 @@ export interface ApplicationRepository {
   applyToEvent(eventId: string): Promise<ApplyResult>;
   approveApplication(applicationId: string): Promise<DecisionResult>;
   rejectApplication(applicationId: string): Promise<DecisionResult>;
-  /** 自分が主催する募集の申請者。docs/06の6-5に対応する関数の名前はまだない */
+  /** 自分が主催する募集の申請者。docs/06の6-5の list_event_applicants【提案・未承認】に対応する */
   listApplicants(eventId: string): Promise<ApplicantListResult>;
   /** 自分の申請。終了・中止した募集の分も返す */
   getMyParticipations(): Promise<MyParticipation[]>;
