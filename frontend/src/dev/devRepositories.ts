@@ -1,6 +1,8 @@
+import { createDevApplicationRepository } from './devApplicationRepository';
 import { createDevAuthRepository } from './devAuthRepository';
 import { createDevDatabase } from './devDatabase';
 import { createDevEventRepository } from './devEventRepository';
+import { createDevProfileRepository } from './devProfileRepository';
 import { createDevSession } from './devSession';
 import { DEV_DATA_MARKER, markDevModule } from './marker';
 
@@ -20,6 +22,14 @@ export const devAuthRepository = createDevAuthRepository({
   session: devSession,
 });
 export const devEventRepository = createDevEventRepository({
+  db: devDatabase,
+  session: devSession,
+});
+export const devApplicationRepository = createDevApplicationRepository({
+  db: devDatabase,
+  session: devSession,
+});
+export const devProfileRepository = createDevProfileRepository({
   db: devDatabase,
   session: devSession,
 });

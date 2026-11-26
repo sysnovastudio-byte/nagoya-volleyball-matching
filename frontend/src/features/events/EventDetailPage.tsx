@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
+import { useApplicationRepository } from '../applications/repositoryContext';
+import type { ApplyRejection } from '../applications/types';
 import { loginPath } from '../auth/loginRedirect';
 import { useViewer } from '../auth/sessionContext';
 import { EventStateBadge } from './EventStateBadge';
@@ -18,20 +20,26 @@ export interface EventDetailLocationState {
   justCreated?: boolean;
 }
 
-/** SCR-006 募集詳細（EVT-03）。未ログインと主催者の表示。申請などは次の段階で加える。 */
+/**
+ * SCR-006 募集詳細（EVT-03・APP-01）。立場ごとの表示は docs/10の5-3。
+ * 取り下げ・キャンセル・質問・通報は、サイクル1では作らない（docs/10の7-3）。
+ */
 export function EventDetailPage() {
   const { eventId = '' } = useParams();
-  const { result, retry } = useEvent(eventId);
+  const { result, retry, reload } = useEvent(eventId);
 
   switch (result.status) {
     case 'loading':
       return <LoadingMessage />;
     case 'error':
       return <ErrorMessage onRetry={retry} />;
-    case 'notFound':
-      return <NotFoundPage />;
     case 'ready':
-      return <EventDetail event={result.event} />;
+      return result.value ? (
+        // 別の募集へ移ったときに、前の募集の案内を残さない
+        <EventDetail key={result.value.id} event={result.value} onChanged={reload} />
+      ) : (
+        <NotFoundPage />
+      );
   }
 }
 
@@ -65,11 +73,15 @@ function ErrorMessage({ onRetry }: ErrorMessageProps) {
 
 interface EventDetailProps {
   event: EventDetailData;
+  /** 申請などで、募集の内容が変わったときに呼ぶ */
+  onChanged: () => void;
 }
 
-function EventDetail({ event }: EventDetailProps) {
+function EventDetail({ event, onChanged }: EventDetailProps) {
   useDocumentTitle(event.title);
   const state = useLocation().state as EventDetailLocationState | null;
+  const apply = useApply(event.id, onChanged);
+  const showLocation = event.isHost || canSeeLocation(event);
 
   return (
     <article className="flex grow flex-col">
@@ -92,6 +104,18 @@ function EventDetail({ event }: EventDetailProps) {
             募集を公開しました。
           </p>
         )}
+        {apply.notice && (
+          <p
+            role={apply.notice.tone === 'error' ? 'alert' : 'status'}
+            className={`mb-3 rounded-xl border px-4 py-3 font-bold ${
+              apply.notice.tone === 'error'
+                ? 'border-danger bg-surface text-danger'
+                : 'border-main bg-main-tint text-main-strong'
+            }`}
+          >
+            {apply.notice.text}
+          </p>
+        )}
 
         <div className="mt-1 mb-5 flex flex-col items-start gap-2">
           <EventStateBadge state={event.state} />
@@ -106,7 +130,7 @@ function EventDetail({ event }: EventDetailProps) {
           >
             <EventFacts event={event} />
             <div className="mt-5 hidden lg:block">
-              <EventActions event={event} />
+              <EventActions event={event} apply={apply} />
             </div>
           </aside>
 
@@ -121,8 +145,8 @@ function EventDetail({ event }: EventDetailProps) {
               <h2 className="font-medium text-muted">主催者</h2>
               <p className="font-bold">{event.hostNickname}</p>
             </section>
-            {event.isHost ? (
-              <HostLocation eventId={event.id} />
+            {showLocation ? (
+              <LocationSection eventId={event.id} isHost={event.isHost} />
             ) : (
               <section className="rounded-2xl border border-line bg-surface p-4">
                 <h2 className="text-lg font-bold">くわしい住所</h2>
@@ -136,7 +160,7 @@ function EventDetail({ event }: EventDetailProps) {
       {/* 下部の移動の上に固定し、重ねない */}
       <div className="sticky bottom-(--member-nav-h) z-10 border-t border-line bg-surface px-4 py-3 lg:hidden">
         <div className="mx-auto max-w-160">
-          <EventActions event={event} />
+          <EventActions event={event} apply={apply} />
         </div>
       </div>
     </article>
@@ -201,24 +225,145 @@ const CLOSED_REASONS: Record<Exclude<EventState, 'open'>, string> = {
   full: '満員のため、今は申請できません。',
   closed: '受付は終了しました。',
   ongoing: '開催中のため、申請できません。',
+  ended: 'この募集は終了しました。',
+  cancelled: 'この募集は中止されました。',
 };
 
-/** 立場ごとの操作（docs/10の11-3）。1つだけを目立たせる。 */
-function EventActions({ event }: EventDetailProps) {
+/** 承認済みの参加者が住所を見られるか（docs/06の5-4）。最終的な判定は取得の窓口が行う。 */
+function canSeeLocation(event: EventDetailData) {
+  return (
+    event.myApplication === 'approved' && event.state !== 'ended' && event.state !== 'cancelled'
+  );
+}
+
+interface EventActionsProps {
+  event: EventDetailData;
+  apply: ApplyControl;
+}
+
+/** 立場ごとの操作（docs/10の5-3）。1つだけを目立たせる。 */
+function EventActions({ event, apply }: EventActionsProps) {
   const viewer = useViewer();
 
   if (event.isHost) {
-    // 件数の表示・編集・締切・中止は、申請者管理（SCR-008）と合わせて加える
+    // 件数の表示・編集・締切・中止は、限定公開までに加える
     return <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>;
+  }
+  if (event.myApplication) {
+    return <MyApplicationStatus event={event} />;
   }
   if (event.state !== 'open') {
     return <p className="text-center font-bold text-sub">{CLOSED_REASONS[event.state]}</p>;
   }
-  if (viewer) {
-    // 参加の申請と質問は、次の段階（SCR-008・009）で加える
-    return <p className="text-center font-bold text-sub">参加の申請は準備中です。</p>;
+  if (!viewer) return <GuestActions eventId={event.id} />;
+  if (!viewer.profile) {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-center text-sub">申請するには、プロフィールの登録が必要です。</p>
+        {/* 登録した後は、この画面に戻る（docs/11の追加-10） */}
+        <ButtonLink
+          to={`/profile/edit?${new URLSearchParams({ next: `/events/${event.id}` }).toString()}`}
+        >
+          プロフィールを登録する
+        </ButtonLink>
+      </div>
+    );
   }
-  return <GuestActions eventId={event.id} />;
+  return (
+    <Button
+      disabled={apply.submitting}
+      onClick={() => {
+        void apply.submit();
+      }}
+    >
+      {apply.submitting ? '申請しています' : '参加を申請する'}
+    </Button>
+  );
+}
+
+/** 自分の申請の状態（docs/11の2-3）。開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3）。 */
+function MyApplicationStatus({ event }: { event: EventDetailData }) {
+  const started = event.state === 'ongoing' || event.state === 'ended';
+  const view = (() => {
+    switch (event.myApplication) {
+      case 'approved':
+        return {
+          label: '承認済み',
+          text: canSeeLocation(event)
+            ? '参加が承認されました。くわしい住所を表示しています。'
+            : '参加が承認されていました。',
+        };
+      case 'pending':
+        return started || event.state === 'cancelled'
+          ? { label: '受付終了', text: '承認されないまま、受付が終わりました。' }
+          : { label: '承認待ち', text: '申請しました。主催者の承認を待っています。' };
+      case 'rejected':
+        return { label: '却下', text: 'この募集への申請は却下されました。' };
+      case null:
+        return null;
+    }
+  })();
+  if (!view) return null;
+
+  return (
+    <div className="flex flex-col items-center gap-1 text-center">
+      <p>
+        <span className="sr-only">あなたの申請：</span>
+        <Badge tone={event.myApplication === 'approved' ? 'main' : 'neutral'}>{view.label}</Badge>
+      </p>
+      <p className="font-bold text-sub">{view.text}</p>
+    </div>
+  );
+}
+
+interface ApplyControl {
+  submitting: boolean;
+  notice: { tone: 'success' | 'error'; text: string } | null;
+  submit: () => Promise<void>;
+}
+
+const APPLY_ERRORS: Record<ApplyRejection, string> = {
+  notLoggedIn: 'ログインしてから申請してください。',
+  profileRequired: '申請するには、プロフィールの登録が必要です。',
+  ownEvent: '自分の募集には申請できません。',
+  alreadyApplied: 'この募集には、すでに申請しています。',
+  notReapplicable: 'この募集には、もう申請できません。',
+  notAccepting: '受付が終わったため、申請できませんでした。',
+  full: '満員になったため、申請できませんでした。',
+  rateLimited: '申請の回数の上限（1日20件）に達しました。時間をおいてお試しください。',
+  notFound: 'この募集は見つかりませんでした。',
+};
+
+/** 参加の申請。結果は同じ画面に示す（docs/11の追加-09）。 */
+function useApply(eventId: string, onChanged: () => void): ApplyControl {
+  const repository = useApplicationRepository();
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<ApplyControl['notice']>(null);
+
+  const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setNotice(null);
+    try {
+      const result = await repository.applyToEvent(eventId);
+      setNotice(
+        result.status === 'applied'
+          ? { tone: 'success', text: '参加を申請しました。' }
+          : { tone: 'error', text: APPLY_ERRORS[result.reason] },
+      );
+      // 申請の状態や残り枠が変わるため、読み込み直す
+      onChanged();
+    } catch {
+      setNotice({
+        tone: 'error',
+        text: '申請できませんでした。通信の状態を確認して、もう一度お試しください。',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return { submitting, notice, submit };
 }
 
 interface GuestActionsProps {
@@ -238,12 +383,13 @@ function GuestActions({ eventId }: GuestActionsProps) {
   );
 }
 
-interface HostLocationProps {
+interface LocationSectionProps {
   eventId: string;
+  isHost: boolean;
 }
 
-/** 主催者に見せる住所・施設名・集合場所。取得の窓口が許可した場合だけ表示する。 */
-function HostLocation({ eventId }: HostLocationProps) {
+/** 主催者と承認済みの参加者に見せる住所・施設名・集合場所。取得の窓口が許可した場合だけ表示する。 */
+function LocationSection({ eventId, isHost }: LocationSectionProps) {
   const { result, retry } = useEventLocation(eventId, true);
 
   return (
@@ -274,7 +420,9 @@ function HostLocation({ eventId }: HostLocationProps) {
         (result.location ? (
           <>
             <p className="mb-3 text-accent-ink">
-              主催者のあなたと、参加が承認された人だけに表示されます。
+              {isHost
+                ? '主催者のあなたと、参加が承認された人だけに表示されます。'
+                : '主催者と、参加が承認された人だけに表示されます。'}
             </p>
             <dl className="flex flex-col gap-3">
               {result.location.venueName !== null && (

@@ -2,13 +2,17 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
+import { createDevApplicationRepository } from '../dev/devApplicationRepository';
 import { createDevAuthRepository } from '../dev/devAuthRepository';
 import { createDevDatabase } from '../dev/devDatabase';
 import { createDevEventRepository } from '../dev/devEventRepository';
+import { createDevProfileRepository } from '../dev/devProfileRepository';
 import { createDevSession } from '../dev/devSession';
+import { ApplicationRepositoryContext } from '../features/applications/repositoryContext';
 import { AuthRepositoryContext } from '../features/auth/repositoryContext';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
 import type { EventRepository } from '../features/events/types';
+import { ProfileRepositoryContext } from '../features/profiles/repositoryContext';
 import { appRoutes } from './App';
 
 const HOST = 'dev-user-b';
@@ -25,7 +29,11 @@ function renderApp(
   render(
     <AuthRepositoryContext value={createDevAuthRepository({ db, session })}>
       <EventRepositoryContext value={eventRepository}>
-        <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
+        <ApplicationRepositoryContext value={createDevApplicationRepository({ db, session })}>
+          <ProfileRepositoryContext value={createDevProfileRepository({ db, session })}>
+            <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
+          </ProfileRepositoryContext>
+        </ApplicationRepositoryContext>
       </EventRepositoryContext>
     </AuthRepositoryContext>,
   );
@@ -105,8 +113,9 @@ describe('要ログインの画面', () => {
     await user.click(await screen.findByRole('button', { name: 'ログアウト' }));
 
     expect(await screen.findByRole('link', { name: 'ログイン' })).toBeInTheDocument();
+    // 上部の表示が先に変わり、ホームへの移動はその後に起きるため、見出しも待つ
     expect(
-      screen.getByRole('heading', { level: 1, name: 'バレーしたい人、集まれ！' }),
+      await screen.findByRole('heading', { level: 1, name: 'バレーしたい人、集まれ！' }),
     ).toBeInTheDocument();
   });
 });
@@ -348,5 +357,257 @@ describe('設定', () => {
     ).toBeInTheDocument();
     switchUser('dev-user-a');
     expect(await screen.findByRole('button', { name: 'ログアウト' })).toBeInTheDocument();
+  });
+});
+
+/** 画面の幅ごとに同じ操作が2か所にあるため、最初のものを使う。 */
+async function findFirstButton(name: string | RegExp) {
+  const [button] = await screen.findAllByRole('button', { name });
+  if (!button) throw new Error(`${String(name)} がありません。`);
+  return button;
+}
+
+describe('募集詳細（申請者）', () => {
+  it('未申請 → 申請すると、承認待ちになる', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}`, { userId: 'dev-user-a' });
+
+    await user.click(await findFirstButton('参加を申請する'));
+
+    expect(await screen.findByRole('status', { name: '' })).toHaveTextContent(
+      '参加を申請しました。',
+    );
+    expect((await screen.findAllByText('承認待ち')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
+    expect(screen.queryByText('ダミー住所A（架空）')).not.toBeInTheDocument();
+  });
+
+  it('承認済みなら、くわしい住所を示す', async () => {
+    renderApp('/events/dev-family-morning', { userId: 'dev-user-a' });
+
+    expect(await screen.findByText('ダミー住所E（架空）')).toBeInTheDocument();
+    expect(screen.getAllByText('承認済み').length).toBeGreaterThan(0);
+  });
+
+  it('却下なら、その旨を示し、申請できない', async () => {
+    renderApp('/events/dev-spike-practice', { userId: 'dev-user-a' });
+
+    expect(
+      (await screen.findAllByText('この募集への申請は却下されました。')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['満員', 'dev-easy-morning', '満員のため、今は申請できません。'],
+    ['受付終了', 'dev-spike-practice', '受付は終了しました。'],
+  ])('%sの募集では、申請できない案内を示す', async (_, eventId, message) => {
+    // 却下の記録がない利用者にする
+    renderApp(`/events/${eventId}`, { userId: 'dev-user-minor' });
+
+    expect((await screen.findAllByText(message)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
+  });
+
+  it('開催中の承認済みは、終了日時まで住所を示す', async () => {
+    renderApp('/events/dev-ongoing', { userId: 'dev-user-a' });
+
+    expect(await screen.findByText('ダミー住所F（架空）')).toBeInTheDocument();
+  });
+
+  it('主催者には、申請のボタンを出さない', async () => {
+    renderApp(`/events/${HOSTED_EVENT}`, { userId: HOST });
+
+    expect((await screen.findAllByRole('link', { name: '申請者を見る' })).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
+  });
+
+  it('プロフィール未登録の人には、登録を案内する', async () => {
+    renderApp(`/events/${HOSTED_EVENT}`, { userId: 'dev-user-no-profile' });
+
+    const [link] = await screen.findAllByRole('link', { name: 'プロフィールを登録する' });
+    expect(link).toHaveAttribute('href', `/profile/edit?next=%2Fevents%2F${HOSTED_EVENT}`);
+  });
+});
+
+describe('申請者一覧', () => {
+  it('承認すると承認済みに移り、定員の数が変わる', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    const summary = await screen.findByRole('region', { name: '定員と承認済みの数' });
+    expect(summary).toHaveTextContent('承認済み 9人');
+    await user.click(screen.getByRole('button', { name: 'こはるさんを承認する' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('こはるさんの参加を承認しました。');
+    expect(summary).toHaveTextContent('承認済み 10人');
+    expect(screen.queryByRole('button', { name: 'こはるさんを承認する' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /承認済み/ }));
+    expect(screen.getByRole('link', { name: 'こはる' })).toHaveAttribute(
+      'href',
+      '/users/dev-user-minor',
+    );
+  });
+
+  it('却下は確認してから行う', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    await user.click(await screen.findByRole('button', { name: 'こはるさんの申請を却下する' }));
+    const confirm = screen.getByRole('group', { name: 'こはるさんの申請の却下の確認' });
+    await user.click(within(confirm).getByRole('button', { name: 'やめる' }));
+    expect(screen.getByRole('button', { name: 'こはるさんを承認する' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'こはるさんの申請を却下する' }));
+    await user.click(
+      within(screen.getByRole('group', { name: 'こはるさんの申請の却下の確認' })).getByRole(
+        'button',
+        { name: '却下する' },
+      ),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('こはるさんの申請を却下しました。');
+  });
+
+  it('満員の募集では、承認待ちを残したまま承認できない', async () => {
+    renderApp('/events/dev-b-full/applicants', { userId: HOST });
+
+    expect(await screen.findByText(/定員に達したため、今は承認できません/)).toBeInTheDocument();
+    const approveButtons = screen.getAllByRole('button', { name: /を承認する$/ });
+    expect(approveButtons).toHaveLength(2);
+    for (const button of approveButtons) expect(button).toBeDisabled();
+  });
+
+  it('他人の募集の申請者一覧は見られない', async () => {
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: 'dev-user-a' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請者一覧を表示できません' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('申請者一覧は、募集の主催者だけが見られます。')).toBeInTheDocument();
+    expect(screen.queryByText('こはる')).not.toBeInTheDocument();
+  });
+
+  it('非表示の募集の申請者一覧は、主催者にも見せない', async () => {
+    renderApp('/events/dev-b-hidden/applicants', { userId: HOST });
+
+    expect(
+      await screen.findByText('この募集は非表示になったため、申請者一覧を表示できません。'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('申請と募集', () => {
+  it('自分の申請の状態を示し、非表示の募集は開催日時だけを示す', async () => {
+    renderApp('/activity', { userId: 'dev-user-a' });
+
+    const section = await screen.findByRole('region', { name: '参加する側' });
+    const link = await within(section).findByRole('link', { name: '平日夜にしっかり動く会' });
+    expect(link.closest('li')).toHaveTextContent('承認待ち');
+    expect(
+      within(section).getByRole('link', { name: '家族や友人と楽しむ午前バレー' }).closest('li'),
+    ).toHaveTextContent('承認済み');
+    expect(
+      within(section).getByRole('link', { name: 'スパイク練習会' }).closest('li'),
+    ).toHaveTextContent('却下');
+    const hidden = within(section).getByText('非表示になった募集').closest('li');
+    expect(hidden).not.toHaveTextContent('非表示の会');
+    expect(hidden).not.toHaveTextContent('承認済み');
+    expect(within(section).getByRole('heading', { name: '終わった募集' })).toBeInTheDocument();
+  });
+
+  it('主催した募集と人数を示し、申請者一覧へ移れる', async () => {
+    renderApp('/activity', { userId: HOST });
+
+    const section = await screen.findByRole('region', { name: '主催する側' });
+    const item = (
+      await within(section).findByRole('link', { name: '木曜夜のミニゲーム会' })
+    ).closest('li');
+    if (!item) throw new Error('募集がありません。');
+    expect(item).toHaveTextContent('承認済み 6／6人・承認待ち 2人');
+    expect(within(item).getByRole('link', { name: '申請者を見る' })).toHaveAttribute(
+      'href',
+      '/events/dev-b-full/applicants',
+    );
+    expect(within(section).getByText('非表示になった募集')).toBeInTheDocument();
+    expect(within(section).queryByText('非表示になった会（主催）')).not.toBeInTheDocument();
+  });
+});
+
+describe('プロフィール', () => {
+  it('自分のプロフィールを示す', async () => {
+    renderApp('/profile', { userId: 'dev-user-a' });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'あおい' })).toBeInTheDocument();
+    expect(screen.getByText('初心者')).toBeInTheDocument();
+    expect(screen.getByText(/名古屋に引っ越してきて/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'プロフィールを編集' })).toBeInTheDocument();
+  });
+
+  it('ほかの人のプロフィールには、編集を出さない', async () => {
+    renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'そら' })).toBeInTheDocument();
+    expect(screen.getByText('経験者')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'プロフィールを編集' })).not.toBeInTheDocument();
+  });
+
+  it('プロフィール未登録なら、登録を案内する', async () => {
+    renderApp('/profile', { userId: 'dev-user-no-profile' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'プロフィールが登録されていません' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('申請者一覧（PC）', () => {
+  /** 1024px以上の画面として扱う。 */
+  function asPc() {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) =>
+        ({
+          matches: query === '(min-width: 1024px)',
+          media: query,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+        }) as unknown as MediaQueryList,
+    );
+  }
+
+  it('1024px以上では、申請者を表で示し、表の中で承認できる', async () => {
+    asPc();
+    try {
+      const user = userEvent.setup();
+      renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+      const table = await screen.findByRole('table', { name: '申請者' });
+      expect(
+        within(table)
+          .getAllByRole('columnheader')
+          .map((header) => header.textContent),
+      ).toEqual(['ニックネーム', '経験レベル', '自己紹介', '申請日時', '状態', '操作']);
+      const row = within(table).getByRole('row', { name: /こはる/ });
+      expect(row).toHaveTextContent('未経験者');
+      expect(row).toHaveTextContent('承認待ち');
+      // カードと二重に置かない
+      expect(screen.getAllByRole('button', { name: 'こはるさんを承認する' })).toHaveLength(1);
+
+      await user.click(within(row).getByRole('button', { name: 'こはるさんを承認する' }));
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'こはるさんの参加を承認しました。',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('スマートフォンでは、表を使わない', async () => {
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    expect(await screen.findByRole('button', { name: 'こはるさんを承認する' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

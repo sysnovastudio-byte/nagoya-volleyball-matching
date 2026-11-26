@@ -1,5 +1,10 @@
-/** 募集の状態（docs/06の5-12）。終了・中止・非表示は、未ログインには返さない。 */
-export type EventState = 'open' | 'full' | 'closed' | 'ongoing';
+import type { ApplicationStatus } from '../applications/types';
+
+/**
+ * 募集の状態（docs/06の5-12）。一覧には受付中・満員・締切だけが出る。
+ * 終了・中止は、主催者と申請したことがある人にだけ返す（DB-08）。非表示は状態として返さない。
+ */
+export type EventState = 'open' | 'full' | 'closed' | 'ongoing' | 'ended' | 'cancelled';
 
 export type TargetLevel = 'inexperienced' | 'beginner' | 'experienced';
 
@@ -45,7 +50,24 @@ export interface PublicEvent {
 export interface EventDetail extends PublicEvent {
   /** 見ている人が主催者か。判定は取得の窓口が行い、画面はIDを扱わない */
   isHost: boolean;
+  /** 見ている人の申請の状態。未申請・主催者・未ログインは null */
+  myApplication: ApplicationStatus | null;
 }
+
+/** 主催した募集（docs/06の6-5の get_my_events）。非表示の募集は開催日時だけ（docs/11の4-4）。 */
+export type MyEvent =
+  | {
+      hidden: false;
+      id: string;
+      title: string;
+      startsAt: string;
+      endsAt: string;
+      state: EventState;
+      capacity: number;
+      approvedCount: number;
+      pendingCount: number;
+    }
+  | { hidden: true; startsAt: string; endsAt: string };
 
 /** 承認された人と主催者だけに見せる情報（docs/06の4-4）。 */
 export interface EventLocation {
@@ -86,15 +108,17 @@ export type CreateEventResult =
 /**
  * 募集の取得・作成の窓口。画面はこの形だけに依存する。
  * 見ている人は、窓口が内部でログイン状態から決める。画面から利用者のIDを渡さない。
- * 将来は、docs/06の6-5の関数（list_events・get_event・create_event）を呼ぶ実装に置き換える。
+ * 将来は、docs/06の6-5の関数（list_events・get_event・create_event・get_my_events）を呼ぶ実装に置き換える。
  */
 export interface EventRepository {
   /** 開催前の募集を、開催日時の順に返す。 */
   listEvents(cursor?: string): Promise<EventListResult>;
   /** 見られる募集を返す。ない場合と、見られない場合は、どちらも null を返す。 */
   getEvent(id: string): Promise<EventDetail | null>;
-  /** くわしい住所。見てよい人（主催者。のちに承認済みの参加者）以外には null を返す。 */
+  /** くわしい住所。見てよい人（主催者と承認済みの参加者、docs/06の5-4）以外には null を返す。 */
   getLocation(eventId: string): Promise<EventLocation | null>;
   /** 募集と住所を作成する。通信の失敗は例外、条件による拒否は結果で返す。 */
   createEvent(input: CreateEventInput): Promise<CreateEventResult>;
+  /** 自分が主催した募集。終了・中止・非表示も含め、開催日時の順に返す。未ログインは空を返す。 */
+  getMyEvents(): Promise<MyEvent[]>;
 }

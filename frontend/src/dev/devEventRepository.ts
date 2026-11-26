@@ -3,9 +3,10 @@ import type {
   EventDetail,
   EventRepository,
   EventState,
+  MyEvent,
   PublicEvent,
 } from '../features/events/types';
-import { findDevUser, type DevDatabase } from './devDatabase';
+import { countApplications, devEventState, findDevUser, type DevDatabase } from './devDatabase';
 import type { DevEventRecord } from './devEvents';
 import type { DevSession } from './devSession';
 import { markDevModule } from './marker';
@@ -21,14 +22,8 @@ interface DevEventRepositoryOptions {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** 未ログインの人から見た状態。見られない場合は null（docs/06の5-12）。 */
-function guestState(record: DevEventRecord, now: Date): EventState | null {
-  if (record.hidden || record.status === 'cancelled') return null;
-  if (now > new Date(record.endsAt)) return null;
-  if (now >= new Date(record.startsAt)) return 'ongoing';
-  if (record.status === 'closed') return 'closed';
-  return record.approvedCount >= record.capacity ? 'full' : 'open';
-}
+/** 誰でも詳細を見られる状態（docs/06の5-12）。 */
+const PUBLIC_STATES: readonly EventState[] = ['open', 'full', 'closed', 'ongoing'];
 
 /**
  * 【開発専用】画面の動作を確かめるための実装。
@@ -55,28 +50,31 @@ export function createDevEventRepository({
     description: record.description,
     belongings: record.belongings,
     capacity: record.capacity,
-    remaining: record.capacity - record.approvedCount,
+    remaining: record.capacity - countApplications(db, record.id, 'approved'),
     fee: record.fee,
     hostNickname: hostNickname(record),
     state,
   });
 
-  const visibleEvents = () => {
-    const current = now();
-    return db.events.flatMap((record) => {
-      const state = guestState(record, current);
-      return state ? [{ record, event: toPublicEvent(record, state) }] : [];
-    });
-  };
-
-  /** ログインしていて、利用を始められる人（docs/06の6-3の共通の検証を、表示の確認用に簡略化）。 */
+  /** ログインしている人。判定は表示の確認用に簡略化している（docs/06の6-3）。 */
   const currentUser = () => findDevUser(db, session.getUserId());
+
+  /** 見ている人の、最新の申請。 */
+  const myApplication = (eventId: string, userId: string | undefined) =>
+    db.applications.findLast(
+      (application) => application.eventId === eventId && application.userId === userId,
+    );
 
   return {
     listEvents: (cursor) => {
-      const upcoming = visibleEvents()
-        .map(({ event }) => event)
-        .filter((event) => event.state !== 'ongoing')
+      const current = now();
+      const upcoming = db.events
+        .flatMap((record) => {
+          const state = devEventState(db, record, current);
+          return state === 'open' || state === 'full' || state === 'closed'
+            ? [toPublicEvent(record, state)]
+            : [];
+        })
         .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id));
       const start = cursor ? upcoming.findIndex((event) => event.id === cursor) + 1 : 0;
       const items = upcoming.slice(start, start + pageSize);
@@ -85,23 +83,38 @@ export function createDevEventRepository({
     },
 
     getEvent: (id) => {
-      // 終了・中止した募集を主催者に見せる扱い（DB-08）は、SCR-009 と合わせて加える
-      const found = visibleEvents().find(({ event }) => event.id === id);
-      if (!found) return Promise.resolve(null);
+      const record = db.events.find((event) => event.id === id);
+      if (!record) return Promise.resolve(null);
+      const state = devEventState(db, record, now());
+      // 非表示の募集は、申請・募集の管理で開催日時だけを示す（docs/11の4-4）。詳細は見せない
+      if (state === 'hidden') return Promise.resolve(null);
+
+      const userId = currentUser()?.id;
+      const isHost = record.hostId === userId;
+      const application = myApplication(record.id, userId);
+      // 終了・中止は、主催者と申請したことがある人だけ（DB-08）
+      if (!PUBLIC_STATES.includes(state) && !isHost && !application) {
+        return Promise.resolve(null);
+      }
       const detail: EventDetail = {
-        ...found.event,
-        isHost: found.record.hostId === session.getUserId(),
+        ...toPublicEvent(record, state),
+        isHost,
+        myApplication: application?.status ?? null,
       };
       return Promise.resolve(detail);
     },
 
     getLocation: (eventId) => {
-      // 主催者で、募集が非表示でない場合だけ（docs/06の5-4）。承認済みの参加者は申請と合わせて加える
+      // docs/06の5-4。主催者は非表示でなければ見られ、参加者は承認済みで終了日時まで見られる
       const user = currentUser();
       const record = db.events.find((event) => event.id === eventId);
-      if (!user || !record || record.hidden || record.hostId !== user.id) {
-        return Promise.resolve(null);
-      }
+      if (!user || !record || record.hidden) return Promise.resolve(null);
+      const isHost = record.hostId === user.id;
+      const isApprovedParticipant =
+        record.status !== 'cancelled' &&
+        now() <= new Date(record.endsAt) &&
+        myApplication(record.id, user.id)?.status === 'approved';
+      if (!isHost && !isApprovedParticipant) return Promise.resolve(null);
       const location = db.locations.get(eventId);
       return Promise.resolve(location ? { ...location } : null);
     },
@@ -144,7 +157,6 @@ export function createDevEventRepository({
         description: input.description,
         belongings: input.belongings,
         capacity: input.capacity,
-        approvedCount: 0,
         fee: input.fee,
         status: 'open',
         hidden: false,
@@ -153,6 +165,34 @@ export function createDevEventRepository({
       db.locations.set(id, { ...input.location });
       db.eventCreations.push({ userId: user.id, at: current });
       return Promise.resolve({ status: 'created', eventId: id });
+    },
+
+    getMyEvents: () => {
+      const user = currentUser();
+      if (!user) return Promise.resolve([]);
+      const current = now();
+      const events = db.events
+        .filter((record) => record.hostId === user.id)
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id))
+        .map((record): MyEvent => {
+          const state = devEventState(db, record, current);
+          // 非表示の募集は、開催日時だけを返す（docs/06の5-12）
+          if (state === 'hidden') {
+            return { hidden: true, startsAt: record.startsAt, endsAt: record.endsAt };
+          }
+          return {
+            hidden: false,
+            id: record.id,
+            title: record.title,
+            startsAt: record.startsAt,
+            endsAt: record.endsAt,
+            state,
+            capacity: record.capacity,
+            approvedCount: countApplications(db, record.id, 'approved'),
+            pendingCount: countApplications(db, record.id, 'pending'),
+          };
+        });
+      return Promise.resolve(events);
     },
   };
 }
