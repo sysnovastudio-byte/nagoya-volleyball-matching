@@ -32,7 +32,10 @@ export function EventCard({ event }: EventCardProps) {
         <EventStateBadge state={event.state} />
         <h3 className="text-lg leading-normal font-bold">
           {/* カード全体を押せるようにする */}
-          <Link to={`/events/${event.id}`} className="after:absolute after:inset-0 after:rounded-2xl">
+          <Link
+            to={`/events/${event.id}`}
+            className="after:absolute after:inset-0 after:rounded-2xl"
+          >
             {event.title}
           </Link>
         </h3>

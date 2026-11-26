@@ -34,8 +34,7 @@ export default defineConfig([
           patterns: [
             {
               group: ['**/dev/*'],
-              message:
-                '開発専用のデータは repository.ts からだけ、開発時に動的に読み込みます。',
+              message: '開発専用のデータは repository.ts からだけ、開発時に動的に読み込みます。',
             },
           ],
         },
