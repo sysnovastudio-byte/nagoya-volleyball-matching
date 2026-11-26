@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
-import { backState } from '../../app/BackLink';
+import { useSearchParams } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { PC_QUERY, useMediaQuery } from '../../app/useMediaQuery';
 import { Button, ButtonLink } from '../../components/ui/Button';
@@ -162,8 +161,6 @@ function FilterSummary({ filter, onClear }: { filter: EventFilter; onClear: () =
 
 function EventList({ filter, onClear }: { filter: EventFilter; onClear: () => void }) {
   const { state, retry, loadMore } = useEventList(filter);
-  const location = useLocation();
-  const back = backState(`${location.pathname}${location.search}`, '募集一覧へ');
 
   if (state.status === 'loading') return <EventListSkeleton />;
 
@@ -200,7 +197,7 @@ function EventList({ filter, onClear }: { filter: EventFilter; onClear: () => vo
       <ul className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
         {state.items.map((event) => (
           <li key={event.id}>
-            <EventCard event={event} backState={back} />
+            <EventCard event={event} />
           </li>
         ))}
       </ul>

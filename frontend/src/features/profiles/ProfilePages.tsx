@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
-import { BackLink } from '../../app/BackLink';
 import { useFlashToast } from '../../app/useFlashToast';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
@@ -51,7 +50,7 @@ export function UserProfilePage() {
   if (result.status === 'loading') return <Loading />;
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   const [profile] = result.value;
-  return profile ? <ProfileView profile={profile} showBack /> : <NotFoundPage />;
+  return profile ? <ProfileView profile={profile} /> : <NotFoundPage />;
 }
 
 function Loading() {
@@ -119,25 +118,18 @@ interface ProfileViewProps {
   profile: PublicProfile;
   /** 本人のプロフィールの場合だけ渡す。ほかの人の画面には出さない */
   ageGroup?: AgeGroup | null;
-  /** 申請者一覧などから来た場合に、戻る先を示す */
-  showBack?: boolean;
   /** 本人の操作 */
   children?: ReactNode;
 }
 
 /** 画像（の代わりの絵柄）と名前、公開項目の順（docs/11の5-1）。 */
-function ProfileView({ profile, ageGroup, showBack = false, children }: ProfileViewProps) {
+function ProfileView({ profile, ageGroup, children }: ProfileViewProps) {
   const name = displayName(profile);
   useDocumentTitle(`${name}のプロフィール`);
   const experience = experienceLabel(profile);
 
   return (
     <div className="mx-auto w-full max-w-160 px-4 py-6">
-      {showBack && (
-        <div className="-mt-4 mb-2">
-          <BackLink />
-        </div>
-      )}
       <div className="mb-5 flex items-center gap-4">
         <Avatar size="large" />
         <h1 className="min-w-0 text-2xl font-bold break-words">{name}</h1>

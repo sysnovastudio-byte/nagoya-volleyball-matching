@@ -19,7 +19,6 @@ export type ApplyRejection =
   | 'notReapplicable'
   /** 締切・開催開始後・中止・非表示 */
   | 'notAccepting'
-  | 'full'
   | 'rateLimited'
   | 'notFound';
 

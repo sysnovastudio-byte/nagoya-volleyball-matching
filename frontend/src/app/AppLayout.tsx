@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { useSession } from '../features/auth/sessionContext';
+import { BackButton } from './BackButton';
 import { MemberNav } from './MemberNav';
 import { PublicHeader } from './PublicHeader';
 import { ToastProvider } from './ToastProvider';
@@ -48,6 +49,7 @@ export function AppLayout() {
           tabIndex={-1}
           className="flex grow flex-col pb-(--member-nav-h) outline-none"
         >
+          <BackButton />
           <Outlet />
         </main>
         {isMember && (

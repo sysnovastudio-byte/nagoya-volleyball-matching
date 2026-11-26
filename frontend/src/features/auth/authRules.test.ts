@@ -51,8 +51,12 @@ describe('新規登録の入力', () => {
 
   it('同意の欄は2つで、最初はすべて未選択', () => {
     expect(CONSENTS.map((item) => item.label)).toEqual([
-      '利用規約とプライバシーポリシーに同意する',
-      '通報時のメッセージ確認に同意する',
+      '同意する',
+      '通報されたメッセージを、運営者が確認することに同意する',
+    ]);
+    expect(CONSENTS.map((item) => item.accessibleLabel)).toEqual([
+      '利用規約・プライバシーポリシーに同意する',
+      '通報されたメッセージを、運営者が確認することに同意する',
     ]);
     expect(Object.values(EMPTY_SIGN_UP_FORM.agreements)).toEqual([false, false]);
     expect(EMPTY_SIGN_UP_FORM.ageCategory).toBeNull();

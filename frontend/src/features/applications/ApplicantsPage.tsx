@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
-import { BackLink, backState } from '../../app/BackLink';
 import { useToast } from '../../app/toastContext';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { PC_QUERY, useMediaQuery } from '../../app/useMediaQuery';
@@ -190,8 +189,6 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
 
   return (
     <div className="mx-auto w-full max-w-200 px-4 pt-2 pb-8 lg:max-w-280">
-      <BackLink fallback={{ to: `/events/${event.id}`, label: '募集詳細へ' }} />
-
       <h1 className="mt-1 text-2xl font-bold">申請者一覧</h1>
       <div className="mt-1 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <EventStateBadge state={event.state} />
@@ -366,7 +363,6 @@ function ApplicantCollection({ applicants, renderActions }: ApplicantCollectionP
 }
 
 function ApplicantName({ applicant }: { applicant: Applicant }) {
-  const { eventId = '' } = useParams();
   const { profile } = applicant;
   const name = displayName(profile);
   return profile.isWithdrawn ? (
@@ -374,8 +370,6 @@ function ApplicantName({ applicant }: { applicant: Applicant }) {
   ) : (
     <Link
       to={`/users/${profile.userId}`}
-      // プロフィールから、この申請者一覧に戻れるようにする
-      state={backState(`/events/${eventId}/applicants`, '申請者一覧へ')}
       className="inline-flex min-h-11 items-center font-bold text-main-strong underline"
     >
       {name}

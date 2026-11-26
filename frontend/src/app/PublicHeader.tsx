@@ -41,6 +41,7 @@ export function PublicHeader({ mode }: PublicHeaderProps) {
             </ButtonLink>
           </nav>
         )}
+        {/* PCでは上部の移動にニックネームを示すため、スマートフォンだけに出す */}
         {mode === 'member' && <ViewerName />}
         {mode === 'member' && (
           <div className="hidden shrink-0 lg:block">
@@ -60,7 +61,7 @@ function ViewerName() {
   return (
     <Link
       to={nickname ? '/profile' : '/profile/edit'}
-      className="flex min-h-11 max-w-[45%] min-w-0 shrink items-center gap-1.5 rounded-full px-2 font-bold text-ink hover:underline lg:max-w-56"
+      className="flex min-h-11 max-w-[45%] min-w-0 shrink items-center gap-1.5 rounded-full px-2 font-bold text-ink hover:underline lg:hidden"
     >
       <svg
         aria-hidden="true"

@@ -99,8 +99,18 @@ describe('参加の申請', () => {
     });
   });
 
+  it('満員の募集にも申請でき、承認待ちになる（2026-11-26 の決定）', async () => {
+    const { applications, db } = setup('dev-member-16');
+
+    expect(await applications.applyToEvent('dev-easy-morning')).toEqual({ status: 'applied' });
+    expect(db.applications.at(-1)).toMatchObject({
+      eventId: 'dev-easy-morning',
+      userId: 'dev-member-16',
+      status: 'pending',
+    });
+  });
+
   it.each([
-    ['満員', 'dev-easy-morning', 'full'],
     ['締切', 'dev-spike-practice', 'notAccepting'],
     ['開催中', 'dev-ongoing', 'notAccepting'],
     ['中止', 'dev-cancelled', 'notAccepting'],

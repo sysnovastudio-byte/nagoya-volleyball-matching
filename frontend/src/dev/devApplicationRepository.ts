@@ -108,8 +108,10 @@ export function createDevApplicationRepository({
       if (mine.length > 0) {
         return Promise.resolve({ status: 'rejected', reason: 'notReapplicable' });
       }
-      if (state === 'full') return Promise.resolve({ status: 'rejected', reason: 'full' });
-      if (state !== 'open') return Promise.resolve({ status: 'rejected', reason: 'notAccepting' });
+      // 満員でも承認待ちとして受け付け、主催者が判断する（docs/11の2-2、2026-11-26）
+      if (state !== 'open' && state !== 'full') {
+        return Promise.resolve({ status: 'rejected', reason: 'notAccepting' });
+      }
 
       const recent = db.applications.filter(
         (application) =>

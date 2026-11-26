@@ -154,7 +154,6 @@ describe('募集詳細（未ログイン）', () => {
   });
 
   it.each([
-    ['full', '満員のため、今は申請できません。'],
     ['closed', '受付は終了しました。'],
     ['ongoing', '開催中のため、申請できません。'],
   ] as const)('%s では申請の操作を出さず、理由を示す', async (state, reason) => {
@@ -165,6 +164,18 @@ describe('募集詳細（未ログイン）', () => {
 
     expect((await screen.findAllByText(reason)).length).toBeGreaterThan(0);
     expect(screen.queryByRole('link', { name: 'ログインして申請する' })).not.toBeInTheDocument();
+  });
+
+  it('満員でも、主催者が判断することを添えて申請の操作を出す', async () => {
+    renderApp(
+      '/events/event-1',
+      createRepository({ getEvent: () => Promise.resolve({ ...EVENT, state: 'full' }) }),
+    );
+
+    expect(
+      (await screen.findAllByText('満員です。申請すると主催者が判断します。')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: 'ログインして申請する' }).length).toBeGreaterThan(0);
   });
 
   it('見られない募集は、ページがない場合と同じ表示にする', async () => {
