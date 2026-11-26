@@ -1,0 +1,159 @@
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
+import { describe, expect, it, vi } from 'vitest';
+import { EventRepositoryContext } from '../features/events/repositoryContext';
+import type { EventRepository, PublicEvent } from '../features/events/types';
+import { App } from './App';
+
+const EVENT: PublicEvent = {
+  id: 'event-1',
+  title: 'テスト用の募集',
+  startsAt: '2026-12-05T04:00:00Z',
+  endsAt: '2026-12-05T07:00:00Z',
+  area: 'nakamura',
+  targetLevels: ['beginner'],
+  description: '説明の文章',
+  belongings: null,
+  capacity: 12,
+  remaining: 3,
+  fee: 500,
+  hostNickname: 'そら',
+  state: 'open',
+};
+
+function createRepository(overrides: Partial<EventRepository> = {}): EventRepository {
+  return {
+    list: () => Promise.resolve({ items: [EVENT], nextCursor: null }),
+    get: (id) => Promise.resolve(id === EVENT.id ? EVENT : null),
+    ...overrides,
+  };
+}
+
+function renderApp(path: string, repository = createRepository()) {
+  render(
+    <EventRepositoryContext value={repository}>
+      <MemoryRouter initialEntries={[path]}>
+        <App />
+      </MemoryRouter>
+    </EventRepositoryContext>,
+  );
+}
+
+describe('募集一覧', () => {
+  it('募集を表示し、選ぶと詳細へ移動する', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+
+    const link = await screen.findByRole('link', { name: EVENT.title });
+    const card = link.closest('article');
+    if (!card) throw new Error('募集のカードがありません。');
+    expect(within(card).getByText('受付中')).toBeInTheDocument();
+    expect(within(card).getByText('残り3／12人')).toBeInTheDocument();
+
+    await user.click(link);
+
+    expect(await screen.findByRole('heading', { level: 1, name: EVENT.title })).toBeInTheDocument();
+  });
+
+  it('募集がない場合の案内を表示する', async () => {
+    renderApp(
+      '/',
+      createRepository({ list: () => Promise.resolve({ items: [], nextCursor: null }) }),
+    );
+
+    expect(await screen.findByText('募集はまだありません')).toBeInTheDocument();
+  });
+
+  it('失敗した場合は、やり直せる', async () => {
+    const user = userEvent.setup();
+    const list = vi
+      .fn<EventRepository['list']>()
+      .mockRejectedValueOnce(new Error('失敗'))
+      .mockResolvedValue({ items: [EVENT], nextCursor: null });
+    renderApp('/', createRepository({ list }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('募集を読み込めませんでした');
+    await user.click(screen.getByRole('button', { name: 'もう一度読み込む' }));
+
+    expect(await screen.findByRole('link', { name: EVENT.title })).toBeInTheDocument();
+  });
+
+  it('続きを読み込める', async () => {
+    const user = userEvent.setup();
+    const next = { ...EVENT, id: 'event-2', title: '続きの募集' };
+    const list = vi
+      .fn<EventRepository['list']>()
+      .mockResolvedValueOnce({ items: [EVENT], nextCursor: EVENT.id })
+      .mockResolvedValueOnce({ items: [next], nextCursor: null });
+    renderApp('/', createRepository({ list }));
+
+    await user.click(await screen.findByRole('button', { name: '続きを読み込む' }));
+
+    expect(await screen.findByRole('link', { name: next.title })).toBeInTheDocument();
+    expect(list).toHaveBeenLastCalledWith(EVENT.id);
+    expect(screen.queryByRole('button', { name: '続きを読み込む' })).not.toBeInTheDocument();
+  });
+});
+
+describe('募集詳細（未ログイン）', () => {
+  it('公開する項目を、決めた順に表示する', async () => {
+    renderApp('/events/event-1');
+
+    expect(await screen.findByText('12月5日（土）13:00〜16:00')).toBeInTheDocument();
+    expect(screen.getAllByRole('term').map((term) => term.textContent)).toEqual([
+      '開催日時',
+      '開催エリア',
+      '残り枠',
+      '参加費',
+      '対象レベル',
+    ]);
+  });
+
+  it('住所は、承認された人だけに表示することを示す', async () => {
+    renderApp('/events/event-1');
+
+    expect(await screen.findByText('参加が承認された人だけに表示されます。')).toBeInTheDocument();
+  });
+
+  it('受付中は、ログインと新規登録へ移動できる', async () => {
+    renderApp('/events/event-1');
+
+    const links = await screen.findAllByRole('link', { name: 'ログインして申請する' });
+    for (const link of links) expect(link).toHaveAttribute('href', '/login');
+  });
+
+  it.each([
+    ['full', '満員のため、今は申請できません。'],
+    ['closed', '受付は終了しました。'],
+    ['ongoing', '開催中のため、申請できません。'],
+  ] as const)('%s では申請の操作を出さず、理由を示す', async (state, reason) => {
+    renderApp(
+      '/events/event-1',
+      createRepository({ get: () => Promise.resolve({ ...EVENT, state }) }),
+    );
+
+    expect((await screen.findAllByText(reason)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: 'ログインして申請する' })).not.toBeInTheDocument();
+  });
+
+  it('見られない募集は、ページがない場合と同じ表示にする', async () => {
+    renderApp('/events/unknown');
+
+    expect(await screen.findByText('ページが見つかりません')).toBeInTheDocument();
+  });
+});
+
+describe('まだない画面', () => {
+  it('準備中であることを示す', () => {
+    renderApp('/login');
+
+    expect(screen.getByText('ログインは準備中です')).toBeInTheDocument();
+  });
+
+  it('知らないアドレスでは、ページがないことを示す', () => {
+    renderApp('/unknown');
+
+    expect(screen.getByText('ページが見つかりません')).toBeInTheDocument();
+  });
+});
