@@ -588,21 +588,21 @@ describe('プロフィール', () => {
   });
 });
 
-describe('申請者一覧（PC）', () => {
-  /** 1024px以上の画面として扱う。 */
-  function asPc() {
-    vi.stubGlobal(
-      'matchMedia',
-      (query: string) =>
-        ({
-          matches: query === '(min-width: 1024px)',
-          media: query,
-          addEventListener: () => undefined,
-          removeEventListener: () => undefined,
-        }) as unknown as MediaQueryList,
-    );
-  }
+/** 1024px以上の画面として扱う。 */
+function asPc() {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string) =>
+      ({
+        matches: query === '(min-width: 1024px)',
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList,
+  );
+}
 
+describe('申請者一覧（PC）', () => {
   it('1024px以上では、申請者を表で示し、表の中で承認できる', async () => {
     asPc();
     try {
@@ -1046,5 +1046,75 @@ describe('年齢の区分を「18歳以上」に変える', () => {
     ).not.toBeInTheDocument();
     // 年代は、10代以外も選べるようになる
     expect(within(screen.getByLabelText(/年代/)).getAllByRole('option')).toHaveLength(7);
+  });
+});
+
+describe('募集の絞り込み（EVT-05）', () => {
+  it('スマートフォンでは「条件」ボタンで開き、区で絞り込む', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+
+    await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' });
+    const toggle = screen.getByRole('button', { name: '条件' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    await user.selectOptions(screen.getByLabelText('区'), '中村区');
+    await user.click(screen.getByRole('button', { name: 'この条件で探す' }));
+
+    expect(await screen.findByText('条件：', { exact: false })).toHaveTextContent('条件：中村区');
+    expect(screen.getByRole('button', { name: '条件（1）' })).toBeInTheDocument();
+    const list = await screen.findAllByRole('article');
+    expect(list).toHaveLength(2);
+  });
+
+  it('条件に合う募集がなければ、そう示して条件をクリアできる', async () => {
+    const user = userEvent.setup();
+    renderApp('/?area=naka');
+
+    expect(
+      await screen.findByRole('heading', { name: '条件に合う募集はありません' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: '条件をクリア' })[0] as HTMLElement);
+
+    expect(
+      await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }),
+    ).toBeInTheDocument();
+  });
+
+  it('始まりの日が終わりの日より後なら、誤りを示して探さない', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+
+    await user.click(await screen.findByRole('button', { name: '条件' }));
+    fireEvent.change(screen.getByLabelText('この日から'), { target: { value: '2026-12-10' } });
+    fireEvent.change(screen.getByLabelText('この日まで'), { target: { value: '2026-12-01' } });
+    await user.click(screen.getByRole('button', { name: 'この条件で探す' }));
+
+    expect(screen.getByText(/終わりの日は、始まりの日と同じか/)).toBeInTheDocument();
+    expect(screen.getByLabelText('この日まで')).toHaveFocus();
+  });
+
+  it('PCでは、条件を左に出す', async () => {
+    asPc();
+    try {
+      renderApp('/');
+
+      const aside = await screen.findByRole('complementary', { name: '絞り込みの条件' });
+      expect(within(aside).getByRole('form', { name: '募集の絞り込み' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '条件' })).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('絞り込んだ一覧から詳細を開くと、同じ条件の一覧に戻れる', async () => {
+    const user = userEvent.setup();
+    renderApp('/?area=nakamura');
+
+    await user.click(await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }));
+    expect(await screen.findByRole('link', { name: '募集一覧へ' })).toHaveAttribute(
+      'href',
+      '/?area=nakamura',
+    );
   });
 });

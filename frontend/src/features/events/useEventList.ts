@@ -1,5 +1,6 @@
-import { useEffect, useReducer } from 'react';
+import { useEffect, useEffectEvent, useReducer } from 'react';
 import { useEventRepository } from './repositoryContext';
+import { filterKey, type EventFilter } from './eventFilter';
 import type { EventListResult, PublicEvent } from './types';
 
 type ListState =
@@ -45,14 +46,20 @@ function reducer(state: ListState, action: Action): ListState {
   }
 }
 
-export function useEventList() {
+/**
+ * 募集の一覧を読み込む。条件（EVT-05）が変わると、読み込み中の表示に戻して読み込み直す。
+ * 呼び出す側は、条件ごとに key を変えて作り直す（前の条件の結果を出さないため）。
+ */
+export function useEventList(filter: EventFilter) {
   const repository = useEventRepository();
   const [state, dispatch] = useReducer(reducer, { status: 'loading', attempt: 0 });
   const { attempt } = state;
+  const key = filterKey(filter);
+  const runFilter = useEffectEvent(() => filter);
 
   useEffect(() => {
     let active = true;
-    repository.listEvents().then(
+    repository.listEvents(undefined, runFilter()).then(
       (result) => {
         if (active) dispatch({ type: 'loaded', result });
       },
@@ -63,7 +70,7 @@ export function useEventList() {
     return () => {
       active = false;
     };
-  }, [repository, attempt]);
+  }, [repository, attempt, key]);
 
   const retry = () => {
     dispatch({ type: 'retried' });
@@ -73,7 +80,7 @@ export function useEventList() {
     if (state.status !== 'ready' || state.nextCursor === null || state.more === 'loading') return;
     dispatch({ type: 'moreStarted' });
     try {
-      const result = await repository.listEvents(state.nextCursor);
+      const result = await repository.listEvents(state.nextCursor, filter);
       dispatch({ type: 'moreLoaded', result });
     } catch {
       dispatch({ type: 'moreFailed' });

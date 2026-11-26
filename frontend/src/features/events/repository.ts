@@ -23,7 +23,7 @@ function createRepository(): EventRepository {
       async () => (await import('../../dev/devRepositories')).devEventRepository,
     );
     return {
-      listEvents: async (cursor) => (await repository()).listEvents(cursor),
+      listEvents: async (cursor, filter) => (await repository()).listEvents(cursor, filter),
       getEvent: async (id) => (await repository()).getEvent(id),
       getLocation: async (eventId) => (await repository()).getLocation(eventId),
       createEvent: async (input) => (await repository()).createEvent(input),
