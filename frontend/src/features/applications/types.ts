@@ -120,7 +120,7 @@ export interface ApplicantList {
 
 export type ApplicantListResult =
   | { status: 'ready'; list: ApplicantList }
-  /** 主催者でない、または非表示の募集（DB-19 の仮の扱い） */
+  /** 主催者でない、または非表示の募集（DB-19） */
   | { status: 'forbidden'; reason: 'notHost' | 'hidden' }
   | { status: 'notFound' };
 

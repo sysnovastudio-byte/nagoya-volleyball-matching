@@ -68,7 +68,7 @@ describe('当事者だけが見られる', () => {
     expect(detail?.messages.map((message) => message.isMine)).toEqual([false, true, false]);
   });
 
-  it('メッセージのない会話は、始めた人の一覧だけに出す（DB-29 の仮の扱い）', async () => {
+  it('メッセージのない会話は、始めた人の一覧だけに出す（DB-29）', async () => {
     expect((await setup('dev-user-a').repository.listMine()).map((c) => c.id)).toContain(
       'dev-conv-empty',
     );

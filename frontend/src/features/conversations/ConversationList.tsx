@@ -106,7 +106,7 @@ function ConversationItem({
         <span className="text-sm text-muted">
           {formatDateTimeRange(event.startsAt, event.endsAt)}
         </span>
-        {/* 「未読あり」（M-09、未承認）を加える場合は、この行に札を置く */}
+        {/* 「未読あり」（M-09、MVPに含めると承認済み）は、サイクル3でこの行に札を置く */}
       </span>
     </Link>
   );

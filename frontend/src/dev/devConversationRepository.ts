@@ -177,7 +177,7 @@ export function createDevConversationRepository({
       if (!user) return Promise.resolve([]);
       const items = db.conversations
         .filter((conversation) => isParty(conversation, user.id))
-        // メッセージのない会話は、始めた人の一覧だけに示す（DB-29 の仮の扱い）
+        // メッセージのない会話は、始めた人の一覧だけに示す（DB-29）
         .filter(
           (conversation) =>
             conversation.lastMessageAt !== null || conversation.startedBy === user.id,
