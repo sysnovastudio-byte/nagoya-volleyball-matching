@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -43,6 +43,15 @@ function renderApp(
     });
   };
   return { db, session, switchUser };
+}
+
+/** 自動的に消える通知（aria-live の「お知らせ」）。中身が入るまで待つ。 */
+async function findToast() {
+  const region = screen.getByRole('status', { name: 'お知らせ' });
+  await waitFor(() => {
+    expect(region).not.toBeEmptyDOMElement();
+  });
+  return region;
 }
 
 /** 日本時間で、今日から数えた日の時刻を datetime-local の形で返す。 */
@@ -155,7 +164,7 @@ describe('募集作成', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: '日曜の練習会' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('募集を公開しました。')).toBeInTheDocument();
+    expect(await findToast()).toHaveTextContent('募集を公開しました。');
     expect(await screen.findByText('ダミー住所Q（架空）')).toBeInTheDocument();
     expect(screen.getByText('ダミー体育館Q')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: '申請者を見る' })[0]).toHaveAttribute(
@@ -377,9 +386,7 @@ describe('募集詳細（申請者）', () => {
 
     await user.click(await findFirstButton('参加を申請する'));
 
-    expect(await screen.findByRole('status', { name: '' })).toHaveTextContent(
-      '参加を申請しました。',
-    );
+    expect(await findToast()).toHaveTextContent('参加を申請しました。');
     expect((await screen.findAllByText('承認待ち')).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
     expect(screen.queryByText('ダミー住所A（架空）')).not.toBeInTheDocument();
@@ -444,7 +451,7 @@ describe('申請者一覧', () => {
     expect(summary).toHaveTextContent('承認済み 9人');
     await user.click(screen.getByRole('button', { name: 'こはるさんを承認する' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('こはるさんの参加を承認しました。');
+    expect(await findToast()).toHaveTextContent('こはるさんの参加を承認しました。');
     expect(summary).toHaveTextContent('承認済み 10人');
     expect(screen.queryByRole('button', { name: 'こはるさんを承認する' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /承認済み/ }));
@@ -470,7 +477,7 @@ describe('申請者一覧', () => {
         { name: '却下する' },
       ),
     );
-    expect(await screen.findByRole('status')).toHaveTextContent('こはるさんの申請を却下しました。');
+    expect(await findToast()).toHaveTextContent('こはるさんの申請を却下しました。');
   });
 
   it('満員の募集では、定員を増やすことを確かめてから承認する', async () => {
@@ -487,7 +494,7 @@ describe('申請者一覧', () => {
     expect(confirm).toHaveTextContent('定員を7人に増やして承認します。');
     await user.click(within(confirm).getByRole('button', { name: '定員を7人にして承認する' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
+    expect(await findToast()).toHaveTextContent(
       /定員を7人に増やして、.+さんの参加を承認しました。/,
     );
     expect(await screen.findByText(/定員7人/)).toBeInTheDocument();
@@ -623,9 +630,7 @@ describe('申請者一覧（PC）', () => {
       expect(screen.getAllByRole('button', { name: 'こはるさんを承認する' })).toHaveLength(1);
 
       await user.click(within(row).getByRole('button', { name: 'こはるさんを承認する' }));
-      expect(await screen.findByRole('status')).toHaveTextContent(
-        'こはるさんの参加を承認しました。',
-      );
+      expect(await findToast()).toHaveTextContent('こはるさんの参加を承認しました。');
     } finally {
       vi.unstubAllGlobals();
     }
@@ -857,10 +862,7 @@ describe('プロフィール登録・編集（SCR-014）', () => {
     await user.type(nickname, 'あおい2');
     await user.click(screen.getByRole('button', { name: '保存する' }));
 
-    expect(await screen.findByText('プロフィールを保存しました。')).toHaveAttribute(
-      'role',
-      'status',
-    );
+    expect(await findToast()).toHaveTextContent('プロフィールを保存しました。');
     expect(screen.getByRole('heading', { level: 1, name: 'あおい2' })).toBeInTheDocument();
   });
 });
@@ -874,7 +876,7 @@ describe('サイクル1の流れ', () => {
     await screen.findByRole('heading', { level: 1, name: '募集を作る' });
     await fillValidForm(user);
     await user.click(screen.getByRole('button', { name: '公開する' }));
-    expect((await screen.findAllByText('募集を公開しました。')).length).toBeGreaterThan(0);
+    expect(await findToast()).toHaveTextContent('募集を公開しました。');
 
     // 探す → 詳細 → 申請（利用者A）
     switchUser('dev-user-a');
@@ -932,7 +934,7 @@ describe('指摘の不具合', () => {
     await fillValidForm(user);
     await user.click(screen.getByRole('button', { name: '公開する' }));
 
-    expect((await screen.findAllByText('募集を公開しました。')).length).toBeGreaterThan(0);
+    expect(await findToast()).toHaveTextContent('募集を公開しました。');
   });
 
   it('2. 申請と募集から開いた募集詳細は、申請と募集に戻る', async () => {
@@ -1039,7 +1041,7 @@ describe('年齢の区分を「18歳以上」に変える', () => {
     await user.click(screen.getByRole('button', { name: '「18歳以上」に変更する' }));
     await user.click(screen.getByRole('button', { name: '18歳以上に変える' }));
 
-    expect(await screen.findByText(/年齢の区分を「18歳以上」に変えました/)).toBeInTheDocument();
+    expect(await findToast()).toHaveTextContent('年齢の区分を「18歳以上」に変えました。');
     expect(db.users.find((u) => u.id === 'dev-user-minor')?.ageCategory).toBe('adult');
     expect(
       screen.queryByRole('button', { name: '「18歳以上」に変更する' }),

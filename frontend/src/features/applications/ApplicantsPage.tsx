@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { BackLink, backState } from '../../app/BackLink';
+import { useToast } from '../../app/toastContext';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { PC_QUERY, useMediaQuery } from '../../app/useMediaQuery';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
@@ -141,7 +142,8 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
   const [tab, setTab] = useState<Tab>('pending');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<{ id: string; kind: ConfirmKind } | null>(null);
-  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const { event, applicants } = list;
   const isFull = event.approvedCount >= event.capacity;
@@ -156,7 +158,7 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
   const decide = async (applicant: Applicant, decision: 'approve' | 'reject') => {
     if (busyId) return;
     setBusyId(applicant.applicationId);
-    setNotice(null);
+    setError(null);
     const name = displayName(applicant.profile);
     try {
       const result =
@@ -166,26 +168,21 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
               expandTo === null ? undefined : { expandCapacityTo: expandTo },
             )
           : await repository.rejectApplication(applicant.applicationId);
-      setNotice(
-        result.status === 'done'
-          ? {
-              tone: 'success',
-              text:
-                decision === 'approve'
-                  ? expandTo === null
-                    ? `${name}さんの参加を承認しました。`
-                    : `定員を${expandTo}人に増やして、${name}さんの参加を承認しました。`
-                  : `${name}さんの申請を却下しました。`,
-            }
-          : { tone: 'error', text: DECISION_ERRORS[result.reason] },
-      );
+      if (result.status === 'done') {
+        toast(
+          decision === 'approve'
+            ? expandTo === null
+              ? `${name}さんの参加を承認しました。`
+              : `定員を${expandTo}人に増やして、${name}さんの参加を承認しました。`
+            : `${name}さんの申請を却下しました。`,
+        );
+      } else {
+        setError(DECISION_ERRORS[result.reason]);
+      }
       setConfirming(null);
       onChanged();
     } catch {
-      setNotice({
-        tone: 'error',
-        text: '操作できませんでした。通信の状態を確認して、もう一度お試しください。',
-      });
+      setError('操作できませんでした。通信の状態を確認して、もう一度お試しください。');
     } finally {
       setBusyId(null);
     }
@@ -222,16 +219,12 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
         {locked && <p className="mt-1 text-sub">{locked}</p>}
       </section>
 
-      {notice && (
+      {error && (
         <p
-          role={notice.tone === 'error' ? 'alert' : 'status'}
-          className={`mb-4 rounded-xl border px-4 py-3 font-bold ${
-            notice.tone === 'error'
-              ? 'border-danger bg-surface text-danger'
-              : 'border-main bg-main-tint text-main-strong'
-          }`}
+          role="alert"
+          className="mb-4 rounded-xl border border-danger bg-surface px-4 py-3 font-bold text-danger"
         >
-          {notice.text}
+          {error}
         </p>
       )}
 

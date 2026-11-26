@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router';
+import { useToast } from '../../app/toastContext';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
@@ -132,7 +133,7 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
   const [validated, setValidated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [changed, setChanged] = useState(false);
+  const toast = useToast();
 
   const update = (next: ProfileFormValues) => {
     setValues(next);
@@ -343,18 +344,10 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
         </div>
       </form>
 
-      {changed && (
-        <p
-          role="status"
-          className="mt-8 rounded-xl border border-main bg-main-tint px-4 py-3 font-bold text-main-strong"
-        >
-          年齢の区分を「18歳以上」に変えました。
-        </p>
-      )}
       {ageCategory === 'minor' && (
         <ChangeToAdult
           onChanged={() => {
-            setChanged(true);
+            toast('年齢の区分を「18歳以上」に変えました。');
           }}
         />
       )}

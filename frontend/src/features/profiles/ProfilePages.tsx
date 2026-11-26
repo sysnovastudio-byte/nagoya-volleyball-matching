@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { BackLink } from '../../app/BackLink';
+import { useFlashToast } from '../../app/useFlashToast';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
@@ -8,7 +9,6 @@ import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { Avatar } from './Avatar';
-import type { ProfileLocationState } from './ProfileEditPage';
 import { displayName, experienceLabel } from './format';
 import { useProfileRepository } from './repositoryContext';
 import { ageGroupLabel } from './profileRules';
@@ -21,17 +21,14 @@ import type { AgeGroup, MyProfile, PublicProfile } from './types';
 export function MyProfilePage() {
   const repository = useProfileRepository();
   const { result, retry } = useResource('my-profile', () => repository.getMyProfile());
-  const saved = (useLocation().state as ProfileLocationState | null)?.profileSaved === true;
+  // 保存した直後は「プロフィールを保存しました」を通知で示す
+  useFlashToast('profileSaved', 'プロフィールを保存しました。');
 
   if (result.status === 'loading') return <Loading />;
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   if (!result.value) return <NoProfile />;
   return (
-    <ProfileView
-      profile={toPublic(result.value)}
-      ageGroup={result.value.ageGroup}
-      notice={saved ? 'プロフィールを保存しました。' : null}
-    >
+    <ProfileView profile={toPublic(result.value)} ageGroup={result.value.ageGroup}>
       <ButtonLink to="/profile/edit">プロフィールを編集</ButtonLink>
       <ButtonLink to="/settings" variant="secondary">
         設定
@@ -95,7 +92,6 @@ interface ProfileViewProps {
   profile: PublicProfile;
   /** 本人のプロフィールの場合だけ渡す。ほかの人の画面には出さない */
   ageGroup?: AgeGroup | null;
-  notice?: string | null;
   /** 申請者一覧などから来た場合に、戻る先を示す */
   showBack?: boolean;
   /** 本人の操作 */
@@ -103,13 +99,7 @@ interface ProfileViewProps {
 }
 
 /** 画像（の代わりの絵柄）と名前、公開項目の順（docs/11の5-1）。 */
-function ProfileView({
-  profile,
-  ageGroup,
-  notice = null,
-  showBack = false,
-  children,
-}: ProfileViewProps) {
+function ProfileView({ profile, ageGroup, showBack = false, children }: ProfileViewProps) {
   const name = displayName(profile);
   useDocumentTitle(`${name}のプロフィール`);
   const experience = experienceLabel(profile);
@@ -120,14 +110,6 @@ function ProfileView({
         <div className="-mt-4 mb-2">
           <BackLink />
         </div>
-      )}
-      {notice && (
-        <p
-          role="status"
-          className="mb-4 rounded-xl border border-main bg-main-tint px-4 py-3 font-bold text-main-strong"
-        >
-          {notice}
-        </p>
       )}
       <div className="mb-5 flex items-center gap-4">
         <Avatar size="large" />
