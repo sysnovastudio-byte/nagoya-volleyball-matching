@@ -10,6 +10,7 @@ import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { EventStateBadge } from '../events/EventStateBadge';
 import { EVENT_LIMITS } from '../events/eventRules';
+import { ageGroupLabel } from '../profiles/profileRules';
 import { formatDateTimeRange } from '../events/format';
 import { Avatar } from '../profiles/Avatar';
 import { displayName, experienceLabel } from '../profiles/format';
@@ -318,6 +319,9 @@ function ApplicantCollection({ applicants, renderActions }: ApplicantCollectionP
             <th scope="col" className="px-4 py-3 font-medium whitespace-nowrap">
               経験レベル
             </th>
+            <th scope="col" className="px-4 py-3 font-medium whitespace-nowrap">
+              年代
+            </th>
             <th scope="col" className="px-4 py-3 font-medium">
               自己紹介
             </th>
@@ -346,6 +350,9 @@ function ApplicantCollection({ applicants, renderActions }: ApplicantCollectionP
               </th>
               <td className="px-4 py-3 font-bold whitespace-nowrap">
                 {experienceLabel(applicant.profile) ?? '－'}
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <AgeGroupText applicant={applicant} />
               </td>
               <td className="max-w-96 min-w-48 px-4 py-3 break-words whitespace-pre-line">
                 <ApplicantBio applicant={applicant} />
@@ -381,6 +388,17 @@ function ApplicantName({ applicant }: { applicant: Applicant }) {
       {name}
     </Link>
   );
+}
+
+/**
+ * 年代は主催者だけに、承認待ち・承認済みの人の分を終了日時まで示す（docs/06の4-13）。
+ * 見られない場合は「－」、未選択は「未選択」とする。
+ */
+function AgeGroupText({ applicant }: { applicant: Applicant }) {
+  const { hostOnly } = applicant;
+  if (!hostOnly) return <span className="text-muted">－</span>;
+  if (!hostOnly.ageGroup) return <span className="text-muted">未選択</span>;
+  return <span className="font-bold text-ink">{ageGroupLabel(hostOnly.ageGroup)}</span>;
 }
 
 function ApplicantBio({ applicant }: { applicant: Applicant }) {
@@ -420,6 +438,14 @@ function ApplicantCard({ applicant, children }: ApplicantCardProps) {
               <div className="flex gap-2">
                 <dt>経験レベル</dt>
                 <dd className="font-bold text-ink">{experience}</dd>
+              </div>
+            )}
+            {applicant.hostOnly && (
+              <div className="flex gap-2">
+                <dt>年代</dt>
+                <dd>
+                  <AgeGroupText applicant={applicant} />
+                </dd>
               </div>
             )}
             <div className="flex gap-2">

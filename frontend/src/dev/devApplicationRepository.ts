@@ -152,6 +152,8 @@ export function createDevApplicationRepository({
       // 非表示の募集の申請者一覧は、主催者にも見せない（DB-19 の仮の扱い）
       if (state === 'hidden') return Promise.resolve({ status: 'forbidden', reason: 'hidden' });
 
+      // 年代は、承認待ち・承認済みの申請者の分を、終了日時まで見せる。中止・終了では見せない（DB-03）
+      const canSeeDetails = state !== 'ended' && state !== 'cancelled';
       const applicants = db.applications
         .filter((application) => application.eventId === eventId)
         .flatMap((application): Applicant[] => {
@@ -166,6 +168,12 @@ export function createDevApplicationRepository({
                   status: application.status,
                   appliedAt: application.appliedAt.toISOString(),
                   profile,
+                  hostOnly:
+                    canSeeDetails &&
+                    applicantUser?.profile &&
+                    (application.status === 'pending' || application.status === 'approved')
+                      ? { ageGroup: applicantUser.profile.ageGroup }
+                      : null,
                 },
               ]
             : [];

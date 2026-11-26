@@ -614,9 +614,10 @@ describe('申請者一覧（PC）', () => {
         within(table)
           .getAllByRole('columnheader')
           .map((header) => header.textContent),
-      ).toEqual(['ニックネーム', '経験レベル', '自己紹介', '申請日時', '状態', '操作']);
+      ).toEqual(['ニックネーム', '経験レベル', '年代', '自己紹介', '申請日時', '状態', '操作']);
       const row = within(table).getByRole('row', { name: /こはる/ });
       expect(row).toHaveTextContent('未経験者');
+      expect(row).toHaveTextContent('10代');
       expect(row).toHaveTextContent('承認待ち');
       // カードと二重に置かない
       expect(screen.getAllByRole('button', { name: 'こはるさんを承認する' })).toHaveLength(1);
@@ -964,5 +965,86 @@ describe('指摘の不具合', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: '申請者一覧' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('年代（M-01 のうち年代だけ）', () => {
+  it('主催者は、申請者一覧で承認待ち・承認済みの人の年代を見られる', async () => {
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    const card = (await screen.findByRole('link', { name: 'こはる' })).closest('li');
+    expect(card).toHaveTextContent('年代10代');
+  });
+
+  it('ほかの人のプロフィールには、年代を出さない', async () => {
+    renderApp('/users/dev-user-a', { userId: HOST });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'あおい' })).toBeInTheDocument();
+    expect(screen.queryByText('年代')).not.toBeInTheDocument();
+    expect(screen.queryByText('20代')).not.toBeInTheDocument();
+  });
+
+  it('本人のプロフィールには、公開範囲を示して年代を出す', async () => {
+    renderApp('/profile', { userId: 'dev-user-a' });
+
+    expect(await screen.findByText('20代')).toBeInTheDocument();
+    expect(screen.getByText('本人と申請先の主催者だけ')).toBeInTheDocument();
+  });
+
+  it('年代を選んで保存できる。選ばないこともできる', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/profile/edit', { userId: 'dev-user-a' });
+
+    const select = await screen.findByLabelText(/年代/);
+    expect(select).toHaveValue('twenties');
+    await user.selectOptions(select, '40代');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(await screen.findByText('40代')).toBeInTheDocument();
+    expect(db.users.find((u) => u.id === 'dev-user-a')?.profile?.ageGroup).toBe('forties');
+  });
+
+  it('18歳未満の人は、年代を「10代」か「選ばない」だけ選べる', async () => {
+    renderApp('/profile/edit', { userId: 'dev-user-minor' });
+
+    const select = await screen.findByLabelText(/年代/);
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['選ばない', '10代']);
+  });
+});
+
+describe('年齢の区分を「18歳以上」に変える', () => {
+  it('18歳以上の人には、変える欄を出さない', async () => {
+    renderApp('/profile/edit', { userId: 'dev-user-a' });
+
+    await screen.findByLabelText(/年代/);
+    expect(
+      screen.queryByRole('button', { name: '「18歳以上」に変更する' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('戻せないことを確かめてから変え、募集を作成できるようになる', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/profile/edit', { userId: 'dev-user-minor' });
+
+    await user.click(await screen.findByRole('button', { name: '「18歳以上」に変更する' }));
+    const confirm = screen.getByRole('group', { name: '年齢の区分の変更の確認' });
+    expect(confirm).toHaveTextContent('「18歳未満」に戻すことはできません');
+    await user.click(within(confirm).getByRole('button', { name: 'やめる' }));
+    expect(db.users.find((u) => u.id === 'dev-user-minor')?.ageCategory).toBe('minor');
+
+    await user.click(screen.getByRole('button', { name: '「18歳以上」に変更する' }));
+    await user.click(screen.getByRole('button', { name: '18歳以上に変える' }));
+
+    expect(await screen.findByText(/年齢の区分を「18歳以上」に変えました/)).toBeInTheDocument();
+    expect(db.users.find((u) => u.id === 'dev-user-minor')?.ageCategory).toBe('adult');
+    expect(
+      screen.queryByRole('button', { name: '「18歳以上」に変更する' }),
+    ).not.toBeInTheDocument();
+    // 年代は、10代以外も選べるようになる
+    expect(within(screen.getByLabelText(/年代/)).getAllByRole('option')).toHaveLength(7);
   });
 });

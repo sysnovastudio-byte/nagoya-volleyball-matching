@@ -4,17 +4,19 @@ import { BackLink } from '../../app/BackLink';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
+import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { Avatar } from './Avatar';
 import type { ProfileLocationState } from './ProfileEditPage';
 import { displayName, experienceLabel } from './format';
 import { useProfileRepository } from './repositoryContext';
-import type { PublicProfile } from './types';
+import { ageGroupLabel } from './profileRules';
+import type { AgeGroup, MyProfile, PublicProfile } from './types';
 
 /**
- * SCR-013 プロフィール（PROF-03）。サイクル1は、ニックネーム・経験レベル・自己紹介と、画像の代わりの絵柄だけ。
- * 年代・性別・活動地域（M-01）と、ブロック・通報（限定公開まで）は加えない。
+ * SCR-013 プロフィール（PROF-03）。ニックネーム・経験レベル・自己紹介と、画像の代わりの絵柄。
+ * 年代は本人にだけ示す（主催者は申請者一覧で見る）。性別・活動地域（M-01）と、ブロック・通報は加えない。
  */
 export function MyProfilePage() {
   const repository = useProfileRepository();
@@ -25,13 +27,22 @@ export function MyProfilePage() {
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   if (!result.value) return <NoProfile />;
   return (
-    <ProfileView profile={result.value} notice={saved ? 'プロフィールを保存しました。' : null}>
+    <ProfileView
+      profile={toPublic(result.value)}
+      ageGroup={result.value.ageGroup}
+      notice={saved ? 'プロフィールを保存しました。' : null}
+    >
       <ButtonLink to="/profile/edit">プロフィールを編集</ButtonLink>
       <ButtonLink to="/settings" variant="secondary">
         設定
       </ButtonLink>
     </ProfileView>
   );
+}
+
+function toPublic(profile: MyProfile): PublicProfile {
+  const { userId, nickname, experienceLevel, bio } = profile;
+  return { userId, isWithdrawn: false, nickname, experienceLevel, bio };
 }
 
 /** ほかの人のプロフィール。申請者一覧などから移る。 */
@@ -82,6 +93,8 @@ function NoProfile() {
 
 interface ProfileViewProps {
   profile: PublicProfile;
+  /** 本人のプロフィールの場合だけ渡す。ほかの人の画面には出さない */
+  ageGroup?: AgeGroup | null;
   notice?: string | null;
   /** 申請者一覧などから来た場合に、戻る先を示す */
   showBack?: boolean;
@@ -90,7 +103,13 @@ interface ProfileViewProps {
 }
 
 /** 画像（の代わりの絵柄）と名前、公開項目の順（docs/11の5-1）。 */
-function ProfileView({ profile, notice = null, showBack = false, children }: ProfileViewProps) {
+function ProfileView({
+  profile,
+  ageGroup,
+  notice = null,
+  showBack = false,
+  children,
+}: ProfileViewProps) {
   const name = displayName(profile);
   useDocumentTitle(`${name}のプロフィール`);
   const experience = experienceLabel(profile);
@@ -127,6 +146,26 @@ function ProfileView({ profile, notice = null, showBack = false, children }: Pro
             </dd>
           </div>
         </dl>
+      )}
+      {ageGroup !== undefined && (
+        <section
+          aria-labelledby="limited-profile-heading"
+          className="mt-4 rounded-2xl border border-line bg-surface p-4"
+        >
+          <h2 id="limited-profile-heading" className="mb-2 flex flex-wrap items-center gap-2">
+            <Badge>本人と申請先の主催者だけ</Badge>
+          </h2>
+          <dl>
+            <dt className="text-muted">年代</dt>
+            <dd className="font-bold">
+              {ageGroup ? (
+                ageGroupLabel(ageGroup)
+              ) : (
+                <span className="font-normal text-muted">選んでいません。</span>
+              )}
+            </dd>
+          </dl>
+        </section>
       )}
       {children && <div className="mt-5 flex flex-col gap-2">{children}</div>}
     </div>
