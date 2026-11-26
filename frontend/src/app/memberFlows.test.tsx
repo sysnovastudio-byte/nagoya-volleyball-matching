@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -45,18 +45,36 @@ function renderApp(
   return { db, session, switchUser };
 }
 
-/** 日本時間で、今日から数えた日の時刻を datetime-local の形で返す。 */
-function jstLocal(daysFromNow: number, hour: number) {
+/** 自動的に消える通知（aria-live の「お知らせ」）。中身が入るまで待つ。 */
+async function findToast() {
+  const region = screen.getByRole('status', { name: 'お知らせ' });
+  await waitFor(() => {
+    expect(region).not.toBeEmptyDOMElement();
+  });
+  return region;
+}
+
+/** 日本時間で、今日から数えた日を「YYYY-MM-DD」の形で返す。 */
+function jstDate(daysFromNow: number) {
   const date = new Date(Date.now() + 9 * 60 * 60 * 1000);
   date.setUTCDate(date.getUTCDate() + daysFromNow);
-  date.setUTCHours(hour, 0, 0, 0);
-  return date.toISOString().slice(0, 16);
+  return date.toISOString().slice(0, 10);
+}
+
+async function fillSchedule(
+  user: ReturnType<typeof userEvent.setup>,
+  daysFromNow: number,
+  start: string,
+  end: string,
+) {
+  fireEvent.change(screen.getByLabelText('日付'), { target: { value: jstDate(daysFromNow) } });
+  await user.selectOptions(screen.getByLabelText('開始時刻'), start);
+  await user.selectOptions(screen.getByLabelText(/終了時刻/), end);
 }
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/タイトル/), '日曜の練習会');
-  fireEvent.change(screen.getByLabelText(/開始の日時/), { target: { value: jstLocal(7, 13) } });
-  fireEvent.change(screen.getByLabelText(/終了の日時/), { target: { value: jstLocal(7, 16) } });
+  await fillSchedule(user, 7, '13:00', '16:00');
   await user.selectOptions(screen.getByLabelText(/開催エリア/), '中区');
   await user.click(screen.getByLabelText('初心者'));
   await user.type(screen.getByLabelText(/募集人数/), '8');
@@ -155,7 +173,7 @@ describe('募集作成', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: '日曜の練習会' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('募集を公開しました。')).toBeInTheDocument();
+    expect(await findToast()).toHaveTextContent('募集を公開しました。');
     expect(await screen.findByText('ダミー住所Q（架空）')).toBeInTheDocument();
     expect(screen.getByText('ダミー体育館Q')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: '申請者を見る' })[0]).toHaveAttribute(
@@ -278,16 +296,45 @@ describe('募集作成', () => {
     expect(screen.getByRole('heading', { level: 1, name: '会話は準備中です' })).toBeInTheDocument();
   });
 
-  it('深夜にかかる場合は注意を示す', async () => {
+  it('終了が開始より前なら翌日として扱い、深夜にかかる注意を示す', async () => {
+    const user = userEvent.setup();
     renderApp('/events/new', { userId: 'dev-user-a' });
     await screen.findByRole('heading', { level: 1, name: '募集を作る' });
 
-    fireEvent.change(screen.getByLabelText(/開始の日時/), { target: { value: jstLocal(7, 21) } });
-    fireEvent.change(screen.getByLabelText(/終了の日時/), {
-      target: { value: jstLocal(8, 1) },
-    });
+    await fillSchedule(user, 7, '21:00', '01:00');
 
+    expect(screen.getByText('翌日')).toBeInTheDocument();
+    expect(screen.getByLabelText(/終了時刻/)).toHaveAccessibleDescription(
+      '終了時刻が開始より前のため、翌日の01:00に終わります。',
+    );
     expect(screen.getByText(/深夜（午後11時〜翌午前6時）にかかります。/)).toBeInTheDocument();
+  });
+
+  it('タイトルに入力例を示し、時刻は15分刻みで選ぶ', async () => {
+    renderApp('/events/new', { userId: 'dev-user-a' });
+
+    expect(await screen.findByLabelText(/タイトル/)).toHaveAttribute(
+      'placeholder',
+      '例：初心者歓迎！土曜午後の練習',
+    );
+    const options = within(screen.getByLabelText('開始時刻')).getAllByRole('option');
+    expect(options.slice(1, 4).map((option) => option.textContent)).toEqual([
+      '00:00',
+      '00:15',
+      '00:30',
+    ]);
+    expect(options).toHaveLength(97);
+  });
+
+  it('説明書きは、残すと決めたものだけ', async () => {
+    renderApp('/events/new', { userId: 'dev-user-a' });
+
+    expect(await screen.findByText('アプリの中では支払えません。')).toBeInTheDocument();
+    expect(screen.getByText('住所や連絡先は書かないでください。')).toBeInTheDocument();
+    expect(screen.queryByText('募集を作る前に')).not.toBeInTheDocument();
+    // 18歳未満が参加し得ることは、深夜にかからなくても常に示す（docs/11の7-1）
+    expect(screen.getByText('18歳未満の人も申請できます。')).toBeInTheDocument();
+    expect(screen.queryByText(/名古屋市の16区から選びます/)).not.toBeInTheDocument();
   });
 
   it('公開する項目と、承認された人だけの項目を分けて示す', async () => {
@@ -377,9 +424,7 @@ describe('募集詳細（申請者）', () => {
 
     await user.click(await findFirstButton('参加を申請する'));
 
-    expect(await screen.findByRole('status', { name: '' })).toHaveTextContent(
-      '参加を申請しました。',
-    );
+    expect(await findToast()).toHaveTextContent('参加を申請しました。');
     expect((await screen.findAllByText('承認待ち')).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
     expect(screen.queryByText('ダミー住所A（架空）')).not.toBeInTheDocument();
@@ -444,7 +489,7 @@ describe('申請者一覧', () => {
     expect(summary).toHaveTextContent('承認済み 9人');
     await user.click(screen.getByRole('button', { name: 'こはるさんを承認する' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('こはるさんの参加を承認しました。');
+    expect(await findToast()).toHaveTextContent('こはるさんの参加を承認しました。');
     expect(summary).toHaveTextContent('承認済み 10人');
     expect(screen.queryByRole('button', { name: 'こはるさんを承認する' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /承認済み/ }));
@@ -470,16 +515,39 @@ describe('申請者一覧', () => {
         { name: '却下する' },
       ),
     );
-    expect(await screen.findByRole('status')).toHaveTextContent('こはるさんの申請を却下しました。');
+    expect(await findToast()).toHaveTextContent('こはるさんの申請を却下しました。');
   });
 
-  it('満員の募集では、承認待ちを残したまま承認できない', async () => {
+  it('満員の募集では、定員を増やすことを確かめてから承認する', async () => {
+    const user = userEvent.setup();
     renderApp('/events/dev-b-full/applicants', { userId: HOST });
 
-    expect(await screen.findByText(/定員に達したため、今は承認できません/)).toBeInTheDocument();
-    const approveButtons = screen.getAllByRole('button', { name: /を承認する$/ });
-    expect(approveButtons).toHaveLength(2);
-    for (const button of approveButtons) expect(button).toBeDisabled();
+    expect(
+      await screen.findByText('定員に達しています。承認すると、定員を1人増やします。'),
+    ).toBeInTheDocument();
+    const [first] = screen.getAllByRole('button', { name: /を承認する$/ });
+    await user.click(first as HTMLElement);
+
+    const confirm = screen.getByRole('group', { name: /の承認の確認$/ });
+    expect(confirm).toHaveTextContent('定員を7人に増やして承認します。');
+    await user.click(within(confirm).getByRole('button', { name: '定員を7人にして承認する' }));
+
+    expect(await findToast()).toHaveTextContent(
+      /定員を7人に増やして、.+さんの参加を承認しました。/,
+    );
+    expect(await screen.findByText(/定員7人/)).toBeInTheDocument();
+  });
+
+  it('定員を増やす確認は、やめると承認しない', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/events/dev-b-full/applicants', { userId: HOST });
+
+    const [first] = await screen.findAllByRole('button', { name: /を承認する$/ });
+    await user.click(first as HTMLElement);
+    await user.click(screen.getByRole('button', { name: 'やめる' }));
+
+    expect(db.events.find((event) => event.id === 'dev-b-full')?.capacity).toBe(6);
+    expect(screen.getAllByRole('button', { name: /を承認する$/ })).toHaveLength(2);
   });
 
   it('他人の募集の申請者一覧は見られない', async () => {
@@ -565,21 +633,21 @@ describe('プロフィール', () => {
   });
 });
 
-describe('申請者一覧（PC）', () => {
-  /** 1024px以上の画面として扱う。 */
-  function asPc() {
-    vi.stubGlobal(
-      'matchMedia',
-      (query: string) =>
-        ({
-          matches: query === '(min-width: 1024px)',
-          media: query,
-          addEventListener: () => undefined,
-          removeEventListener: () => undefined,
-        }) as unknown as MediaQueryList,
-    );
-  }
+/** 1024px以上の画面として扱う。 */
+function asPc() {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string) =>
+      ({
+        matches: query === '(min-width: 1024px)',
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList,
+  );
+}
 
+describe('申請者一覧（PC）', () => {
   it('1024px以上では、申請者を表で示し、表の中で承認できる', async () => {
     asPc();
     try {
@@ -591,17 +659,16 @@ describe('申請者一覧（PC）', () => {
         within(table)
           .getAllByRole('columnheader')
           .map((header) => header.textContent),
-      ).toEqual(['ニックネーム', '経験レベル', '自己紹介', '申請日時', '状態', '操作']);
+      ).toEqual(['ニックネーム', '経験レベル', '年代', '自己紹介', '申請日時', '状態', '操作']);
       const row = within(table).getByRole('row', { name: /こはる/ });
       expect(row).toHaveTextContent('未経験者');
+      expect(row).toHaveTextContent('10代');
       expect(row).toHaveTextContent('承認待ち');
       // カードと二重に置かない
       expect(screen.getAllByRole('button', { name: 'こはるさんを承認する' })).toHaveLength(1);
 
       await user.click(within(row).getByRole('button', { name: 'こはるさんを承認する' }));
-      expect(await screen.findByRole('status')).toHaveTextContent(
-        'こはるさんの参加を承認しました。',
-      );
+      expect(await findToast()).toHaveTextContent('こはるさんの参加を承認しました。');
     } finally {
       vi.unstubAllGlobals();
     }
@@ -673,18 +740,16 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約に同意します'));
-    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
-    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
   }
 
-  it('同意の欄は3つが別々で、最初はすべて未選択', async () => {
+  it('同意の欄は2つが別々で、最初はすべて未選択', async () => {
     renderApp('/signup');
 
     const boxes = [
-      await screen.findByLabelText('利用規約に同意します'),
-      screen.getByLabelText('プライバシーポリシーに同意します'),
-      screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/),
+      await screen.findByLabelText('利用規約とプライバシーポリシーに同意する'),
+      screen.getByLabelText('通報時のメッセージ確認に同意する'),
     ];
     for (const box of boxes) expect(box).not.toBeChecked();
     expect(screen.getByLabelText('18歳以上')).not.toBeChecked();
@@ -710,12 +775,14 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     const user = userEvent.setup();
     renderApp('/signup');
     await fillSignUp(user);
-    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
 
     await user.click(screen.getByRole('button', { name: '登録する' }));
 
-    expect(screen.getByText('プライバシーポリシーへの同意が必要です。')).toBeInTheDocument();
-    expect(screen.queryByText('利用規約への同意が必要です。')).not.toBeInTheDocument();
+    expect(screen.getByText('通報時のメッセージ確認への同意が必要です。')).toBeInTheDocument();
+    expect(
+      screen.queryByText('利用規約とプライバシーポリシーへの同意が必要です。'),
+    ).not.toBeInTheDocument();
   });
 
   it('登録 → 認証 → プロフィール入力へ進む', async () => {
@@ -783,9 +850,8 @@ describe('プロフィール登録・編集（SCR-014）', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約に同意します'));
-    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
-    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
     await user.click(screen.getByRole('button', { name: '登録する' }));
     await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
     await user.click(await screen.findByRole('link', { name: 'プロフィールを入力する' }));
@@ -834,10 +900,7 @@ describe('プロフィール登録・編集（SCR-014）', () => {
     await user.type(nickname, 'あおい2');
     await user.click(screen.getByRole('button', { name: '保存する' }));
 
-    expect(await screen.findByText('プロフィールを保存しました。')).toHaveAttribute(
-      'role',
-      'status',
-    );
+    expect(await findToast()).toHaveTextContent('プロフィールを保存しました。');
     expect(screen.getByRole('heading', { level: 1, name: 'あおい2' })).toBeInTheDocument();
   });
 });
@@ -851,7 +914,7 @@ describe('サイクル1の流れ', () => {
     await screen.findByRole('heading', { level: 1, name: '募集を作る' });
     await fillValidForm(user);
     await user.click(screen.getByRole('button', { name: '公開する' }));
-    expect((await screen.findAllByText('募集を公開しました。')).length).toBeGreaterThan(0);
+    expect(await findToast()).toHaveTextContent('募集を公開しました。');
 
     // 探す → 詳細 → 申請（利用者A）
     switchUser('dev-user-a');
@@ -879,5 +942,269 @@ describe('サイクル1の流れ', () => {
     await screen.findByRole('heading', { level: 1, name: '申請者一覧を表示できません' });
     await user.click(screen.getByRole('link', { name: '募集詳細へ' }));
     expect(await screen.findByText('ダミー住所Q（架空）')).toBeInTheDocument();
+  });
+});
+
+describe('指摘の不具合', () => {
+  it('1. 新規登録をやり直しても、18歳以上なら募集を作成できる', async () => {
+    const user = userEvent.setup();
+    const { db, session } = renderApp('/signup');
+    // 先に18歳未満の利用者が登録・認証を済ませている
+    db.users.push({ id: 'dev-registered-1', ageCategory: 'minor', profile: null });
+
+    await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
+    await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
+    await user.click(screen.getByLabelText('18歳以上'));
+    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
+    await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
+    expect(session.getUserId()).toBe('dev-registered-2');
+    await user.click(await screen.findByRole('link', { name: 'プロフィールを入力する' }));
+    await user.type(await screen.findByLabelText(/ニックネーム/), 'ななみ');
+    await user.click(screen.getByLabelText('未経験者'));
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    await user.click(
+      (await screen.findAllByRole('link', { name: '募集を作る' }))[0] as HTMLElement,
+    );
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+
+    expect(await findToast()).toHaveTextContent('募集を公開しました。');
+  });
+
+  it('2. 申請と募集から開いた募集詳細は、申請と募集に戻る', async () => {
+    const user = userEvent.setup();
+    renderApp('/activity', { userId: HOST });
+
+    const section = await screen.findByRole('region', { name: '主催する側' });
+    await user.click(await within(section).findByRole('link', { name: '木曜夜のミニゲーム会' }));
+    await user.click(await screen.findByRole('link', { name: '申請と募集へ' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請と募集' }),
+    ).toBeInTheDocument();
+  });
+
+  it('2. 募集一覧から開いた募集詳細は、募集一覧に戻る', async () => {
+    renderApp(`/events/${HOSTED_EVENT}`, { userId: HOST });
+
+    expect(await screen.findByRole('link', { name: '募集一覧へ' })).toHaveAttribute('href', '/');
+  });
+
+  it('3. 申請者一覧から開いたプロフィールに、申請者一覧へ戻るボタンがある', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    await user.click(await screen.findByRole('link', { name: 'こはる' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'こはる' })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: '申請者一覧へ' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請者一覧' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('年代（M-01 のうち年代だけ）', () => {
+  it('主催者は、申請者一覧で承認待ち・承認済みの人の年代を見られる', async () => {
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    const card = (await screen.findByRole('link', { name: 'こはる' })).closest('li');
+    expect(card).toHaveTextContent('年代10代');
+  });
+
+  it('ほかの人のプロフィールには、年代を出さない', async () => {
+    renderApp('/users/dev-user-a', { userId: HOST });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'あおい' })).toBeInTheDocument();
+    expect(screen.queryByText('年代')).not.toBeInTheDocument();
+    expect(screen.queryByText('20代')).not.toBeInTheDocument();
+  });
+
+  it('本人のプロフィールには、公開範囲を示して年代を出す', async () => {
+    renderApp('/profile', { userId: 'dev-user-a' });
+
+    expect(await screen.findByText('20代')).toBeInTheDocument();
+    expect(screen.getByText('本人と申請先の主催者だけ')).toBeInTheDocument();
+  });
+
+  it('年代を選んで保存できる。選ばないこともできる', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/profile/edit', { userId: 'dev-user-a' });
+
+    const select = await screen.findByLabelText(/年代/);
+    expect(select).toHaveValue('twenties');
+    await user.selectOptions(select, '40代');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(await screen.findByText('40代')).toBeInTheDocument();
+    expect(db.users.find((u) => u.id === 'dev-user-a')?.profile?.ageGroup).toBe('forties');
+  });
+
+  it('18歳未満の人は、年代を「10代」か「選ばない」だけ選べる', async () => {
+    renderApp('/profile/edit', { userId: 'dev-user-minor' });
+
+    const select = await screen.findByLabelText(/年代/);
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['選ばない', '10代']);
+  });
+});
+
+describe('年齢の区分を「18歳以上」に変える', () => {
+  it('18歳以上の人には、変える欄を出さない', async () => {
+    renderApp('/profile/edit', { userId: 'dev-user-a' });
+
+    await screen.findByLabelText(/年代/);
+    expect(
+      screen.queryByRole('button', { name: '「18歳以上」に変更する' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('戻せないことを確かめてから変え、募集を作成できるようになる', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/profile/edit', { userId: 'dev-user-minor' });
+
+    await user.click(await screen.findByRole('button', { name: '「18歳以上」に変更する' }));
+    const confirm = screen.getByRole('group', { name: '年齢の区分の変更の確認' });
+    expect(confirm).toHaveTextContent('「18歳未満」に戻すことはできません');
+    await user.click(within(confirm).getByRole('button', { name: 'やめる' }));
+    expect(db.users.find((u) => u.id === 'dev-user-minor')?.ageCategory).toBe('minor');
+
+    await user.click(screen.getByRole('button', { name: '「18歳以上」に変更する' }));
+    await user.click(screen.getByRole('button', { name: '18歳以上に変える' }));
+
+    expect(await findToast()).toHaveTextContent('年齢の区分を「18歳以上」に変えました。');
+    expect(db.users.find((u) => u.id === 'dev-user-minor')?.ageCategory).toBe('adult');
+    expect(
+      screen.queryByRole('button', { name: '「18歳以上」に変更する' }),
+    ).not.toBeInTheDocument();
+    // 年代は、10代以外も選べるようになる
+    expect(within(screen.getByLabelText(/年代/)).getAllByRole('option')).toHaveLength(7);
+  });
+});
+
+describe('募集の絞り込み（EVT-05）', () => {
+  it('スマートフォンでは「条件」ボタンで開き、区で絞り込む', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+
+    await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' });
+    const toggle = screen.getByRole('button', { name: '条件' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    await user.selectOptions(screen.getByLabelText('区'), '中村区');
+    await user.click(screen.getByRole('button', { name: 'この条件で探す' }));
+
+    expect(await screen.findByText('条件：', { exact: false })).toHaveTextContent('条件：中村区');
+    expect(screen.getByRole('button', { name: '条件（1）' })).toBeInTheDocument();
+    const list = await screen.findAllByRole('article');
+    expect(list).toHaveLength(2);
+  });
+
+  it('条件に合う募集がなければ、そう示して条件をクリアできる', async () => {
+    const user = userEvent.setup();
+    renderApp('/?area=naka');
+
+    expect(
+      await screen.findByRole('heading', { name: '条件に合う募集はありません' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: '条件をクリア' })[0] as HTMLElement);
+
+    expect(
+      await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }),
+    ).toBeInTheDocument();
+  });
+
+  it('始まりの日が終わりの日より後なら、誤りを示して探さない', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+
+    await user.click(await screen.findByRole('button', { name: '条件' }));
+    fireEvent.change(screen.getByLabelText('この日から'), { target: { value: '2026-12-10' } });
+    fireEvent.change(screen.getByLabelText('この日まで'), { target: { value: '2026-12-01' } });
+    await user.click(screen.getByRole('button', { name: 'この条件で探す' }));
+
+    expect(screen.getByText(/終わりの日は、始まりの日と同じか/)).toBeInTheDocument();
+    expect(screen.getByLabelText('この日まで')).toHaveFocus();
+  });
+
+  it('PCでは、条件を左に出す', async () => {
+    asPc();
+    try {
+      renderApp('/');
+
+      const aside = await screen.findByRole('complementary', { name: '絞り込みの条件' });
+      expect(within(aside).getByRole('form', { name: '募集の絞り込み' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '条件' })).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('絞り込んだ一覧から詳細を開くと、同じ条件の一覧に戻れる', async () => {
+    const user = userEvent.setup();
+    renderApp('/?area=nakamura');
+
+    await user.click(await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }));
+    expect(await screen.findByRole('link', { name: '募集一覧へ' })).toHaveAttribute(
+      'href',
+      '/?area=nakamura',
+    );
+  });
+});
+
+describe('ヘッダーのニックネームと設定への入口', () => {
+  it('ログイン中は、ヘッダーにニックネームを示し、プロフィールへ移れる', async () => {
+    renderApp('/', { userId: 'dev-user-a' });
+
+    const header = await screen.findByRole('banner');
+    const link = await within(header).findByRole('link', { name: 'ログイン中：あおい' });
+    expect(link).toHaveAttribute('href', '/profile');
+  });
+
+  it('プロフィール未登録なら、登録へ移る', async () => {
+    renderApp('/', { userId: 'dev-user-no-profile' });
+
+    const header = await screen.findByRole('banner');
+    expect(
+      await within(header).findByRole('link', { name: 'ログイン中：プロフィール未登録' }),
+    ).toHaveAttribute('href', '/profile/edit');
+  });
+
+  it('未ログインでは、ニックネームを出さない', async () => {
+    renderApp('/');
+
+    const header = await screen.findByRole('banner');
+    await within(header).findByRole('link', { name: 'ログイン' });
+    expect(within(header).queryByText(/ログイン中/)).not.toBeInTheDocument();
+  });
+
+  it('プロフィールを保存すると、ヘッダーのニックネームも変わる', async () => {
+    const user = userEvent.setup();
+    renderApp('/profile/edit', { userId: 'dev-user-a' });
+
+    const nickname = await screen.findByLabelText(/ニックネーム/);
+    await user.clear(nickname);
+    await user.type(nickname, 'あおい2');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(
+      await within(screen.getByRole('banner')).findByRole('link', { name: 'ログイン中：あおい2' }),
+    ).toBeInTheDocument();
+  });
+
+  it('本人のプロフィールの下に、設定への入口がある', async () => {
+    const user = userEvent.setup();
+    renderApp('/profile', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('link', { name: /^設定/ }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: '設定' })).toBeInTheDocument();
   });
 });

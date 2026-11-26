@@ -110,6 +110,52 @@ describe('募集の一覧', () => {
   });
 });
 
+describe('募集の絞り込み（EVT-05）', () => {
+  const NONE = { dateFrom: null, dateTo: null, area: null };
+
+  it('区で絞り込む', async () => {
+    const { items } = await setup().repository.listEvents(undefined, { ...NONE, area: 'nakamura' });
+
+    expect(items.map((event) => event.id)).toEqual([
+      'dev-beginner-afternoon',
+      'dev-family-morning',
+    ]);
+  });
+
+  it('開催日の範囲で絞り込む。両端の日を含む', async () => {
+    const { items } = await setup().repository.listEvents(undefined, {
+      ...NONE,
+      dateFrom: '2026-12-03',
+      dateTo: '2026-12-06',
+    });
+
+    expect(items.map((event) => event.id)).toEqual([
+      'dev-b-full',
+      'dev-beginner-afternoon',
+      'dev-easy-morning',
+    ]);
+  });
+
+  it('条件に合っても、開催前でない募集・中止・非表示は返さない', async () => {
+    const { items } = await setup().repository.listEvents(undefined, { ...NONE, area: 'naka' });
+
+    expect(items).toEqual([]);
+  });
+
+  it('続きも、同じ条件で返す', async () => {
+    const { repository } = setup({ pageSize: 1 });
+    const filter = { ...NONE, area: 'nakamura' as const };
+    const first = await repository.listEvents(undefined, filter);
+    const second = await repository.listEvents(first.nextCursor ?? undefined, filter);
+
+    expect([...first.items, ...second.items].map((event) => event.id)).toEqual([
+      'dev-beginner-afternoon',
+      'dev-family-morning',
+    ]);
+    expect(second.nextCursor).toBeNull();
+  });
+});
+
 describe('募集の詳細', () => {
   it('開催中の募集は見られる', async () => {
     expect((await setup().repository.getEvent('dev-ongoing'))?.state).toBe('ongoing');

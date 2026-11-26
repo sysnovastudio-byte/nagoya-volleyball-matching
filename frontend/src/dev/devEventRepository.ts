@@ -1,3 +1,4 @@
+import { EMPTY_FILTER, matchesFilter } from '../features/events/eventFilter';
 import { checkEventInput, EVENT_LIMITS } from '../features/events/eventRules';
 import type {
   EventDetail,
@@ -66,12 +67,13 @@ export function createDevEventRepository({
     );
 
   return {
-    listEvents: (cursor) => {
+    listEvents: (cursor, filter = EMPTY_FILTER) => {
       const current = now();
       const upcoming = db.events
         .flatMap((record) => {
           const state = devEventState(db, record, current);
-          return state === 'open' || state === 'full' || state === 'closed'
+          return (state === 'open' || state === 'full' || state === 'closed') &&
+            matchesFilter(record, filter)
             ? [toPublicEvent(record, state)]
             : [];
         })

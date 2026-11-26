@@ -1,3 +1,4 @@
+import { EVENT_LIMITS } from '../features/events/eventRules';
 import type {
   Applicant,
   ApplicationRepository,
@@ -49,7 +50,11 @@ export function createDevApplicationRepository({
   };
 
   /** 承認・却下の共通の確認（docs/06の5-1の手順2〜4）。 */
-  const decide = (applicationId: string, next: 'approved' | 'rejected'): DecisionResult => {
+  const decide = (
+    applicationId: string,
+    next: 'approved' | 'rejected',
+    expandCapacityTo?: number,
+  ): DecisionResult => {
     const user = currentUser();
     const application = db.applications.find((item) => item.id === applicationId);
     const record = application && db.events.find((event) => event.id === application.eventId);
@@ -63,8 +68,13 @@ export function createDevApplicationRepository({
       return { status: 'rejected', reason: 'notAccepting' };
     }
     if (application.status !== 'pending') return { status: 'rejected', reason: 'notPending' };
+    // 満員の場合は、承認と同時に定員を1人増やす。定員は常に承認済み人数以上に保つ（docs/11の2-2）
     if (next === 'approved' && countApplications(db, record.id, 'approved') >= record.capacity) {
-      return { status: 'rejected', reason: 'full' };
+      if (record.capacity >= EVENT_LIMITS.capacityMax) {
+        return { status: 'rejected', reason: 'capacityLimit' };
+      }
+      if (expandCapacityTo !== record.capacity + 1) return { status: 'rejected', reason: 'full' };
+      record.capacity = expandCapacityTo;
     }
     application.status = next;
     application.decidedAt = current;
@@ -121,7 +131,8 @@ export function createDevApplicationRepository({
       return Promise.resolve({ status: 'applied' });
     },
 
-    approveApplication: (applicationId) => Promise.resolve(decide(applicationId, 'approved')),
+    approveApplication: (applicationId, options) =>
+      Promise.resolve(decide(applicationId, 'approved', options?.expandCapacityTo)),
     rejectApplication: (applicationId) => Promise.resolve(decide(applicationId, 'rejected')),
 
     listApplicants: (eventId) => {
@@ -141,6 +152,8 @@ export function createDevApplicationRepository({
       // 非表示の募集の申請者一覧は、主催者にも見せない（DB-19 の仮の扱い）
       if (state === 'hidden') return Promise.resolve({ status: 'forbidden', reason: 'hidden' });
 
+      // 年代は、承認待ち・承認済みの申請者の分を、終了日時まで見せる。中止・終了では見せない（DB-03）
+      const canSeeDetails = state !== 'ended' && state !== 'cancelled';
       const applicants = db.applications
         .filter((application) => application.eventId === eventId)
         .flatMap((application): Applicant[] => {
@@ -155,6 +168,12 @@ export function createDevApplicationRepository({
                   status: application.status,
                   appliedAt: application.appliedAt.toISOString(),
                   profile,
+                  hostOnly:
+                    canSeeDetails &&
+                    applicantUser?.profile &&
+                    (application.status === 'pending' || application.status === 'approved')
+                      ? { ageGroup: applicantUser.profile.ageGroup }
+                      : null,
                 },
               ]
             : [];

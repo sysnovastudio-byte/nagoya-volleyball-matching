@@ -20,7 +20,8 @@ function createRepository(): ApplicationRepository {
     );
     return {
       applyToEvent: async (eventId) => (await repository()).applyToEvent(eventId),
-      approveApplication: async (id) => (await repository()).approveApplication(id),
+      approveApplication: async (id, options) =>
+        (await repository()).approveApplication(id, options),
       rejectApplication: async (id) => (await repository()).rejectApplication(id),
       listApplicants: async (eventId) => (await repository()).listApplicants(eventId),
       getMyParticipations: async () => (await repository()).getMyParticipations(),

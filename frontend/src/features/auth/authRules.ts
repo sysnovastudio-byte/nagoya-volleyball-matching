@@ -1,4 +1,5 @@
-import type { AgeCategory, AgreementDocument } from './types';
+import type { ConsentKey } from './agreements';
+import type { AgeCategory } from './types';
 
 /** パスワードは10文字以上。文字の種類は強制しない（docs/11のQ-49）。 */
 export const PASSWORD_MIN_LENGTH = 10;
@@ -35,11 +36,10 @@ export interface SignUpFormValues {
   password: string;
   ageCategory: AgeCategory | null;
   guardianConsent: boolean;
-  agreements: Record<AgreementDocument, boolean>;
+  agreements: Record<ConsentKey, boolean>;
 }
 
-export type SignUpField =
-  'email' | 'password' | 'ageCategory' | 'guardianConsent' | AgreementDocument;
+export type SignUpField = 'email' | 'password' | 'ageCategory' | 'guardianConsent' | ConsentKey;
 export type SignUpFieldErrors = Partial<Record<SignUpField, string>>;
 
 /** 同意の欄は、すべて未選択から始める（docs/11の7-2）。 */
@@ -48,13 +48,12 @@ export const EMPTY_SIGN_UP_FORM: SignUpFormValues = {
   password: '',
   ageCategory: null,
   guardianConsent: false,
-  agreements: { terms: false, privacy: false, message_review: false },
+  agreements: { termsAndPrivacy: false, messageReview: false },
 };
 
-const AGREEMENT_ERRORS: Record<AgreementDocument, string> = {
-  terms: '利用規約への同意が必要です。',
-  privacy: 'プライバシーポリシーへの同意が必要です。',
-  message_review: '通報時のメッセージ確認への同意が必要です。',
+const AGREEMENT_ERRORS: Record<ConsentKey, string> = {
+  termsAndPrivacy: '利用規約とプライバシーポリシーへの同意が必要です。',
+  messageReview: '通報時のメッセージ確認への同意が必要です。',
 };
 
 export function checkSignUpForm(values: SignUpFormValues): SignUpFieldErrors {
@@ -69,8 +68,8 @@ export function checkSignUpForm(values: SignUpFormValues): SignUpFieldErrors {
   if (values.ageCategory === 'minor' && !values.guardianConsent) {
     errors.guardianConsent = '18歳未満の方は、保護者の同意が必要です。';
   }
-  for (const document of Object.keys(AGREEMENT_ERRORS) as AgreementDocument[]) {
-    if (!values.agreements[document]) errors[document] = AGREEMENT_ERRORS[document];
+  for (const key of Object.keys(AGREEMENT_ERRORS) as ConsentKey[]) {
+    if (!values.agreements[key]) errors[key] = AGREEMENT_ERRORS[key];
   }
   return errors;
 }

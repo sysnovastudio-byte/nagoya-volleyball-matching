@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AGREEMENTS } from './agreements';
+import { agreedDocuments, CONSENTS } from './agreements';
 import { checkSignInForm, checkSignUpForm, EMPTY_SIGN_UP_FORM, isEmailFormat } from './authRules';
 
 const VALID = {
@@ -7,7 +7,7 @@ const VALID = {
   email: 'test@example.com',
   password: 'abcdefghij',
   ageCategory: 'adult' as const,
-  agreements: { terms: true, privacy: true, message_review: true },
+  agreements: { termsAndPrivacy: true, messageReview: true },
 };
 
 describe('メールアドレスの形式', () => {
@@ -49,20 +49,34 @@ describe('新規登録の入力', () => {
     expect(checkSignUpForm({ ...VALID, password: 'ああああああああああ' })).toEqual({});
   });
 
-  it('同意の欄は3つで、最初はすべて未選択', () => {
-    expect(AGREEMENTS.map((item) => item.document)).toEqual(['terms', 'privacy', 'message_review']);
-    expect(Object.values(EMPTY_SIGN_UP_FORM.agreements)).toEqual([false, false, false]);
+  it('同意の欄は2つで、最初はすべて未選択', () => {
+    expect(CONSENTS.map((item) => item.label)).toEqual([
+      '利用規約とプライバシーポリシーに同意する',
+      '通報時のメッセージ確認に同意する',
+    ]);
+    expect(Object.values(EMPTY_SIGN_UP_FORM.agreements)).toEqual([false, false]);
     expect(EMPTY_SIGN_UP_FORM.ageCategory).toBeNull();
   });
 
-  it('同意は1つずつ確かめる', () => {
-    for (const document of ['terms', 'privacy', 'message_review'] as const) {
+  it('同意は欄ごとに確かめる', () => {
+    for (const key of ['termsAndPrivacy', 'messageReview'] as const) {
       const errors = checkSignUpForm({
         ...VALID,
-        agreements: { ...VALID.agreements, [document]: false },
+        agreements: { ...VALID.agreements, [key]: false },
       });
-      expect(Object.keys(errors)).toEqual([document]);
+      expect(Object.keys(errors)).toEqual([key]);
     }
+  });
+
+  it('同意は文書ごとに、版を付けて記録する', () => {
+    expect(agreedDocuments({ termsAndPrivacy: true, messageReview: true })).toEqual([
+      { document: 'terms', version: '仮-0' },
+      { document: 'privacy', version: '仮-0' },
+      { document: 'message_review', version: '仮-0' },
+    ]);
+    expect(agreedDocuments({ termsAndPrivacy: false, messageReview: true })).toEqual([
+      { document: 'message_review', version: '仮-0' },
+    ]);
   });
 
   it('年齢の区分は、選ばないと誤りになる', () => {

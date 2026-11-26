@@ -66,7 +66,7 @@ describe('開発用のログイン・登録・認証', () => {
     expect(session.getUserId()).toBe('dev-user-a');
   });
 
-  it('登録すると、年齢の区分と3つの同意（仮-0）だけを記録し、メールアドレスとパスワードは残さない', async () => {
+  it('登録すると、年齢の区分と、文書ごとの同意（仮-0）だけを記録し、メールアドレスとパスワードは残さない', async () => {
     const { db, session, repository } = setupWithDb();
 
     expect(await repository.signUp(SIGN_UP)).toEqual({ status: 'confirmationSent' });
@@ -85,7 +85,8 @@ describe('開発用のログイン・登録・認証', () => {
   });
 
   it.each([
-    ['同意が足りない', { agreements: SIGN_UP.agreements.slice(0, 2) }],
+    ['通報時のメッセージ確認への同意がない', { agreements: SIGN_UP.agreements.slice(0, 2) }],
+    ['プライバシーポリシーへの同意がない', { agreements: SIGN_UP.agreements.slice(0, 1) }],
     ['18歳未満で保護者の同意がない', { guardianConsent: false }],
     ['パスワードが短い', { password: 'short' }],
   ])('%s登録は断る', async (_, override) => {
@@ -130,5 +131,32 @@ describe('開発用のログイン・登録・認証', () => {
     await repository.signUp(SIGN_UP);
 
     expect(await repository.verifyEmail(token)).toEqual({ status: 'rejected', reason });
+  });
+});
+
+describe('2回目の新規登録', () => {
+  it('認証した後に登録し直しても、別の利用者になり、年齢の区分を取り違えない', async () => {
+    const db = createDevDatabase(new Date());
+    const session = createDevSession(null);
+    const repository = createDevAuthRepository({ db, session });
+    const input = {
+      email: 'test@example.com',
+      password: 'abcdefghij',
+      guardianConsent: true,
+      agreements: (['terms', 'privacy', 'message_review'] as const).map((document) => ({
+        document,
+        version: '仮-0',
+      })),
+    };
+
+    await repository.signUp({ ...input, ageCategory: 'minor' });
+    await repository.verifyEmail('dev-verify-success');
+    await repository.signOut();
+    await repository.signUp({ ...input, ageCategory: 'adult' });
+    await repository.verifyEmail('dev-verify-success');
+
+    expect(session.getUserId()).toBe('dev-registered-2');
+    expect(await repository.getViewer()).toEqual({ ageCategory: 'adult', profile: null });
+    expect(new Set(db.users.map((user) => user.id)).size).toBe(db.users.length);
   });
 });

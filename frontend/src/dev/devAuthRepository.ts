@@ -54,6 +54,8 @@ export function createDevAuthRepository({
     },
 
     signUp: (input) => {
+      const has = (document: AgreementDocument) =>
+        input.agreements.some((item) => item.document === document);
       // 画面と同じ検証。本番では Supabase Auth と登録の関数が確かめる
       const errors = checkSignUpForm({
         email: input.email,
@@ -61,9 +63,8 @@ export function createDevAuthRepository({
         ageCategory: input.ageCategory,
         guardianConsent: input.guardianConsent,
         agreements: {
-          terms: input.agreements.some((item) => item.document === 'terms'),
-          privacy: input.agreements.some((item) => item.document === 'privacy'),
-          message_review: input.agreements.some((item) => item.document === 'message_review'),
+          termsAndPrivacy: has('terms') && has('privacy'),
+          messageReview: has('message_review'),
         },
       });
       if (Object.keys(errors).length > 0) {
@@ -74,11 +75,13 @@ export function createDevAuthRepository({
       }
 
       // メールアドレスとパスワードは保存しない。年齢の区分と同意だけを、ダミーの利用者に記録する
-      const id = `dev-registered-${db.pendingVerifications.length + 1}`;
+      // IDは登録した人数から決める。認証待ちの人数から決めると、認証の後に同じIDが付いてしまう
+      const registered = db.users.filter((user) => user.id.startsWith('dev-registered-')).length;
+      const id = `dev-registered-${registered + 1}`;
       db.users.push({ id, ageCategory: input.ageCategory, profile: null });
-      const agreedAt = now();
+      // 文書ごとに、版と日時（ダミー）を別々に記録する（docs/06の4-17）
       for (const document of DOCUMENTS) {
-        db.agreements.push({ userId: id, document, version: AGREEMENT_VERSION, agreedAt });
+        db.agreements.push({ userId: id, document, version: AGREEMENT_VERSION, agreedAt: now() });
       }
       db.pendingVerifications.push(id);
       return Promise.resolve({ status: 'confirmationSent' });

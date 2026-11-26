@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { useParams } from 'react-router';
+import { BackLink, type BackState } from '../../app/BackLink';
+import { useToast } from '../../app/toastContext';
+import { useFlashToast } from '../../app/useFlashToast';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
@@ -16,7 +19,7 @@ import { useEvent } from './useEvent';
 import { useEventLocation } from './useEventLocation';
 
 /** 作成の直後に、募集詳細へ渡す印。 */
-export interface EventDetailLocationState {
+export interface EventDetailLocationState extends BackState {
   justCreated?: boolean;
 }
 
@@ -79,41 +82,23 @@ interface EventDetailProps {
 
 function EventDetail({ event, onChanged }: EventDetailProps) {
   useDocumentTitle(event.title);
-  const state = useLocation().state as EventDetailLocationState | null;
+  // 作成した直後は「募集を公開しました」を通知で示す
+  useFlashToast('justCreated', '募集を公開しました。');
   const apply = useApply(event.id, onChanged);
   const showLocation = event.isHost || canSeeLocation(event);
 
   return (
     <article className="flex grow flex-col">
       <div className="mx-auto w-full max-w-288 grow px-4 pt-2 pb-8">
-        <Link
-          to="/"
-          className="inline-flex min-h-11 items-center font-bold text-main-strong hover:underline"
-        >
-          <span aria-hidden="true" className="mr-1">
-            ‹
-          </span>
-          募集一覧へ
-        </Link>
+        {/* 申請と募集などから来た場合は、その画面に戻る */}
+        <BackLink fallback={{ to: '/', label: '募集一覧へ' }} />
 
-        {state?.justCreated && event.isHost && (
+        {apply.error && (
           <p
-            role="status"
-            className="mb-3 rounded-xl border border-main bg-main-tint px-4 py-3 font-bold text-main-strong"
+            role="alert"
+            className="mb-3 rounded-xl border border-danger bg-surface px-4 py-3 font-bold text-danger"
           >
-            募集を公開しました。
-          </p>
-        )}
-        {apply.notice && (
-          <p
-            role={apply.notice.tone === 'error' ? 'alert' : 'status'}
-            className={`mb-3 rounded-xl border px-4 py-3 font-bold ${
-              apply.notice.tone === 'error'
-                ? 'border-danger bg-surface text-danger'
-                : 'border-main bg-main-tint text-main-strong'
-            }`}
-          >
-            {apply.notice.text}
+            {apply.error}
           </p>
         )}
 
@@ -318,7 +303,8 @@ function MyApplicationStatus({ event }: { event: EventDetailData }) {
 
 interface ApplyControl {
   submitting: boolean;
-  notice: { tone: 'success' | 'error'; text: string } | null;
+  /** 申請できなかった理由。申請できた場合は通知で示し、状態（承認待ち）は画面に残る */
+  error: string | null;
   submit: () => Promise<void>;
 }
 
@@ -338,32 +324,27 @@ const APPLY_ERRORS: Record<ApplyRejection, string> = {
 function useApply(eventId: string, onChanged: () => void): ApplyControl {
   const repository = useApplicationRepository();
   const [submitting, setSubmitting] = useState(false);
-  const [notice, setNotice] = useState<ApplyControl['notice']>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const submit = async () => {
     if (submitting) return;
     setSubmitting(true);
-    setNotice(null);
+    setError(null);
     try {
       const result = await repository.applyToEvent(eventId);
-      setNotice(
-        result.status === 'applied'
-          ? { tone: 'success', text: '参加を申請しました。' }
-          : { tone: 'error', text: APPLY_ERRORS[result.reason] },
-      );
+      if (result.status === 'applied') toast('参加を申請しました。');
+      else setError(APPLY_ERRORS[result.reason]);
       // 申請の状態や残り枠が変わるため、読み込み直す
       onChanged();
     } catch {
-      setNotice({
-        tone: 'error',
-        text: '申請できませんでした。通信の状態を確認して、もう一度お試しください。',
-      });
+      setError('申請できませんでした。通信の状態を確認して、もう一度お試しください。');
     } finally {
       setSubmitting(false);
     }
   };
 
-  return { submitting, notice, submit };
+  return { submitting, error, submit };
 }
 
 interface GuestActionsProps {

@@ -8,6 +8,7 @@ const notConnectedRepository: ProfileRepository = {
   getProfiles: notConnected,
   getMyProfile: notConnected,
   saveProfile: notConnected,
+  changeAgeCategoryToAdult: notConnected,
 };
 
 /** 開発時だけ、ダミーデータの実装を動的に読み込む（events/repository.ts と同じ方法）。 */
@@ -20,6 +21,7 @@ function createRepository(): ProfileRepository {
       getProfiles: async (userIds) => (await repository()).getProfiles(userIds),
       getMyProfile: async () => (await repository()).getMyProfile(),
       saveProfile: async (input) => (await repository()).saveProfile(input),
+      changeAgeCategoryToAdult: async () => (await repository()).changeAgeCategoryToAdult(),
     };
   }
   return notConnectedRepository;

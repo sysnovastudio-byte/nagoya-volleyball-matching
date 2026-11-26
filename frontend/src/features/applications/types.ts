@@ -1,5 +1,5 @@
 import type { EventState } from '../events/types';
-import type { PublicProfile } from '../profiles/types';
+import type { AgeGroup, PublicProfile } from '../profiles/types';
 
 /**
  * 申請の状態（docs/11の2-3）。サイクル1は承認待ち・承認済み・却下だけを扱う。
@@ -30,8 +30,10 @@ export type DecisionRejection =
   | 'notFound'
   /** すでに承認・却下した */
   | 'notPending'
-  /** 定員に達している（承認だけ） */
+  /** 定員に達していて、定員を増やす指定がない・指定が今の定員と合わない（承認だけ） */
   | 'full'
+  /** 定員が上限（100人）のため、増やせない（承認だけ） */
+  | 'capacityLimit'
   /** 開催開始後・中止・非表示 */
   | 'notAccepting';
 
@@ -43,6 +45,11 @@ export interface Applicant {
   status: ApplicationStatus;
   appliedAt: string;
   profile: PublicProfile;
+  /**
+   * 主催者だけが見られる項目（docs/06の4-13）。承認待ち・承認済みの申請で、募集の終了日時までだけ返す。
+   * 却下などの申請、中止・終了した募集、退会した人は null。年代の未選択は ageGroup が null。
+   */
+  hostOnly: { ageGroup: AgeGroup | null } | null;
 }
 
 export interface ApplicantList {
@@ -93,7 +100,14 @@ export interface MyParticipation {
  */
 export interface ApplicationRepository {
   applyToEvent(eventId: string): Promise<ApplyResult>;
-  approveApplication(applicationId: string): Promise<DecisionResult>;
+  /**
+   * 承認する。満員の場合は expandCapacityTo に「今の定員＋1」を渡すと、承認と同時に定員を1人増やす。
+   * 渡した値が今の定員＋1と合わない場合は、ほかの操作で変わったものとして断る（full）。
+   */
+  approveApplication(
+    applicationId: string,
+    options?: { expandCapacityTo?: number },
+  ): Promise<DecisionResult>;
   rejectApplication(applicationId: string): Promise<DecisionResult>;
   /** 自分が主催する募集の申請者。docs/06の6-5の list_event_applicants【提案・未承認】に対応する */
   listApplicants(eventId: string): Promise<ApplicantListResult>;

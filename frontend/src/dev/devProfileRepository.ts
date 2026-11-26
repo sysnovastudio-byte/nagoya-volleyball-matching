@@ -1,5 +1,5 @@
 import { validateProfileForm } from '../features/profiles/profileRules';
-import type { ProfileRepository, PublicProfile } from '../features/profiles/types';
+import type { MyProfile, ProfileRepository, PublicProfile } from '../features/profiles/types';
 import { findDevUser, type DevDatabase } from './devDatabase';
 import type { DevSession } from './devSession';
 import type { DevUser } from './devUsers';
@@ -19,6 +19,12 @@ export function toPublicProfile(user: DevUser): PublicProfile | null {
     experienceLevel: user.profile.experienceLevel,
     bio: user.profile.bio,
   };
+}
+
+function toMyProfile(user: DevUser): MyProfile | null {
+  if (!user.profile) return null;
+  const { nickname, experienceLevel, bio, ageGroup } = user.profile;
+  return { userId: user.id, nickname, experienceLevel, bio, ageGroup };
 }
 
 interface DevProfileRepositoryOptions {
@@ -46,18 +52,29 @@ export function createDevProfileRepository({
     },
     getMyProfile: () => {
       const user = findDevUser(db, session.getUserId());
-      return Promise.resolve((user && toPublicProfile(user)) ?? null);
+      return Promise.resolve((user && toMyProfile(user)) ?? null);
     },
     saveProfile: (input) => {
       const user = findDevUser(db, session.getUserId());
       if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
       // 画面と同じ検証。本番では save_profile が確かめる
-      const checked = validateProfileForm({ ...input, bio: input.bio ?? '' });
+      const checked = validateProfileForm({ ...input, bio: input.bio ?? '' }, user.ageCategory);
       if (!checked.ok) return Promise.resolve({ status: 'rejected', reason: 'invalid' });
       user.profile = { ...checked.input };
       // ログイン状態の表示（ニックネーム・プロフィールの有無）を更新する
       session.notify();
       return Promise.resolve({ status: 'saved' });
+    },
+    changeAgeCategoryToAdult: () => {
+      const user = findDevUser(db, session.getUserId());
+      if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
+      // 「18歳以上」から戻す操作は作らない（docs/11の7-1）
+      if (user.ageCategory === 'adult') {
+        return Promise.resolve({ status: 'rejected', reason: 'alreadyAdult' });
+      }
+      user.ageCategory = 'adult';
+      session.notify();
+      return Promise.resolve({ status: 'changed' });
     },
   };
 }

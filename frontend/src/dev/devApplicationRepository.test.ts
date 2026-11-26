@@ -1,3 +1,4 @@
+import { createDevProfileRepository } from './devProfileRepository';
 import { describe, expect, it } from 'vitest';
 import { APPLICATION_LIMITS } from '../features/applications/types';
 import { createDevApplicationRepository } from './devApplicationRepository';
@@ -182,26 +183,71 @@ describe('承認・却下', () => {
     expect(after.event).toMatchObject({ state: 'full', approvedCount: 12 });
   });
 
-  it('満員でも承認待ちは残り、承認だけができない', async () => {
+  it('満員の場合、定員を増やす指定がなければ承認せず、承認待ちのまま残す', async () => {
     const { applications } = setup(HOST_ID);
     const full = await applicantsOf(applications, FULL_EVENT);
     expect(full.event).toMatchObject({ state: 'full', capacity: 6, approvedCount: 6 });
-    const pending = full.applicants.filter((a) => a.status === 'pending');
-    expect(pending).toHaveLength(2);
-    const [next] = pending;
+    const [next] = full.applicants.filter((a) => a.status === 'pending');
     if (!next) throw new Error('承認待ちがありません。');
 
     expect(await applications.approveApplication(next.applicationId)).toEqual({
       status: 'rejected',
       reason: 'full',
     });
-    // 承認待ちのまま残る。却下はできる
+    // 今の定員＋1と合わない指定も断る（ほかの操作で定員が変わった場合）
+    expect(
+      await applications.approveApplication(next.applicationId, { expandCapacityTo: 8 }),
+    ).toEqual({ status: 'rejected', reason: 'full' });
     expect(
       (await applicantsOf(applications, FULL_EVENT)).applicants.filter(
         (a) => a.status === 'pending',
       ),
     ).toHaveLength(2);
     expect(await applications.rejectApplication(next.applicationId)).toEqual({ status: 'done' });
+  });
+
+  it('満員の場合、定員を1人増やして承認する。定員は承認済み人数以上のまま', async () => {
+    const { applications } = setup(HOST_ID);
+    const [next] = (await applicantsOf(applications, FULL_EVENT)).applicants.filter(
+      (a) => a.status === 'pending',
+    );
+    if (!next) throw new Error('承認待ちがありません。');
+
+    expect(
+      await applications.approveApplication(next.applicationId, { expandCapacityTo: 7 }),
+    ).toEqual({ status: 'done' });
+    expect((await applicantsOf(applications, FULL_EVENT)).event).toMatchObject({
+      state: 'full',
+      capacity: 7,
+      approvedCount: 7,
+    });
+  });
+
+  it('満員でも定員が上限の100人なら、承認できない', async () => {
+    const { applications, db } = setup(HOST_ID);
+    const record = db.events.find((event) => event.id === FULL_EVENT);
+    if (!record) throw new Error('募集がありません。');
+    const [next] = (await applicantsOf(applications, FULL_EVENT)).applicants.filter(
+      (a) => a.status === 'pending',
+    );
+    if (!next) throw new Error('承認待ちがありません。');
+    // 定員を上限の100人にし、承認済みも100人にそろえる
+    record.capacity = 100;
+    for (let index = 0; index < 94; index += 1) {
+      db.applications.push({
+        id: `filler-${index}`,
+        eventId: FULL_EVENT,
+        userId: `filler-user-${index}`,
+        status: 'approved',
+        appliedAt: NOW,
+        decidedAt: NOW,
+      });
+    }
+
+    expect(
+      await applications.approveApplication(next.applicationId, { expandCapacityTo: 101 }),
+    ).toEqual({ status: 'rejected', reason: 'capacityLimit' });
+    expect(record.capacity).toBe(100);
   });
 
   it('同時に承認しても、定員を超えない', async () => {
@@ -334,5 +380,39 @@ describe('自分の申請', () => {
 
   it('未ログインには空を返す', async () => {
     expect(await setup(null).applications.getMyParticipations()).toEqual([]);
+  });
+});
+
+describe('申請者の年代', () => {
+  it('承認待ち・承認済みの人の分だけを、主催者に返す', async () => {
+    const { applications } = setup(HOST_ID);
+    const list = await applicantsOf(applications, HOSTED_EVENT);
+
+    for (const applicant of list.applicants) {
+      if (applicant.status === 'pending' || applicant.status === 'approved') {
+        expect(applicant.hostOnly).not.toBeNull();
+      } else {
+        expect(applicant.hostOnly).toBeNull();
+      }
+    }
+    const minor = list.applicants.find((a) => a.profile.userId === 'dev-user-minor');
+    expect(minor?.hostOnly).toEqual({ ageGroup: 'teens' });
+  });
+
+  it('終了した募集では、主催者にも年代を返さない', async () => {
+    const { applications } = setup(HOST_ID);
+    const list = await applicantsOf(applications, 'dev-b-ended');
+
+    expect(list.applicants.length).toBeGreaterThan(0);
+    for (const applicant of list.applicants) expect(applicant.hostOnly).toBeNull();
+  });
+
+  it('ほかの人のプロフィールの取得には、年代を含めない', async () => {
+    const { db, session } = setup(HOST_ID);
+    const profiles = createDevProfileRepository({ db, session });
+
+    for (const profile of await profiles.getProfiles(['dev-user-a', 'dev-user-minor'])) {
+      expect(Object.keys(profile)).not.toContain('ageGroup');
+    }
   });
 });

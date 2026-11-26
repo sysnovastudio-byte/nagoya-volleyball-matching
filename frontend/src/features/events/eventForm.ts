@@ -1,12 +1,14 @@
-import { checkCapacity, checkEventInput, checkFee, type EventFieldErrors } from './eventRules';
+import { checkCapacity, checkEventInput, checkFee, type EventField } from './eventRules';
 import type { Area, CreateEventInput, TargetLevel } from './types';
 
 /** 募集作成の入力欄の値。入力の途中の値も持てるよう、すべて文字列で持つ。 */
 export interface EventFormValues {
   title: string;
-  /** 日本時間の「2026-12-05T13:00」の形（datetime-local の値） */
-  startsAt: string;
-  endsAt: string;
+  /** 開催日。日本時間の「2026-12-05」の形 */
+  date: string;
+  /** 開始・終了の時刻。「13:00」の形で、15分刻み */
+  startTime: string;
+  endTime: string;
   area: Area | '';
   targetLevels: TargetLevel[];
   capacity: string;
@@ -20,8 +22,9 @@ export interface EventFormValues {
 
 export const EMPTY_EVENT_FORM: EventFormValues = {
   title: '',
-  startsAt: '',
-  endsAt: '',
+  date: '',
+  startTime: '',
+  endTime: '',
   area: '',
   targetLevels: [],
   capacity: '',
@@ -34,12 +37,42 @@ export const EMPTY_EVENT_FORM: EventFormValues = {
 };
 
 const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 時刻の刻み（分）。 */
+export const TIME_STEP_MINUTES = 15;
+
+/** 選べる時刻（00:00〜23:45、15分刻み）。 */
+export const TIME_OPTIONS: readonly string[] = Array.from(
+  { length: (24 * 60) / TIME_STEP_MINUTES },
+  (_, index) => {
+    const minutes = index * TIME_STEP_MINUTES;
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  },
+);
 
 /** 入力された日時を、日本時間として読む。端末の時間帯の設定によらない。 */
 export function parseJstDateTime(value: string): Date | null {
   if (!LOCAL_DATE_TIME.test(value)) return null;
   const date = new Date(`${value}:00+09:00`);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * 開催日と開始・終了の時刻から、開始・終了の日時を作る。
+ * 終了の時刻が開始より前なら、翌日として扱う（docs/11の2-1）。どれかが欠けていれば null。
+ */
+export function scheduleFromForm(values: Pick<EventFormValues, 'date' | 'startTime' | 'endTime'>) {
+  if (!LOCAL_DATE.test(values.date)) return null;
+  if (!TIME_OPTIONS.includes(values.startTime) || !TIME_OPTIONS.includes(values.endTime))
+    return null;
+  const startsAt = parseJstDateTime(`${values.date}T${values.startTime}`);
+  const sameDayEnd = parseJstDateTime(`${values.date}T${values.endTime}`);
+  if (!startsAt || !sameDayEnd) return null;
+  const nextDay = values.endTime < values.startTime;
+  const endsAt = nextDay ? new Date(sameDayEnd.getTime() + DAY_MS) : sameDayEnd;
+  return { startsAt, endsAt, nextDay };
 }
 
 /** 数字の入力を読む。全角の数字と桁区切りを受け付ける。 */
@@ -63,8 +96,13 @@ export function isEventFormDirty(values: EventFormValues) {
   });
 }
 
+/** 画面の入力欄。開始・終了の日時は、開催日・開始時刻・終了時刻の3つで入力する。 */
+export type EventFormField =
+  Exclude<EventField, 'startsAt' | 'endsAt'> | 'date' | 'startTime' | 'endTime';
+export type EventFormErrors = Partial<Record<EventFormField, string>>;
+
 export type EventFormResult =
-  { ok: true; input: CreateEventInput } | { ok: false; errors: EventFieldErrors };
+  { ok: true; input: CreateEventInput } | { ok: false; errors: EventFormErrors };
 
 /** 入力欄の値を検証し、送る内容に変える。 */
 export function validateEventForm(
@@ -72,16 +110,15 @@ export function validateEventForm(
   now: Date,
   clientRequestId: string,
 ): EventFormResult {
-  const startsAt = parseJstDateTime(values.startsAt);
-  const endsAt = parseJstDateTime(values.endsAt);
+  const schedule = scheduleFromForm(values);
   const capacity = parseInteger(values.capacity);
   const fee = parseInteger(values.fee);
 
   const input: CreateEventInput = {
     clientRequestId,
     title: values.title.trim(),
-    startsAt: startsAt?.toISOString() ?? '',
-    endsAt: endsAt?.toISOString() ?? '',
+    startsAt: schedule?.startsAt.toISOString() ?? '',
+    endsAt: schedule?.endsAt.toISOString() ?? '',
     // 未選択は、選択肢にない値として検証で誤りにする
     area: values.area as Area,
     targetLevels: values.targetLevels,
@@ -96,7 +133,17 @@ export function validateEventForm(
     },
   };
 
-  const errors = checkEventInput(input, now);
+  const { startsAt: startError, endsAt: endError, ...rest } = checkEventInput(input, now);
+  const errors: EventFormErrors = rest;
+  if (values.date === '') errors.date = '日付を選んでください。';
+  if (values.startTime === '') errors.startTime = '開始時刻を選んでください。';
+  if (values.endTime === '') errors.endTime = '終了時刻を選んでください。';
+  if (values.startTime !== '' && values.startTime === values.endTime) {
+    errors.endTime = '終了時刻は、開始時刻と違う時刻にしてください。';
+  }
+  // 開始の日時の誤り（今より後・1年以内）は開始時刻の欄に、終了の誤りは終了時刻の欄に示す
+  if (schedule && startError) errors.startTime = startError;
+  if (schedule && endError && !errors.endTime) errors.endTime = endError;
   // 数字として読めなかった場合は、空か形の誤りかで案内を変える
   if (capacity === null) {
     errors.capacity =

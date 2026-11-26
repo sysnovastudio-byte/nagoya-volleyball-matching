@@ -1,3 +1,4 @@
+import type { EventFilter } from './eventFilter';
 import type { ApplicationStatus } from '../applications/types';
 
 /**
@@ -111,8 +112,11 @@ export type CreateEventResult =
  * 将来は、docs/06の6-5の関数（list_events・get_event・create_event・get_my_events）を呼ぶ実装に置き換える。
  */
 export interface EventRepository {
-  /** 開催前の募集を、開催日時の順に返す。 */
-  listEvents(cursor?: string): Promise<EventListResult>;
+  /**
+   * 開催前の募集を、開催日時の順に返す。条件（EVT-05）を渡すと、合う募集だけを返す。
+   * 続きを読むときは、前と同じ条件を渡す。
+   */
+  listEvents(cursor?: string, filter?: EventFilter): Promise<EventListResult>;
   /** 見られる募集を返す。ない場合と、見られない場合は、どちらも null を返す。 */
   getEvent(id: string): Promise<EventDetail | null>;
   /** くわしい住所。見てよい人（主催者と承認済みの参加者、docs/06の5-4）以外には null を返す。 */

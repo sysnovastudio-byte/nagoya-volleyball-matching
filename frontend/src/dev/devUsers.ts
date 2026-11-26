@@ -1,5 +1,5 @@
 import type { AgeCategory } from '../features/auth/types';
-import type { ExperienceLevel } from '../features/profiles/types';
+import type { AgeGroup, ExperienceLevel } from '../features/profiles/types';
 import { markDevModule } from './marker';
 
 markDevModule('DEV-ONLY-DUMMY-DATA:devUsers');
@@ -9,7 +9,13 @@ export interface DevUser {
   id: string;
   ageCategory: AgeCategory;
   /** 必須プロフィールが未登録の場合は null */
-  profile: { nickname: string; experienceLevel: ExperienceLevel; bio: string | null } | null;
+  profile: {
+    nickname: string;
+    experienceLevel: ExperienceLevel;
+    bio: string | null;
+    /** 年代。本人と申請先の主催者（終了日時まで）だけが見られる */
+    ageGroup: AgeGroup | null;
+  } | null;
 }
 
 /** 開発用の帯で切り替えられる利用者。null は未ログイン。 */
@@ -41,6 +47,16 @@ const MEMBERS: [string, ExperienceLevel, string | null][] = [
   ['ちさと', 'beginner', '平日の夜なら参加しやすいです。'],
 ];
 
+const MEMBER_AGE_GROUPS: (AgeGroup | null)[] = [
+  'twenties',
+  'thirties',
+  null,
+  'forties',
+  'twenties',
+  'fifties',
+  'sixtiesPlus',
+];
+
 export const DEV_MEMBER_IDS = MEMBERS.map((_, index) => `dev-member-${index + 1}`);
 
 export function createDevUsers(): DevUser[] {
@@ -52,6 +68,7 @@ export function createDevUsers(): DevUser[] {
         nickname: 'あおい',
         experienceLevel: 'beginner',
         bio: '名古屋に引っ越してきて、一緒に楽しめる人を探しています。',
+        ageGroup: 'twenties',
       },
     },
     {
@@ -61,12 +78,18 @@ export function createDevUsers(): DevUser[] {
         nickname: 'そら',
         experienceLevel: 'experienced',
         bio: '初心者向けの練習会を、月に2回ほど開いています。',
+        ageGroup: 'thirties',
       },
     },
     {
       id: 'dev-user-minor',
       ageCategory: 'minor',
-      profile: { nickname: 'こはる', experienceLevel: 'inexperienced', bio: null },
+      profile: {
+        nickname: 'こはる',
+        experienceLevel: 'inexperienced',
+        bio: null,
+        ageGroup: 'teens',
+      },
     },
     { id: 'dev-user-no-profile', ageCategory: 'adult', profile: null },
     // ここから下は、ほかの募集の主催者（帯では選べない）
@@ -80,12 +103,18 @@ export function createDevUsers(): DevUser[] {
     ).map(([id, nickname]) => ({
       id,
       ageCategory: 'adult' as const,
-      profile: { nickname, experienceLevel: 'experienced' as const, bio: null },
+      profile: { nickname, experienceLevel: 'experienced' as const, bio: null, ageGroup: null },
     })),
     ...MEMBERS.map(([nickname, experienceLevel, bio], index) => ({
       id: DEV_MEMBER_IDS[index] ?? '',
       ageCategory: 'adult' as const,
-      profile: { nickname, experienceLevel, bio },
+      // 年代は、未選択の人も含めて順にばらつかせる（架空）
+      profile: {
+        nickname,
+        experienceLevel,
+        bio,
+        ageGroup: MEMBER_AGE_GROUPS[index % MEMBER_AGE_GROUPS.length] ?? null,
+      },
     })),
   ];
 }

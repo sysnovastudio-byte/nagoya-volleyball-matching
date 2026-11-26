@@ -1,3 +1,4 @@
+import { EMPTY_FILTER } from '../features/events/eventFilter';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -109,7 +110,7 @@ describe('募集一覧', () => {
     await user.click(await screen.findByRole('button', { name: '続きを読み込む' }));
 
     expect(await screen.findByRole('link', { name: next.title })).toBeInTheDocument();
-    expect(list).toHaveBeenLastCalledWith(EVENT.id);
+    expect(list).toHaveBeenLastCalledWith(EVENT.id, EMPTY_FILTER);
     expect(screen.queryByRole('button', { name: '続きを読み込む' })).not.toBeInTheDocument();
   });
 });

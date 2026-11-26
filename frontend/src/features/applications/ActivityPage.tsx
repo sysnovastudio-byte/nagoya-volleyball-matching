@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { backState } from '../../app/BackLink';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource, type Resource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
@@ -222,7 +223,12 @@ function HostedItem({ item }: { item: MyEvent }) {
             <span className="font-bold text-ink">{item.pendingCount}</span>人
           </p>
           <div className="mt-2">
-            <ButtonLink to={`/events/${item.id}/applicants`} variant="secondary" size="small">
+            <ButtonLink
+              to={`/events/${item.id}/applicants`}
+              state={backState('/activity', '申請と募集へ')}
+              variant="secondary"
+              size="small"
+            >
               申請者を見る
             </ButtonLink>
           </div>
@@ -249,6 +255,7 @@ function EventHeading({ event }: { event: EventSummary | MyEvent }) {
         <EventStateBadge state={event.state} />
         <Link
           to={`/events/${event.id}`}
+          state={backState('/activity', '申請と募集へ')}
           className="inline-flex min-h-11 items-center font-bold text-main-strong underline"
         >
           {event.title}
