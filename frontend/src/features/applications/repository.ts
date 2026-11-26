@@ -8,6 +8,7 @@ const notConnectedRepository: ApplicationRepository = {
   applyToEvent: notConnected,
   approveApplication: notConnected,
   rejectApplication: notConnected,
+  revokeApproval: notConnected,
   cancelParticipation: notConnected,
   retractApplication: notConnected,
   listApplicants: notConnected,
@@ -25,6 +26,7 @@ function createRepository(): ApplicationRepository {
       approveApplication: async (id, options) =>
         (await repository()).approveApplication(id, options),
       rejectApplication: async (id) => (await repository()).rejectApplication(id),
+      revokeApproval: async (id, reason) => (await repository()).revokeApproval(id, reason),
       cancelParticipation: async (id) => (await repository()).cancelParticipation(id),
       retractApplication: async (id) => (await repository()).retractApplication(id),
       listApplicants: async (eventId) => (await repository()).listApplicants(eventId),

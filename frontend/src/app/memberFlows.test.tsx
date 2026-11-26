@@ -538,6 +538,41 @@ describe('募集詳細（申請者）', () => {
 });
 
 describe('申請者一覧', () => {
+  it('承認の取り消しは、理由を選び確認してから行い、「そのほか」に移る', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    const summary = await screen.findByRole('region', { name: '定員と承認済みの数' });
+    await user.click(screen.getByRole('button', { name: /承認済み/ }));
+    await user.click(screen.getByRole('button', { name: 'ひなたさんの承認を取り消す' }));
+    const group = screen.getByRole('group', { name: 'ひなたさんの承認の取り消しの確認' });
+    expect(group).toHaveTextContent('この募集にもう申請できません');
+    const submit = within(group).getByRole('button', { name: '承認を取り消す' });
+    // 理由を選ぶまでは押せない
+    expect(submit).toBeDisabled();
+    await user.click(within(group).getByRole('radio', { name: '安全上の理由' }));
+    await user.click(submit);
+
+    expect(await findToast()).toHaveTextContent('ひなたさんの承認を取り消しました。');
+    expect(summary).toHaveTextContent('承認済み 8人');
+    await user.click(screen.getByRole('button', { name: /そのほか/ }));
+    expect(screen.getByRole('link', { name: 'ひなた' }).closest('li')).toHaveTextContent(
+      '承認取り消し',
+    );
+  });
+
+  it('承認の取り消しは、やめると何もしない', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    await screen.findByRole('region', { name: '定員と承認済みの数' });
+    await user.click(screen.getByRole('button', { name: /承認済み/ }));
+    await user.click(screen.getByRole('button', { name: 'ひなたさんの承認を取り消す' }));
+    await user.click(screen.getByRole('button', { name: 'やめる' }));
+
+    expect(screen.getByRole('button', { name: 'ひなたさんの承認を取り消す' })).toBeInTheDocument();
+  });
+
   it('承認すると承認済みに移り、定員の数が変わる', async () => {
     const user = userEvent.setup();
     renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
@@ -685,6 +720,20 @@ describe('キャンセル・取り下げ・再申請（SCR-006）', () => {
 
     expect(await findToast()).toHaveTextContent('参加を申請しました。');
     expect((await screen.findAllByText('承認待ち')).length).toBeGreaterThan(0);
+  });
+
+  it('承認を取り消された募集では、再申請できないことを示す', async () => {
+    renderApp('/events/dev-b-full', { userId: 'dev-user-a' });
+
+    expect(
+      (
+        await screen.findAllByText(
+          '主催者が参加の承認を取り消しました。この募集には、もう申請できません。',
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('承認取り消し').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /申請する/ })).not.toBeInTheDocument();
   });
 
   it('却下の後は、取り下げ・再申請の操作を出さない', async () => {

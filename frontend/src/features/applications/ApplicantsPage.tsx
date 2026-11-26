@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useToast } from '../../app/toastContext';
 import { NotFoundPage } from '../../app/NotFoundPage';
@@ -14,9 +14,16 @@ import { ageGroupLabel } from '../profiles/profileRules';
 import { formatDateTimeRange } from '../events/format';
 import { Avatar } from '../profiles/Avatar';
 import { displayName, experienceLabel } from '../profiles/format';
-import { APPLICATION_STATUS_LABELS, formatAppliedAt } from './format';
+import { APPLICATION_STATUS_LABELS, formatAppliedAt, REVOKE_REASON_LABELS } from './format';
 import { useApplicationRepository } from './repositoryContext';
-import type { Applicant, ApplicantList, DecisionRejection } from './types';
+import {
+  REVOKE_REASONS,
+  type Applicant,
+  type ApplicantList,
+  type DecisionRejection,
+  type RevokeReason,
+  type RevokeRejection,
+} from './types';
 import { SegmentedControl } from './SegmentedControl';
 
 type Tab = 'pending' | 'approved' | 'other';
@@ -41,8 +48,8 @@ function tabOf(applicant: Applicant): Tab {
 }
 
 /**
- * SCR-008 申請者一覧（APP-02〜05）。主催者だけが見られる。スマートフォンはカード、PC（1024px以上）は表。
- * 承認の取り消し（APP-11）と会話の開始（MSG-06）は、サイクル1では作らない（docs/10の7-3）。
+ * SCR-008 申請者一覧（APP-02〜05・APP-11）。主催者だけが見られる。スマートフォンはカード、PC（1024px以上）は表。
+ * 会話の開始（MSG-06）は、PR 2-5 で加える。
  */
 export function ApplicantsPage() {
   const { eventId = '' } = useParams();
@@ -120,14 +127,21 @@ const DECISION_ERRORS: Record<DecisionRejection, string> = {
   notAccepting: '開催が始まったか、受付ができない状態のため、操作できませんでした。',
 };
 
+const REVOKE_ERRORS: Record<RevokeRejection, string> = {
+  notFound: '申請が見つかりませんでした。',
+  notApproved: 'この参加は、すでにキャンセルまたは取り消しされています。',
+  reasonRequired: '取り消しの理由を選んでください。',
+  notAccepting: '開催が始まったか、受付ができない状態のため、操作できませんでした。',
+};
+
 /** 承認・却下できない理由（docs/06の5-12）。 */
 function lockedReason(list: ApplicantList) {
   switch (list.event.state) {
     case 'ongoing':
     case 'ended':
-      return '開催が始まったため、承認・却下はできません。';
+      return '開催が始まったため、承認・却下・承認の取り消しはできません。';
     case 'cancelled':
-      return '中止した募集のため、承認・却下はできません。';
+      return '中止した募集のため、承認・却下・承認の取り消しはできません。';
     default:
       return null;
   }
@@ -180,6 +194,26 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
         );
       } else {
         setError(DECISION_ERRORS[result.reason]);
+      }
+      setConfirming(null);
+      onChanged();
+    } catch {
+      setError('操作できませんでした。通信の状態を確認して、もう一度お試しください。');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const revoke = async (applicant: Applicant, reason: RevokeReason) => {
+    if (busyId) return;
+    setBusyId(applicant.applicationId);
+    setError(null);
+    try {
+      const result = await repository.revokeApproval(applicant.applicationId, reason);
+      if (result.status === 'done') {
+        toast(`${displayName(applicant.profile)}さんの承認を取り消しました。`);
+      } else {
+        setError(REVOKE_ERRORS[result.reason]);
       }
       setConfirming(null);
       onChanged();
@@ -247,30 +281,51 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
       ) : (
         <ApplicantCollection
           applicants={shown}
-          renderActions={(applicant) => (
-            <DecisionActions
-              name={displayName(applicant.profile)}
-              visible={event.canDecide && applicant.status === 'pending'}
-              canApprove={!isFull || expandTo !== null}
-              expandTo={expandTo}
-              busy={busyId === applicant.applicationId}
-              disabled={busyId !== null}
-              confirming={confirming?.id === applicant.applicationId ? confirming.kind : null}
-              onApprove={() => {
-                // 定員を増やす場合は、確認してから承認する
-                if (expandTo === null) void decide(applicant, 'approve');
-                else setConfirming({ id: applicant.applicationId, kind: 'expand' });
-              }}
-              onConfirmApprove={() => void decide(applicant, 'approve')}
-              onAskReject={() => {
-                setConfirming({ id: applicant.applicationId, kind: 'reject' });
-              }}
-              onCancel={() => {
-                setConfirming(null);
-              }}
-              onReject={() => void decide(applicant, 'reject')}
-            />
-          )}
+          renderActions={(applicant) => {
+            const isConfirming = confirming?.id === applicant.applicationId;
+            if (applicant.status === 'approved') {
+              return (
+                <RevokeActions
+                  name={displayName(applicant.profile)}
+                  visible={event.canDecide}
+                  busy={busyId === applicant.applicationId}
+                  disabled={busyId !== null}
+                  confirming={isConfirming && confirming.kind === 'revoke'}
+                  onAsk={() => {
+                    setConfirming({ id: applicant.applicationId, kind: 'revoke' });
+                  }}
+                  onCancel={() => {
+                    setConfirming(null);
+                  }}
+                  onRevoke={(reason) => void revoke(applicant, reason)}
+                />
+              );
+            }
+            return (
+              <DecisionActions
+                name={displayName(applicant.profile)}
+                visible={event.canDecide && applicant.status === 'pending'}
+                canApprove={!isFull || expandTo !== null}
+                expandTo={expandTo}
+                busy={busyId === applicant.applicationId}
+                disabled={busyId !== null}
+                confirming={isConfirming ? confirming.kind : null}
+                onApprove={() => {
+                  // 定員を増やす場合は、確認してから承認する
+                  if (expandTo === null) void decide(applicant, 'approve');
+                  else setConfirming({ id: applicant.applicationId, kind: 'expand' });
+                }}
+                onConfirmApprove={() => void decide(applicant, 'approve')}
+                onAskReject={() => {
+                  setConfirming({ id: applicant.applicationId, kind: 'reject' });
+                }}
+                onCancel={() => {
+                  setConfirming(null);
+                }}
+                onReject={() => void decide(applicant, 'reject')}
+              />
+            );
+          }}
         />
       )}
     </div>
@@ -451,7 +506,7 @@ function ApplicantCard({ applicant, children }: ApplicantCardProps) {
   );
 }
 
-type ConfirmKind = 'reject' | 'expand';
+type ConfirmKind = 'reject' | 'expand' | 'revoke';
 
 interface DecisionActionsProps {
   name: string;
@@ -548,6 +603,104 @@ function DecisionActions({
       >
         却下する
       </Button>
+    </div>
+  );
+}
+
+interface RevokeActionsProps {
+  name: string;
+  /** 承認済みで、操作できる期間の場合だけ出す */
+  visible: boolean;
+  busy: boolean;
+  disabled: boolean;
+  confirming: boolean;
+  onAsk: () => void;
+  onCancel: () => void;
+  onRevoke: (reason: RevokeReason) => void;
+}
+
+/**
+ * 承認の取り消し（APP-11）。理由を選び、確認してから行う（docs/10の11-3）。
+ * 相手が再申請できなくなることと、住所を見られなくなることを示す。
+ */
+function RevokeActions({
+  name,
+  visible,
+  busy,
+  disabled,
+  confirming,
+  onAsk,
+  onCancel,
+  onRevoke,
+}: RevokeActionsProps) {
+  const [reason, setReason] = useState<RevokeReason | null>(null);
+  const groupName = useId();
+  if (!visible) return null;
+  if (!confirming) {
+    return (
+      <Button
+        variant="secondary"
+        size="small"
+        disabled={disabled}
+        aria-label={`${name}さんの承認を取り消す`}
+        onClick={() => {
+          setReason(null);
+          onAsk();
+        }}
+      >
+        承認を取り消す
+      </Button>
+    );
+  }
+  return (
+    <div
+      role="group"
+      aria-label={`${name}さんの承認の取り消しの確認`}
+      className="rounded-xl border border-danger p-3"
+    >
+      <p className="mb-2 font-bold">
+        取り消すと、{name}
+        さんはくわしい住所を見られなくなり、この募集にもう申請できません。{name}さんに通知します。
+      </p>
+      <fieldset className="mb-3">
+        <legend className="mb-1 font-bold">
+          取り消しの理由<span className="ml-1 text-danger">（必須）</span>
+        </legend>
+        <p className="mb-1 text-sub">理由は記録に残り、{name}さんへの通知には含めません。</p>
+        <div className="flex flex-col">
+          {REVOKE_REASONS.map((value) => (
+            <label key={value} className="flex min-h-11 items-center gap-2">
+              <input
+                type="radio"
+                name={groupName}
+                value={value}
+                checked={reason === value}
+                onChange={() => {
+                  setReason(value);
+                }}
+                className="size-5"
+              />
+              {REVOKE_REASON_LABELS[value]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="danger"
+          size="small"
+          disabled={disabled || reason === null}
+          onClick={() => {
+            if (reason) onRevoke(reason);
+          }}
+        >
+          {busy ? '取り消しています' : '承認を取り消す'}
+        </Button>
+        <Button variant="secondary" size="small" disabled={disabled} onClick={onCancel}>
+          やめる
+        </Button>
+      </div>
+      {reason === null && <p className="mt-2 text-sub">理由を選ぶと、取り消せます。</p>}
     </div>
   );
 }

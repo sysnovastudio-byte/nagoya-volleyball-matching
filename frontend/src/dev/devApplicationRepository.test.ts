@@ -1,6 +1,6 @@
 import { createDevProfileRepository } from './devProfileRepository';
 import { describe, expect, it } from 'vitest';
-import { APPLICATION_LIMITS } from '../features/applications/types';
+import { APPLICATION_LIMITS, type RevokeReason } from '../features/applications/types';
 import { createDevApplicationRepository } from './devApplicationRepository';
 import { createDevDatabase } from './devDatabase';
 import { createDevEventRepository } from './devEventRepository';
@@ -146,6 +146,8 @@ describe('参加の申請', () => {
         decidedAt: null,
         cancelledAt: null,
         retractedAt: null,
+        revokedAt: null,
+        revokeReason: null,
       });
     }
 
@@ -257,6 +259,8 @@ describe('承認・却下', () => {
         decidedAt: NOW,
         cancelledAt: null,
         retractedAt: null,
+        revokedAt: null,
+        revokeReason: null,
       });
     }
 
@@ -647,5 +651,95 @@ describe('再申請（docs/11の2-2）', () => {
         .filter((item) => item.profile.userId === 'dev-user-a')
         .map((item) => item.status),
     ).toEqual(['pending']);
+  });
+});
+
+describe('承認の取り消し（APP-11）', () => {
+  /** 利用者Bが主催する募集の、承認済みの申請。 */
+  const approvedOf = (db: ReturnType<typeof setup>['db']) => {
+    const application = db.applications.find(
+      (item) => item.eventId === HOSTED_EVENT && item.status === 'approved',
+    );
+    if (!application) throw new Error('承認済みの申請がありません。');
+    return application;
+  };
+
+  it('理由を記録して取り消し、枠を戻し、参加者に1件だけ通知する', async () => {
+    const { db, session, applications, events } = setup(HOST_ID);
+    const application = approvedOf(db);
+    const before = (await events.getEvent(HOSTED_EVENT))?.remaining ?? 0;
+
+    expect(await applications.revokeApproval(application.id, 'not_matching')).toEqual({
+      status: 'done',
+    });
+
+    expect(application).toMatchObject({
+      status: 'revoked',
+      revokedAt: NOW,
+      revokeReason: 'not_matching',
+    });
+    expect((await events.getEvent(HOSTED_EVENT))?.remaining).toBe(before + 1);
+    const sent = db.notifications.filter((item) => item.participantId === application.id);
+    expect(sent.map((item) => [item.userId, item.type])).toEqual([
+      [application.userId, 'approval_revoked'],
+    ]);
+    // 参加者は住所を見られず、同じ募集に再申請できない
+    session.setUserId(application.userId);
+    expect(await events.getLocation(HOSTED_EVENT)).toBeNull();
+    expect((await events.getEvent(HOSTED_EVENT))?.myApplication).toMatchObject({
+      status: 'revoked',
+      canReapply: false,
+    });
+    expect(await applications.applyToEvent(HOSTED_EVENT)).toEqual({
+      status: 'rejected',
+      reason: 'notReapplicable',
+    });
+  });
+
+  it('理由がなければ取り消さない', async () => {
+    const { db, applications } = setup(HOST_ID);
+    const application = approvedOf(db);
+
+    expect(
+      await applications.revokeApproval(application.id, '' as unknown as RevokeReason),
+    ).toEqual({ status: 'rejected', reason: 'reasonRequired' });
+    expect(application.status).toBe('approved');
+  });
+
+  it('承認待ちの申請は取り消せない', async () => {
+    const { db, applications } = setup(HOST_ID);
+    const pending = db.applications.find(
+      (item) => item.eventId === HOSTED_EVENT && item.status === 'pending',
+    );
+    if (!pending) throw new Error('承認待ちの申請がありません。');
+
+    expect(await applications.revokeApproval(pending.id, 'other')).toEqual({
+      status: 'rejected',
+      reason: 'notApproved',
+    });
+  });
+
+  it('主催者でない人は取り消せない', async () => {
+    const { db, applications } = setup();
+    const application = approvedOf(db);
+
+    expect(await applications.revokeApproval(application.id, 'other')).toEqual({
+      status: 'rejected',
+      reason: 'notFound',
+    });
+    expect(application.status).toBe('approved');
+  });
+
+  it('開催が始まった募集では取り消せない', async () => {
+    const { db, applications } = setup(HOST_ID);
+    const ongoing = db.applications.find(
+      (item) => item.eventId === 'dev-ongoing' && item.status === 'approved',
+    );
+    if (!ongoing) throw new Error('開催中の承認済みがありません。');
+
+    expect(await applications.revokeApproval(ongoing.id, 'safety')).toEqual({
+      status: 'rejected',
+      reason: 'notAccepting',
+    });
   });
 });

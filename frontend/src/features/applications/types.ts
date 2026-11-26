@@ -52,6 +52,29 @@ export type DecisionRejection =
 
 export type DecisionResult = { status: 'done' } | { status: 'rejected'; reason: DecisionRejection };
 
+/** 承認の取り消しの理由（docs/11の3-3、docs/06の4-19）。画面にもこの順で示す。 */
+export const REVOKE_REASONS = [
+  'mistaken_approval',
+  'not_matching',
+  'safety',
+  'event_changed',
+  'other',
+] as const;
+
+export type RevokeReason = (typeof REVOKE_REASONS)[number];
+
+/** 承認の取り消しを断る理由。 */
+export type RevokeRejection =
+  | 'notFound'
+  /** 承認済みでない（すでに取り消した・キャンセルされたなど） */
+  | 'notApproved'
+  /** 理由がない、または選択肢にない */
+  | 'reasonRequired'
+  /** 開催開始後・中止・非表示 */
+  | 'notAccepting';
+
+export type RevokeResult = { status: 'done' } | { status: 'rejected'; reason: RevokeRejection };
+
 /** キャンセル・取り下げを断る理由。 */
 export type OwnActionRejection =
   | 'notFound'
@@ -122,7 +145,7 @@ export interface MyParticipation {
 
 /**
  * 申請の窓口。将来は docs/06の6-5の関数（apply_to_event・approve_application・
- * reject_application・cancel_participation・retract_application・get_my_participations）を
+ * reject_application・revoke_approval・cancel_participation・retract_application・get_my_participations）を
  * 呼ぶ実装に置き換える。
  * 操作する人は、窓口が内部でログイン状態から決める。画面から自分のIDを渡さない。
  * 通信の失敗は例外、条件による拒否は結果で返す。
@@ -138,6 +161,11 @@ export interface ApplicationRepository {
     options?: { expandCapacityTo?: number },
   ): Promise<DecisionResult>;
   rejectApplication(applicationId: string): Promise<DecisionResult>;
+  /**
+   * 主催者が承認を取り消す（APP-11）。理由は必須。参加者へ通知し、相手は同じ募集に再申請できなくなる。
+   * 理由は記録するが、参加者への通知には含めない
+   */
+  revokeApproval(applicationId: string, reason: RevokeReason): Promise<RevokeResult>;
   /** 自分の承認済みの参加をキャンセルする（APP-08）。主催者へ通知する */
   cancelParticipation(applicationId: string): Promise<OwnActionResult>;
   /** 自分の承認待ちの申請を取り下げる（CND-10）。主催者へは通知しない */

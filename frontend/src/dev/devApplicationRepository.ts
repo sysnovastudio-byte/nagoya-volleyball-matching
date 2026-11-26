@@ -6,8 +6,10 @@ import type {
   EventSummary,
   MyParticipation,
   OwnActionResult,
+  RevokeReason,
+  RevokeResult,
 } from '../features/applications/types';
-import { APPLICATION_LIMITS, MAX_ATTEMPTS } from '../features/applications/types';
+import { APPLICATION_LIMITS, MAX_ATTEMPTS, REVOKE_REASONS } from '../features/applications/types';
 import { countApplications, devEventState, findDevUser, type DevDatabase } from './devDatabase';
 import type { DevApplicationRecord, DevEventRecord } from './devEvents';
 import { notifyParticipantChange } from './devNotifications';
@@ -104,6 +106,30 @@ export function createDevApplicationRepository({
     return { status: 'done' };
   };
 
+  /** 承認の取り消し（docs/06の5-1の revoke_approval）。主催者・開催開始前・承認済み・理由を確認する。 */
+  const revoke = (applicationId: string, reason: RevokeReason): RevokeResult => {
+    const user = currentUser();
+    const application = db.applications.find((item) => item.id === applicationId);
+    const record = application && db.events.find((event) => event.id === application.eventId);
+    // 他人の募集の申請は、ない場合と同じに扱う
+    if (!user || !application || !record || record.hostId !== user.id) {
+      return { status: 'rejected', reason: 'notFound' };
+    }
+    const current = now();
+    const state = devEventState(db, record, current);
+    if (state !== 'open' && state !== 'full' && state !== 'closed') {
+      return { status: 'rejected', reason: 'notAccepting' };
+    }
+    if (application.status !== 'approved') return { status: 'rejected', reason: 'notApproved' };
+    if (!REVOKE_REASONS.includes(reason)) return { status: 'rejected', reason: 'reasonRequired' };
+    application.status = 'revoked';
+    application.revokedAt = current;
+    application.revokeReason = reason;
+    // 参加者へ通知する（NTF-03）。理由は通知に含めない。枠は承認済みの人数から数えるため戻る
+    notifyParticipantChange(db, application, 'approval_revoked', current);
+    return { status: 'done' };
+  };
+
   /**
    * 本人によるキャンセル・取り下げ（docs/06の6-5の cancel_participation・retract_application）。
    * 開催開始前で、中止・非表示でない募集だけ。
@@ -192,6 +218,8 @@ export function createDevApplicationRepository({
         decidedAt: null,
         cancelledAt: null,
         retractedAt: null,
+        revokedAt: null,
+        revokeReason: null,
       };
       db.applications.push(application);
       // 主催者へ通知する（NTF-01）
@@ -202,6 +230,7 @@ export function createDevApplicationRepository({
     approveApplication: (applicationId, options) =>
       Promise.resolve(decide(applicationId, 'approved', options?.expandCapacityTo)),
     rejectApplication: (applicationId) => Promise.resolve(decide(applicationId, 'rejected')),
+    revokeApproval: (applicationId, reason) => Promise.resolve(revoke(applicationId, reason)),
     cancelParticipation: (applicationId) => Promise.resolve(changeOwn(applicationId, 'cancel')),
     retractApplication: (applicationId) => Promise.resolve(changeOwn(applicationId, 'retract')),
 

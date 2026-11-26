@@ -1,4 +1,4 @@
-import type { ApplicationStatus } from '../features/applications/types';
+import type { ApplicationStatus, RevokeReason } from '../features/applications/types';
 import type { EventLocation, PublicEvent } from '../features/events/types';
 import { DEV_MEMBER_IDS } from './devUsers';
 import { markDevModule } from './marker';
@@ -284,6 +284,9 @@ export interface DevApplicationRecord {
   decidedAt: Date | null;
   cancelledAt: Date | null;
   retractedAt: Date | null;
+  /** 承認を取り消した日時と理由。取り消した行だけ（docs/06の4-5） */
+  revokedAt: Date | null;
+  revokeReason: RevokeReason | null;
 }
 
 /** 帯で選べる利用者の申請。状態ごとの表示を確かめるためのもの。 */
@@ -291,6 +294,8 @@ const NAMED_APPLICATIONS: [eventId: string, userId: string, status: ApplicationS
   ['dev-family-morning', 'dev-user-a', 'approved'],
   // 満員の募集で、キャンセルの後に再申請できることを確かめる
   ['dev-easy-morning', 'dev-user-a', 'cancelled'],
+  // 承認を取り消された表示を確かめる（主催は利用者B）
+  ['dev-b-full', 'dev-user-a', 'revoked'],
   ['dev-weekday-night', 'dev-user-a', 'pending'],
   ['dev-spike-practice', 'dev-user-a', 'rejected'],
   ['dev-ongoing', 'dev-user-a', 'approved'],
@@ -335,6 +340,8 @@ export function createDevApplications(now: Date): DevApplicationRecord[] {
       decidedAt: status === 'pending' || status === 'retracted' ? null : later(1),
       cancelledAt: status === 'cancelled' ? later(2) : null,
       retractedAt: status === 'retracted' ? later(1) : null,
+      revokedAt: status === 'revoked' ? later(2) : null,
+      revokeReason: status === 'revoked' ? 'not_matching' : null,
     });
   };
 
