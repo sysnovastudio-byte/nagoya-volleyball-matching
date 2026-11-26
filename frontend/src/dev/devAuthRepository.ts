@@ -74,7 +74,9 @@ export function createDevAuthRepository({
       }
 
       // メールアドレスとパスワードは保存しない。年齢の区分と同意だけを、ダミーの利用者に記録する
-      const id = `dev-registered-${db.pendingVerifications.length + 1}`;
+      // IDは登録した人数から決める。認証待ちの人数から決めると、認証の後に同じIDが付いてしまう
+      const registered = db.users.filter((user) => user.id.startsWith('dev-registered-')).length;
+      const id = `dev-registered-${registered + 1}`;
       db.users.push({ id, ageCategory: input.ageCategory, profile: null });
       const agreedAt = now();
       for (const document of DOCUMENTS) {

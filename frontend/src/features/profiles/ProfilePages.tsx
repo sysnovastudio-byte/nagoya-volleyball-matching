@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router';
+import { BackLink } from '../../app/BackLink';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
@@ -44,7 +45,7 @@ export function UserProfilePage() {
   if (result.status === 'loading') return <Loading />;
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   const [profile] = result.value;
-  return profile ? <ProfileView profile={profile} /> : <NotFoundPage />;
+  return profile ? <ProfileView profile={profile} showBack /> : <NotFoundPage />;
 }
 
 function Loading() {
@@ -82,18 +83,25 @@ function NoProfile() {
 interface ProfileViewProps {
   profile: PublicProfile;
   notice?: string | null;
+  /** 申請者一覧などから来た場合に、戻る先を示す */
+  showBack?: boolean;
   /** 本人の操作 */
   children?: ReactNode;
 }
 
 /** 画像（の代わりの絵柄）と名前、公開項目の順（docs/11の5-1）。 */
-function ProfileView({ profile, notice = null, children }: ProfileViewProps) {
+function ProfileView({ profile, notice = null, showBack = false, children }: ProfileViewProps) {
   const name = displayName(profile);
   useDocumentTitle(`${name}のプロフィール`);
   const experience = experienceLabel(profile);
 
   return (
     <div className="mx-auto w-full max-w-160 px-4 py-6">
+      {showBack && (
+        <div className="-mt-4 mb-2">
+          <BackLink />
+        </div>
+      )}
       {notice && (
         <p
           role="status"

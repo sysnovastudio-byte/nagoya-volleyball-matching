@@ -881,3 +881,67 @@ describe('サイクル1の流れ', () => {
     expect(await screen.findByText('ダミー住所Q（架空）')).toBeInTheDocument();
   });
 });
+
+describe('指摘の不具合', () => {
+  it('1. 新規登録をやり直しても、18歳以上なら募集を作成できる', async () => {
+    const user = userEvent.setup();
+    const { db, session } = renderApp('/signup');
+    // 先に18歳未満の利用者が登録・認証を済ませている
+    db.users.push({ id: 'dev-registered-1', ageCategory: 'minor', profile: null });
+
+    await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
+    await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
+    await user.click(screen.getByLabelText('18歳以上'));
+    await user.click(screen.getByLabelText('利用規約に同意します'));
+    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
+    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
+    await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
+    expect(session.getUserId()).toBe('dev-registered-2');
+    await user.click(await screen.findByRole('link', { name: 'プロフィールを入力する' }));
+    await user.type(await screen.findByLabelText(/ニックネーム/), 'ななみ');
+    await user.click(screen.getByLabelText('未経験者'));
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    await user.click(
+      (await screen.findAllByRole('link', { name: '募集を作る' }))[0] as HTMLElement,
+    );
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+
+    expect((await screen.findAllByText('募集を公開しました。')).length).toBeGreaterThan(0);
+  });
+
+  it('2. 申請と募集から開いた募集詳細は、申請と募集に戻る', async () => {
+    const user = userEvent.setup();
+    renderApp('/activity', { userId: HOST });
+
+    const section = await screen.findByRole('region', { name: '主催する側' });
+    await user.click(await within(section).findByRole('link', { name: '木曜夜のミニゲーム会' }));
+    await user.click(await screen.findByRole('link', { name: '申請と募集へ' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請と募集' }),
+    ).toBeInTheDocument();
+  });
+
+  it('2. 募集一覧から開いた募集詳細は、募集一覧に戻る', async () => {
+    renderApp(`/events/${HOSTED_EVENT}`, { userId: HOST });
+
+    expect(await screen.findByRole('link', { name: '募集一覧へ' })).toHaveAttribute('href', '/');
+  });
+
+  it('3. 申請者一覧から開いたプロフィールに、申請者一覧へ戻るボタンがある', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
+
+    await user.click(await screen.findByRole('link', { name: 'こはる' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'こはる' })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: '申請者一覧へ' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請者一覧' }),
+    ).toBeInTheDocument();
+  });
+});
