@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { BackLink, type BackState } from '../../app/BackLink';
 import { useToast } from '../../app/toastContext';
+import { StartConversationButton } from '../conversations/StartConversationButton';
 import { useFlashToast } from '../../app/useFlashToast';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
@@ -128,7 +129,9 @@ function EventDetail({ event, onChanged }: EventDetailProps) {
             )}
             <section className="rounded-2xl border border-line bg-surface p-4">
               <h2 className="font-medium text-muted">主催者</h2>
-              <p className="font-bold">{event.hostNickname}</p>
+              <p className="mb-3 font-bold">{event.hostNickname}</p>
+              {/* 申請の前でも、主催者に質問できる（docs/11の3-1） */}
+              <StartConversationButton event={event} />
             </section>
             {showLocation ? (
               <LocationSection eventId={event.id} isHost={event.isHost} />
