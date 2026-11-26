@@ -2,6 +2,10 @@
   "name": "nagoya-volleyball-matching",
   // Node.js 26系LTS（Q-06、frontend/package.json の engines ">=26"）に合わせる
   "image": "mcr.microsoft.com/devcontainers/typescript-node:26",
+  // GitHub CLI（gh）。プルリクエストの作成などに使う
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
   "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash",
   "forwardPorts": [5173],
   "portsAttributes": {
