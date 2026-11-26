@@ -82,7 +82,7 @@ describe('募集の一覧', () => {
       ['open', 3],
       ['full', 0],
       ['open', 1],
-      ['closed', 2],
+      ['open', 2],
       ['open', 6],
     ]);
   });

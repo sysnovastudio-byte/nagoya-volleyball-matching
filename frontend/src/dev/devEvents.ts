@@ -98,7 +98,8 @@ export function createDevEvents(now: Date): DevEventRecord[] {
       capacity: 8,
       fee: 600,
       hostId: 'dev-host-tsubasa',
-      status: 'closed',
+      // MVPには締切がない（M-03）ため、受付中にする
+      status: 'open',
       hidden: false,
       clientRequestId: null,
     },

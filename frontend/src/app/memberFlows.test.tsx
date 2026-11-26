@@ -561,11 +561,13 @@ describe('募集詳細（申請者）', () => {
     expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
   });
 
-  it('受付終了の募集では、申請できない案内を示す', async () => {
-    // 却下の記録がない利用者にする
-    renderApp('/events/dev-spike-practice', { userId: 'dev-user-minor' });
+  it('開催中の募集では、申請できない案内を示す', async () => {
+    // 申請の記録がない利用者にする
+    renderApp('/events/dev-ongoing', { userId: 'dev-user-minor' });
 
-    expect((await screen.findAllByText('受付は終了しました。')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('開催中のため、申請できません。')).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
   });
 

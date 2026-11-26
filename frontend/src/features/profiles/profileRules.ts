@@ -2,7 +2,7 @@ import { textLength } from '../../lib/text';
 import type { AgeCategory } from '../auth/types';
 import type { AgeGroup, ExperienceLevel, ProfileInput } from './types';
 
-/** 上限（docs/11の3-3）。紛らわしいニックネームの拒否（DB-21）は行わない。 */
+/** 上限（docs/11の3-3）。紛らわしいニックネームの拒否（DB-21、承認済み）は、まだ作っていない。 */
 export const PROFILE_LIMITS = {
   nicknameMax: 20,
   bioMax: 500,

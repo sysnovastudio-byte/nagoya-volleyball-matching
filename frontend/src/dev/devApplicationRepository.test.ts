@@ -111,13 +111,12 @@ describe('参加の申請', () => {
   });
 
   it.each([
-    ['締切', 'dev-spike-practice', 'notAccepting'],
     ['開催中', 'dev-ongoing', 'notAccepting'],
     ['中止', 'dev-cancelled', 'notAccepting'],
     ['非表示', 'dev-b-hidden', 'notFound'],
     ['存在しない', 'unknown', 'notFound'],
   ])('%sの募集には申請できない', async (_, eventId, reason) => {
-    // 締切の募集で却下されていない人として確かめるため、別の利用者にする
+    // 申請の記録がない人として確かめるため、別の利用者にする
     const { applications } = setup('dev-member-16');
 
     expect(await applications.applyToEvent(eventId)).toEqual({ status: 'rejected', reason });
@@ -371,7 +370,7 @@ describe('申請者一覧', () => {
     });
   });
 
-  it('非表示の募集は、主催者にも見せない（DB-19 の仮の扱い）', async () => {
+  it('非表示の募集は、主催者にも見せない（DB-19）', async () => {
     expect(await setup(HOST_ID).applications.listApplicants('dev-b-hidden')).toEqual({
       status: 'forbidden',
       reason: 'hidden',

@@ -248,7 +248,7 @@ export function createDevApplicationRepository({
             : { status: 'notFound' },
         );
       }
-      // 非表示の募集の申請者一覧は、主催者にも見せない（DB-19 の仮の扱い）
+      // 非表示の募集の申請者一覧は、主催者にも見せない（DB-19）
       if (state === 'hidden') return Promise.resolve({ status: 'forbidden', reason: 'hidden' });
 
       // 年代は、承認待ち・承認済みの申請者の分を、終了日時まで見せる。中止・終了では見せない（DB-03）
