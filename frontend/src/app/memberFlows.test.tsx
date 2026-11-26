@@ -1,7 +1,7 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createDevAuthRepository } from '../dev/devAuthRepository';
 import { createDevDatabase } from '../dev/devDatabase';
 import { createDevEventRepository } from '../dev/devEventRepository';
@@ -37,6 +37,26 @@ function renderApp(
     });
   };
   return { db, switchUser };
+}
+
+/** 日本時間で、今日から数えた日の時刻を datetime-local の形で返す。 */
+function jstLocal(daysFromNow: number, hour: number) {
+  const date = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  date.setUTCDate(date.getUTCDate() + daysFromNow);
+  date.setUTCHours(hour, 0, 0, 0);
+  return date.toISOString().slice(0, 16);
+}
+
+async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/タイトル/), '日曜の練習会');
+  fireEvent.change(screen.getByLabelText(/開始の日時/), { target: { value: jstLocal(7, 13) } });
+  fireEvent.change(screen.getByLabelText(/終了の日時/), { target: { value: jstLocal(7, 16) } });
+  await user.selectOptions(screen.getByLabelText(/開催エリア/), '中区');
+  await user.click(screen.getByLabelText('初心者'));
+  await user.type(screen.getByLabelText(/募集人数/), '8');
+  await user.type(screen.getByLabelText(/参加費/), '300');
+  await user.type(screen.getByLabelText(/くわしい住所/), 'ダミー住所Q（架空）');
+  await user.type(screen.getByLabelText(/施設名/), 'ダミー体育館Q');
 }
 
 describe('ログイン後の移動', () => {
@@ -76,7 +96,7 @@ describe('要ログインの画面', () => {
     switchUser('dev-user-a');
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: '募集作成は準備中です' }),
+      await screen.findByRole('heading', { level: 1, name: '募集を作る' }),
     ).toBeInTheDocument();
   });
 
@@ -115,6 +135,148 @@ describe('募集一覧の「募集を作る」', () => {
 
     expect(await screen.findByText(/18歳未満の方は、募集を作成できません/)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '募集を作る' })).not.toBeInTheDocument();
+  });
+});
+
+describe('募集作成', () => {
+  it('作成すると、募集詳細へ移り、主催者に住所を示す', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/new', { userId: 'dev-user-a' });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+
+    await fillValidForm(user);
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '日曜の練習会' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('募集を公開しました。')).toBeInTheDocument();
+    expect(await screen.findByText('ダミー住所Q（架空）')).toBeInTheDocument();
+    expect(screen.getByText('ダミー体育館Q')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: '申請者を見る' })[0]).toHaveAttribute(
+      'href',
+      expect.stringMatching(/^\/events\/.+\/applicants$/) as string,
+    );
+  });
+
+  it('誤りがあれば送らず、最初の誤りの項目へ移る', async () => {
+    const user = userEvent.setup();
+    const createEvent = vi.fn<EventRepository['createEvent']>();
+    renderApp('/events/new', { userId: 'dev-user-a', events: { createEvent } });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+
+    const title = screen.getByLabelText(/タイトル/);
+    expect(title).toHaveFocus();
+    expect(title).toHaveAccessibleDescription(/入力してください。/);
+    expect(screen.getByLabelText(/くわしい住所/)).toHaveAttribute('aria-invalid', 'true');
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  it('送信中は二重に押せない', async () => {
+    const user = userEvent.setup();
+    let finish: (value: Awaited<ReturnType<EventRepository['createEvent']>>) => void = () =>
+      undefined;
+    const createEvent = vi.fn<EventRepository['createEvent']>(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    renderApp('/events/new', { userId: 'dev-user-a', events: { createEvent } });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+
+    const submit = screen.getByRole('button', { name: '公開する' });
+    await user.click(submit);
+    await user.click(submit);
+
+    expect(screen.getByRole('button', { name: '公開しています' })).toBeDisabled();
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    act(() => {
+      finish({ status: 'rejected', reason: 'rateLimited' });
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('24時間に5件まで');
+  });
+
+  it('失敗しても、入力を残す', async () => {
+    const user = userEvent.setup();
+    const createEvent = vi
+      .fn<EventRepository['createEvent']>()
+      .mockRejectedValue(new Error('失敗'));
+    renderApp('/events/new', { userId: 'dev-user-a', events: { createEvent } });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('公開できませんでした');
+    expect(screen.getByLabelText(/タイトル/)).toHaveValue('日曜の練習会');
+    expect(screen.getByLabelText(/くわしい住所/)).toHaveValue('ダミー住所Q（架空）');
+    expect(screen.getByRole('button', { name: '公開する' })).toBeEnabled();
+  });
+
+  it('入力中にやめるときは確認する', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/new', { userId: 'dev-user-a' });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await user.type(screen.getByLabelText(/タイトル/), '途中');
+
+    await user.click(screen.getByRole('button', { name: 'やめる' }));
+    expect(
+      screen.getByText('入力した内容は保存されません。入力をやめますか？'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '入力を続ける' })).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: '入力を続ける' }));
+    expect(screen.getByLabelText(/タイトル/)).toHaveValue('途中');
+
+    await user.click(screen.getByRole('button', { name: 'やめる' }));
+    await user.click(screen.getByRole('button', { name: '入力をやめる' }));
+    expect(await screen.findByText('これからの募集')).toBeInTheDocument();
+  });
+
+  it('深夜にかかる場合は注意を示す', async () => {
+    renderApp('/events/new', { userId: 'dev-user-a' });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+
+    fireEvent.change(screen.getByLabelText(/開始の日時/), { target: { value: jstLocal(7, 21) } });
+    fireEvent.change(screen.getByLabelText(/終了の日時/), {
+      target: { value: jstLocal(8, 1) },
+    });
+
+    expect(screen.getByText(/深夜（午後11時〜翌午前6時）にかかります。/)).toBeInTheDocument();
+  });
+
+  it('公開する項目と、承認された人だけの項目を分けて示す', async () => {
+    renderApp('/events/new', { userId: 'dev-user-a' });
+
+    const publicSection = await screen.findByRole('region', { name: '全員に公開する項目' });
+    const privateSection = screen.getByRole('region', { name: '承認された人だけに見せる項目' });
+    expect(within(publicSection).queryByLabelText(/くわしい住所/)).not.toBeInTheDocument();
+    expect(within(privateSection).getByLabelText(/くわしい住所/)).toBeInTheDocument();
+  });
+
+  it('18歳未満の人には、フォームを出さずに案内する', async () => {
+    renderApp('/events/new', { userId: 'dev-user-minor' });
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: '18歳未満の方は、募集を作成できません',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '公開する' })).not.toBeInTheDocument();
+  });
+
+  it('プロフィール未登録の人には、登録を案内する', async () => {
+    renderApp('/events/new', { userId: 'dev-user-no-profile' });
+
+    expect(await screen.findByRole('link', { name: 'プロフィールを登録する' })).toHaveAttribute(
+      'href',
+      '/profile/edit?next=%2Fevents%2Fnew',
+    );
   });
 });
 

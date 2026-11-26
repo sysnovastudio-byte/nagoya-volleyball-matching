@@ -3,6 +3,7 @@ import { ButtonLink } from '../components/ui/Button';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireLogin } from '../features/auth/RequireLogin';
 import { SessionProvider } from '../features/auth/SessionProvider';
+import { CreateEventPage } from '../features/events/CreateEventPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventListPage } from '../features/events/EventListPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
@@ -22,7 +23,7 @@ export function App() {
 
           {/* 要ログインの画面。仮の画面は、作るときに置き換える */}
           <Route element={<RequireLogin />}>
-            <Route path="events/new" element={<PendingPage title="募集作成" />} />
+            <Route path="events/new" element={<CreateEventPage />} />
             <Route path="events/:eventId/applicants" element={<PendingPage title="申請者一覧" />} />
             <Route path="activity" element={<PendingPage title="申請と募集の管理" />} />
             <Route path="conversations" element={<PendingPage title="会話" />} />
