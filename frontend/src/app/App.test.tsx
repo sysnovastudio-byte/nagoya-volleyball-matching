@@ -23,6 +23,7 @@ const EVENT: EventDetail = {
   hostNickname: 'そら',
   state: 'open',
   isHost: false,
+  myApplication: null,
 };
 
 /** 未ログインのまま変わらない窓口。 */
@@ -38,6 +39,7 @@ function createRepository(overrides: Partial<EventRepository> = {}): EventReposi
     getEvent: (id) => Promise.resolve(id === EVENT.id ? EVENT : null),
     getLocation: () => Promise.resolve(null),
     createEvent: () => Promise.reject(new Error('使わない')),
+    getMyEvents: () => Promise.resolve([]),
     ...overrides,
   };
 }

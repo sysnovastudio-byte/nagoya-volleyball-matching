@@ -32,6 +32,8 @@ const STATE_LABELS: Record<EventState, string> = {
   full: '満員',
   closed: '受付終了',
   ongoing: '開催中',
+  ended: '終了',
+  cancelled: '中止',
 };
 
 const partsFormat = new Intl.DateTimeFormat('ja-JP', {

@@ -19,7 +19,10 @@ export function createDevAuthRepository({ db, session }: DevAuthRepositoryOption
     getViewer: () => {
       const user = findDevUser(db, session.getUserId());
       const viewer: Viewer | null = user
-        ? { ageCategory: user.ageCategory, profile: user.profile ? { ...user.profile } : null }
+        ? {
+            ageCategory: user.ageCategory,
+            profile: user.profile ? { nickname: user.profile.nickname } : null,
+          }
         : null;
       return Promise.resolve(viewer);
     },

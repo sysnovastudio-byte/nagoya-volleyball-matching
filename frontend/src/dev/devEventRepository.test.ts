@@ -64,6 +64,7 @@ describe('募集の一覧', () => {
     const { items, nextCursor } = await setup().repository.listEvents();
 
     expect(items.map((event) => event.id)).toEqual([
+      'dev-b-full',
       'dev-beginner-afternoon',
       'dev-easy-morning',
       'dev-weekday-night',
@@ -77,6 +78,7 @@ describe('募集の一覧', () => {
     const { items } = await setup().repository.listEvents();
 
     expect(items.map(({ state, remaining }) => [state, remaining])).toEqual([
+      ['full', 0],
       ['open', 3],
       ['full', 0],
       ['open', 1],
@@ -103,8 +105,8 @@ describe('募集の一覧', () => {
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
 
-    expect(ids).toHaveLength(5);
-    expect(new Set(ids).size).toBe(5);
+    expect(ids).toHaveLength(6);
+    expect(new Set(ids).size).toBe(6);
   });
 });
 
@@ -120,11 +122,38 @@ describe('募集の詳細', () => {
     },
   );
 
-  it('公開する項目と、主催者かどうかだけを返す', async () => {
+  it('公開する項目と、見ている人との関係だけを返す', async () => {
     const event = await setup({ userId: HOST_ID }).repository.getEvent(HOSTED_EVENT);
 
-    expect(Object.keys(event ?? {}).sort()).toEqual([...PUBLIC_KEYS, 'isHost'].sort());
+    expect(Object.keys(event ?? {}).sort()).toEqual(
+      [...PUBLIC_KEYS, 'isHost', 'myApplication'].sort(),
+    );
     expect(event?.isHost).toBe(true);
+    expect(event?.myApplication).toBeNull();
+  });
+
+  it('見ている人の申請の状態を返す', async () => {
+    const { repository } = setup({ userId: 'dev-user-a' });
+
+    expect((await repository.getEvent('dev-family-morning'))?.myApplication).toBe('approved');
+    expect((await repository.getEvent('dev-weekday-night'))?.myApplication).toBe('pending');
+    expect((await repository.getEvent('dev-spike-practice'))?.myApplication).toBe('rejected');
+    expect((await repository.getEvent(HOSTED_EVENT))?.myApplication).toBeNull();
+  });
+
+  it('終了した募集は、申請したことがある人と主催者には見せる（DB-08）', async () => {
+    expect((await setup({ userId: 'dev-user-a' }).repository.getEvent('dev-ended'))?.state).toBe(
+      'ended',
+    );
+    expect((await setup({ userId: 'dev-host-haru' }).repository.getEvent('dev-ended'))?.state).toBe(
+      'ended',
+    );
+    expect(await setup({ userId: HOST_ID }).repository.getEvent('dev-ended')).toBeNull();
+  });
+
+  it('非表示の募集は、主催者と申請した人にも詳細を返さない', async () => {
+    expect(await setup({ userId: 'dev-user-a' }).repository.getEvent('dev-hidden')).toBeNull();
+    expect(await setup({ userId: HOST_ID }).repository.getEvent('dev-b-hidden')).toBeNull();
   });
 
   it.each([null, 'dev-user-a'])(
@@ -152,6 +181,23 @@ describe('くわしい住所', () => {
       expect(await setup({ userId }).repository.getLocation(HOSTED_EVENT)).toBeNull();
     },
   );
+
+  it('承認済みの参加者には返す', async () => {
+    const { repository } = setup({ userId: 'dev-user-a' });
+
+    expect(await repository.getLocation('dev-family-morning')).not.toBeNull();
+    // 開催中も、終了日時までは見られる（docs/06の5-4）
+    expect(await repository.getLocation('dev-ongoing')).not.toBeNull();
+  });
+
+  it.each([
+    ['承認待ち', 'dev-weekday-night'],
+    ['却下', 'dev-spike-practice'],
+    ['終了した募集', 'dev-ended'],
+    ['非表示の募集', 'dev-hidden'],
+  ])('%sの参加者には返さない', async (_, eventId) => {
+    expect(await setup({ userId: 'dev-user-a' }).repository.getLocation(eventId)).toBeNull();
+  });
 
   it('非表示の募集は、主催者にも返さない', async () => {
     expect(
@@ -259,5 +305,36 @@ describe('募集の作成', () => {
       status: 'rejected',
       reason: 'invalid',
     });
+  });
+});
+
+describe('主催した募集', () => {
+  it('終了・非表示も含め、開催日時の順に返す。非表示は開催日時だけ', async () => {
+    const events = await setup({ userId: HOST_ID }).repository.getMyEvents();
+
+    expect(events.map((event) => (event.hidden ? 'hidden' : event.id))).toEqual([
+      'dev-b-ended',
+      'dev-ongoing',
+      'dev-b-full',
+      HOSTED_EVENT,
+      'hidden',
+    ]);
+    const hidden = events.find((event) => event.hidden);
+    expect(Object.keys(hidden ?? {}).sort()).toEqual(['endsAt', 'hidden', 'startsAt']);
+  });
+
+  it('承認済みと承認待ちの人数を返す', async () => {
+    const events = await setup({ userId: HOST_ID }).repository.getMyEvents();
+
+    expect(events.find((event) => !event.hidden && event.id === 'dev-b-full')).toMatchObject({
+      state: 'full',
+      capacity: 6,
+      approvedCount: 6,
+      pendingCount: 2,
+    });
+  });
+
+  it('未ログインには空を返す', async () => {
+    expect(await setup().repository.getMyEvents()).toEqual([]);
   });
 });
