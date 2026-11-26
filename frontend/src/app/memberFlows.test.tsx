@@ -673,18 +673,16 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約に同意します'));
-    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
-    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
   }
 
-  it('同意の欄は3つが別々で、最初はすべて未選択', async () => {
+  it('同意の欄は2つが別々で、最初はすべて未選択', async () => {
     renderApp('/signup');
 
     const boxes = [
-      await screen.findByLabelText('利用規約に同意します'),
-      screen.getByLabelText('プライバシーポリシーに同意します'),
-      screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/),
+      await screen.findByLabelText('利用規約とプライバシーポリシーに同意する'),
+      screen.getByLabelText('通報時のメッセージ確認に同意する'),
     ];
     for (const box of boxes) expect(box).not.toBeChecked();
     expect(screen.getByLabelText('18歳以上')).not.toBeChecked();
@@ -710,12 +708,14 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     const user = userEvent.setup();
     renderApp('/signup');
     await fillSignUp(user);
-    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
 
     await user.click(screen.getByRole('button', { name: '登録する' }));
 
-    expect(screen.getByText('プライバシーポリシーへの同意が必要です。')).toBeInTheDocument();
-    expect(screen.queryByText('利用規約への同意が必要です。')).not.toBeInTheDocument();
+    expect(screen.getByText('通報時のメッセージ確認への同意が必要です。')).toBeInTheDocument();
+    expect(
+      screen.queryByText('利用規約とプライバシーポリシーへの同意が必要です。'),
+    ).not.toBeInTheDocument();
   });
 
   it('登録 → 認証 → プロフィール入力へ進む', async () => {
@@ -783,9 +783,8 @@ describe('プロフィール登録・編集（SCR-014）', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約に同意します'));
-    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
-    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
     await user.click(screen.getByRole('button', { name: '登録する' }));
     await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
     await user.click(await screen.findByRole('link', { name: 'プロフィールを入力する' }));
@@ -892,9 +891,8 @@ describe('指摘の不具合', () => {
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
     await user.click(screen.getByLabelText('18歳以上'));
-    await user.click(screen.getByLabelText('利用規約に同意します'));
-    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
-    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+    await user.click(screen.getByLabelText('利用規約とプライバシーポリシーに同意する'));
+    await user.click(screen.getByLabelText('通報時のメッセージ確認に同意する'));
     await user.click(screen.getByRole('button', { name: '登録する' }));
     await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
     expect(session.getUserId()).toBe('dev-registered-2');

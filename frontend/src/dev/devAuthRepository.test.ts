@@ -66,7 +66,7 @@ describe('開発用のログイン・登録・認証', () => {
     expect(session.getUserId()).toBe('dev-user-a');
   });
 
-  it('登録すると、年齢の区分と3つの同意（仮-0）だけを記録し、メールアドレスとパスワードは残さない', async () => {
+  it('登録すると、年齢の区分と、文書ごとの同意（仮-0）だけを記録し、メールアドレスとパスワードは残さない', async () => {
     const { db, session, repository } = setupWithDb();
 
     expect(await repository.signUp(SIGN_UP)).toEqual({ status: 'confirmationSent' });
@@ -85,7 +85,8 @@ describe('開発用のログイン・登録・認証', () => {
   });
 
   it.each([
-    ['同意が足りない', { agreements: SIGN_UP.agreements.slice(0, 2) }],
+    ['通報時のメッセージ確認への同意がない', { agreements: SIGN_UP.agreements.slice(0, 2) }],
+    ['プライバシーポリシーへの同意がない', { agreements: SIGN_UP.agreements.slice(0, 1) }],
     ['18歳未満で保護者の同意がない', { guardianConsent: false }],
     ['パスワードが短い', { password: 'short' }],
   ])('%s登録は断る', async (_, override) => {

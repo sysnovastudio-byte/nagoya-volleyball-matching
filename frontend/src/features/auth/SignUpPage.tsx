@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router';
 import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
-import { AGREEMENT_VERSION, AGREEMENTS } from './agreements';
+import { AGREEMENT_VERSION, agreedDocuments, CONSENTS, type ConsentKey } from './agreements';
 import { AuthLayout, DevNotice, FormError } from './AuthLayout';
 import {
   checkSignUpForm,
@@ -15,7 +15,7 @@ import {
 import { AuthNotConnectedError } from './repository';
 import { useAuthRepository } from './repositoryContext';
 import { useSession } from './sessionContext';
-import type { AgeCategory, AgreementDocument } from './types';
+import type { AgeCategory } from './types';
 
 /** 誤りがあるときに、最初にフォーカスを移す順。 */
 const FIELD_ORDER: SignUpField[] = [
@@ -23,9 +23,8 @@ const FIELD_ORDER: SignUpField[] = [
   'password',
   'ageCategory',
   'guardianConsent',
-  'terms',
-  'privacy',
-  'message_review',
+  'termsAndPrivacy',
+  'messageReview',
 ];
 
 function fieldId(field: SignUpField) {
@@ -84,7 +83,7 @@ function SignUpForm() {
         password: values.password,
         ageCategory: values.ageCategory,
         guardianConsent: values.ageCategory === 'minor' && values.guardianConsent,
-        agreements: AGREEMENTS.map(({ document }) => ({ document, version: AGREEMENT_VERSION })),
+        agreements: agreedDocuments(values.agreements),
       });
       if (result.status === 'confirmationSent') {
         // 戻る操作で、送信済みの入力画面に戻らないようにする
@@ -107,8 +106,8 @@ function SignUpForm() {
     }
   };
 
-  const setAgreement = (document: AgreementDocument, checked: boolean) => {
-    update({ ...values, agreements: { ...values.agreements, [document]: checked } });
+  const setAgreement = (key: ConsentKey, checked: boolean) => {
+    update({ ...values, agreements: { ...values.agreements, [key]: checked } });
   };
 
   return (
@@ -227,26 +226,28 @@ function SignUpForm() {
             <RequiredMark required />
           </legend>
           <p className="text-muted">
-            3つすべてに、それぞれ同意が必要です。内容は開発中の仮の文章です（版：
-            {AGREEMENT_VERSION}）。
+            2つの欄に、それぞれ同意が必要です。内容は開発中の仮の文章です（版：{AGREEMENT_VERSION}
+            ）。
           </p>
-          {AGREEMENTS.map((agreement) => (
-            <div key={agreement.document} className="rounded-xl border border-line p-3">
-              <details className="mb-1">
-                <summary className="flex min-h-11 cursor-pointer items-center font-bold text-main-strong">
-                  {agreement.title}（仮の文章）を読む
-                </summary>
-                <p className="pb-2 text-sub">{agreement.body}</p>
-              </details>
+          {CONSENTS.map((consent) => (
+            <div key={consent.key} className="rounded-xl border border-line p-3">
+              {consent.documents.map((document) => (
+                <details key={document.document} className="mb-1">
+                  <summary className="flex min-h-11 cursor-pointer items-center font-bold text-main-strong">
+                    {document.title}（仮の文章）を読む
+                  </summary>
+                  <p className="pb-2 text-sub">{document.body}</p>
+                </details>
+              ))}
               <CheckboxField
-                id={fieldId(agreement.document)}
-                checked={values.agreements[agreement.document]}
-                error={errors[agreement.document]}
+                id={fieldId(consent.key)}
+                checked={values.agreements[consent.key]}
+                error={errors[consent.key]}
                 onChange={(checked) => {
-                  setAgreement(agreement.document, checked);
+                  setAgreement(consent.key, checked);
                 }}
               >
-                {agreement.consent}
+                {consent.label}
               </CheckboxField>
             </div>
           ))}
