@@ -181,9 +181,13 @@ describe('募集の詳細', () => {
   it('見ている人の申請の状態を返す', async () => {
     const { repository } = setup({ userId: 'dev-user-a' });
 
-    expect((await repository.getEvent('dev-family-morning'))?.myApplication).toBe('approved');
-    expect((await repository.getEvent('dev-weekday-night'))?.myApplication).toBe('pending');
-    expect((await repository.getEvent('dev-spike-practice'))?.myApplication).toBe('rejected');
+    expect((await repository.getEvent('dev-family-morning'))?.myApplication?.status).toBe(
+      'approved',
+    );
+    expect((await repository.getEvent('dev-weekday-night'))?.myApplication?.status).toBe('pending');
+    expect((await repository.getEvent('dev-spike-practice'))?.myApplication?.status).toBe(
+      'rejected',
+    );
     expect((await repository.getEvent(HOSTED_EVENT))?.myApplication).toBeNull();
   });
 

@@ -5,8 +5,9 @@ import type {
   DecisionResult,
   EventSummary,
   MyParticipation,
+  OwnActionResult,
 } from '../features/applications/types';
-import { APPLICATION_LIMITS } from '../features/applications/types';
+import { APPLICATION_LIMITS, MAX_ATTEMPTS } from '../features/applications/types';
 import { countApplications, devEventState, findDevUser, type DevDatabase } from './devDatabase';
 import type { DevApplicationRecord, DevEventRecord } from './devEvents';
 import { notifyParticipantChange } from './devNotifications';
@@ -23,6 +24,20 @@ interface DevApplicationRepositoryOptions {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 募集と申請した人の組ごとに、最新の申請だけを残す。
+ * 本人と主催者に見せるのは、今の行の状態と日時だけ（docs/06の14-2、M-14）。
+ */
+export function latestApplications(applications: DevApplicationRecord[]) {
+  const latest = new Map<string, DevApplicationRecord>();
+  for (const application of applications) {
+    const key = `${application.eventId}:${application.userId}`;
+    const current = latest.get(key);
+    if (!current || application.attemptNo > current.attemptNo) latest.set(key, application);
+  }
+  return [...latest.values()];
+}
 
 /**
  * 【開発専用】申請の窓口。
@@ -89,6 +104,38 @@ export function createDevApplicationRepository({
     return { status: 'done' };
   };
 
+  /**
+   * 本人によるキャンセル・取り下げ（docs/06の6-5の cancel_participation・retract_application）。
+   * 開催開始前で、中止・非表示でない募集だけ。
+   */
+  const changeOwn = (applicationId: string, action: 'cancel' | 'retract'): OwnActionResult => {
+    const user = currentUser();
+    const application = db.applications.find((item) => item.id === applicationId);
+    const record = application && db.events.find((event) => event.id === application.eventId);
+    // 他人の申請は、ない場合と同じに扱う
+    if (!user || !application || !record || application.userId !== user.id) {
+      return { status: 'rejected', reason: 'notFound' };
+    }
+    const current = now();
+    const state = devEventState(db, record, current);
+    if (state !== 'open' && state !== 'full' && state !== 'closed') {
+      return { status: 'rejected', reason: 'notAccepting' };
+    }
+    if (action === 'cancel') {
+      if (application.status !== 'approved') return { status: 'rejected', reason: 'invalidState' };
+      application.status = 'cancelled';
+      application.cancelledAt = current;
+      // 主催者へ通知する（NTF-02）。枠は、承認済みの人数から数えるため自動的に戻る
+      notifyParticipantChange(db, application, 'participation_cancelled', current);
+    } else {
+      if (application.status !== 'pending') return { status: 'rejected', reason: 'invalidState' };
+      // 取り下げは主催者へ通知しない（docs/11の2-2）
+      application.status = 'retracted';
+      application.retractedAt = current;
+    }
+    return { status: 'done' };
+  };
+
   return {
     applyToEvent: (eventId) => {
       const user = currentUser();
@@ -109,12 +156,16 @@ export function createDevApplicationRepository({
         (application) => application.eventId === eventId && application.userId === user.id,
       );
       // 有効な申請は1件だけ（docs/06の5-2の部分一意インデックス）
-      if (mine.some((application) => application.status !== 'rejected')) {
+      if (mine.some(({ status }) => status === 'pending' || status === 'approved')) {
         return Promise.resolve({ status: 'rejected', reason: 'alreadyApplied' });
       }
-      // 却下された募集には、もう申請できない（docs/11の2-2）
-      if (mine.length > 0) {
+      // 却下・承認取り消しの後は、同じ募集に申請できない（docs/11の2-2）
+      if (mine.some(({ status }) => status === 'rejected' || status === 'revoked')) {
         return Promise.resolve({ status: 'rejected', reason: 'notReapplicable' });
+      }
+      // キャンセル・取り下げの後は再申請できるが、合計3回まで（docs/06の4-5の attempt_no）
+      if (mine.length >= MAX_ATTEMPTS) {
+        return Promise.resolve({ status: 'rejected', reason: 'attemptLimit' });
       }
       // 満員でも承認待ちとして受け付け、主催者が判断する（docs/11の2-2、2026-11-26）
       if (state !== 'open' && state !== 'full') {
@@ -134,9 +185,13 @@ export function createDevApplicationRepository({
         id: `dev-application-${db.applications.length + 1}`,
         eventId,
         userId: user.id,
+        // 再申請は新しい行にして、前の申請を残す（docs/06の4-5）
+        attemptNo: mine.length + 1,
         status: 'pending',
         appliedAt: current,
         decidedAt: null,
+        cancelledAt: null,
+        retractedAt: null,
       };
       db.applications.push(application);
       // 主催者へ通知する（NTF-01）
@@ -147,6 +202,8 @@ export function createDevApplicationRepository({
     approveApplication: (applicationId, options) =>
       Promise.resolve(decide(applicationId, 'approved', options?.expandCapacityTo)),
     rejectApplication: (applicationId) => Promise.resolve(decide(applicationId, 'rejected')),
+    cancelParticipation: (applicationId) => Promise.resolve(changeOwn(applicationId, 'cancel')),
+    retractApplication: (applicationId) => Promise.resolve(changeOwn(applicationId, 'retract')),
 
     listApplicants: (eventId) => {
       const user = currentUser();
@@ -167,8 +224,9 @@ export function createDevApplicationRepository({
 
       // 年代は、承認待ち・承認済みの申請者の分を、終了日時まで見せる。中止・終了では見せない（DB-03）
       const canSeeDetails = state !== 'ended' && state !== 'cancelled';
-      const applicants = db.applications
-        .filter((application) => application.eventId === eventId)
+      const applicants = latestApplications(
+        db.applications.filter((application) => application.eventId === eventId),
+      )
         .flatMap((application): Applicant[] => {
           const applicantUser = findDevUser(db, application.userId);
           const profile = applicantUser
@@ -215,8 +273,9 @@ export function createDevApplicationRepository({
       const user = currentUser();
       if (!user) return Promise.resolve([]);
       const current = now();
-      const participations = db.applications
-        .filter((application) => application.userId === user.id)
+      const participations = latestApplications(
+        db.applications.filter((application) => application.userId === user.id),
+      )
         .flatMap((application): MyParticipation[] => {
           const record = db.events.find((event) => event.id === application.eventId);
           return record

@@ -15,7 +15,7 @@ import { useConversationRepository } from './repositoryContext';
  */
 export function canOpenHostConversation(event: EventDetail, now: Date) {
   if (event.isHost) return false;
-  if (event.myApplication === 'approved') return now <= sendableUntil(event.endsAt);
+  if (event.myApplication?.status === 'approved') return now <= sendableUntil(event.endsAt);
   return event.state !== 'cancelled' && now < new Date(event.startsAt);
 }
 
@@ -28,7 +28,7 @@ export function StartConversationButton({ event }: { event: EventDetail }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const here = `${pathname}${search}`;
-  const approved = event.myApplication === 'approved';
+  const approved = event.myApplication?.status === 'approved';
   const label = approved ? '主催者に連絡する' : '主催者に質問する';
 
   if (!canOpenHostConversation(event, new Date())) return null;

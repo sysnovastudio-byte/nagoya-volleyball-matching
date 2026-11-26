@@ -14,7 +14,7 @@ import { ageGroupLabel } from '../profiles/profileRules';
 import { formatDateTimeRange } from '../events/format';
 import { Avatar } from '../profiles/Avatar';
 import { displayName, experienceLabel } from '../profiles/format';
-import { formatAppliedAt } from './format';
+import { APPLICATION_STATUS_LABELS, formatAppliedAt } from './format';
 import { useApplicationRepository } from './repositoryContext';
 import type { Applicant, ApplicantList, DecisionRejection } from './types';
 import { SegmentedControl } from './SegmentedControl';
@@ -30,11 +30,14 @@ const TAB_LABELS: Record<Tab, string> = {
 const EMPTY_MESSAGES: Record<Tab, string> = {
   pending: '承認待ちの申請はありません。',
   approved: '承認済みの人はいません。',
-  other: '却下した申請はありません。',
+  other: 'そのほかの申請はありません。',
 };
 
+/** 却下・キャンセル・承認取り消し・取り下げは「そのほか」に示す（docs/10の11-3）。 */
 function tabOf(applicant: Applicant): Tab {
-  return applicant.status === 'rejected' ? 'other' : applicant.status;
+  return applicant.status === 'pending' || applicant.status === 'approved'
+    ? applicant.status
+    : 'other';
 }
 
 /**
@@ -274,8 +277,6 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
   );
 }
 
-const STATUS_LABELS = { pending: '承認待ち', approved: '承認済み', rejected: '却下' } as const;
-
 interface ApplicantCollectionProps {
   applicants: Applicant[];
   renderActions: (applicant: Applicant) => ReactNode;
@@ -397,7 +398,7 @@ function ApplicantBio({ applicant }: { applicant: Applicant }) {
 function StatusBadge({ applicant }: { applicant: Applicant }) {
   return (
     <Badge tone={applicant.status === 'approved' ? 'main' : 'neutral'}>
-      {STATUS_LABELS[applicant.status]}
+      {APPLICATION_STATUS_LABELS[applicant.status]}
     </Badge>
   );
 }

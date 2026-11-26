@@ -40,7 +40,7 @@ describe('参加の申請', () => {
     expect(await applications.applyToEvent(HOSTED_EVENT)).toEqual({ status: 'applied' });
 
     const event = await events.getEvent(HOSTED_EVENT);
-    expect(event?.myApplication).toBe('pending');
+    expect(event?.myApplication?.status).toBe('pending');
     expect(event?.remaining).toBe(3);
   });
 
@@ -140,9 +140,12 @@ describe('参加の申請', () => {
         id: `limit-${i}`,
         eventId: `other-${i}`,
         userId: 'dev-user-a',
+        attemptNo: 1,
         status: 'pending',
         appliedAt: new Date(NOW.getTime() - 60 * 1000),
         decidedAt: null,
+        cancelledAt: null,
+        retractedAt: null,
       });
     }
 
@@ -168,7 +171,7 @@ describe('承認・却下', () => {
     expect(await applications.approveApplication(mine.applicationId)).toEqual({ status: 'done' });
 
     session.setUserId('dev-user-a');
-    expect((await events.getEvent(HOSTED_EVENT))?.myApplication).toBe('approved');
+    expect((await events.getEvent(HOSTED_EVENT))?.myApplication?.status).toBe('approved');
     expect(await events.getLocation(HOSTED_EVENT)).toMatchObject({
       address: 'ダミー住所A（架空）',
     });
@@ -248,9 +251,12 @@ describe('承認・却下', () => {
         id: `filler-${index}`,
         eventId: FULL_EVENT,
         userId: `filler-user-${index}`,
+        attemptNo: 1,
         status: 'approved',
         appliedAt: NOW,
         decidedAt: NOW,
+        cancelledAt: null,
+        retractedAt: null,
       });
     }
 
@@ -424,5 +430,222 @@ describe('申請者の年代', () => {
     for (const profile of await profiles.getProfiles(['dev-user-a', 'dev-user-minor'])) {
       expect(Object.keys(profile)).not.toContain('ageGroup');
     }
+  });
+});
+
+describe('参加のキャンセル（APP-08）', () => {
+  /** 利用者Aの承認済みの申請（dev-family-morning）。 */
+  const approvedOf = (db: ReturnType<typeof setup>['db']) => {
+    const application = db.applications.find(
+      (item) => item.eventId === 'dev-family-morning' && item.userId === 'dev-user-a',
+    );
+    if (!application) throw new Error('承認済みの申請がありません。');
+    return application;
+  };
+
+  it('キャンセルすると枠が戻り、住所が見られなくなり、主催者に1件だけ通知する', async () => {
+    const { db, applications, events } = setup();
+    const application = approvedOf(db);
+    const before = (await events.getEvent('dev-family-morning'))?.remaining ?? 0;
+
+    expect(await applications.cancelParticipation(application.id)).toEqual({ status: 'done' });
+
+    expect(application.status).toBe('cancelled');
+    expect(application.cancelledAt).toEqual(NOW);
+    // 承認の日時は残す（docs/06の4-5）
+    expect(application.decidedAt).not.toBeNull();
+    expect((await events.getEvent('dev-family-morning'))?.remaining).toBe(before + 1);
+    expect(await events.getLocation('dev-family-morning')).toBeNull();
+    const sent = db.notifications.filter((item) => item.participantId === application.id);
+    expect(sent.map((item) => [item.userId, item.type])).toContainEqual([
+      'dev-host-yui',
+      'participation_cancelled',
+    ]);
+    // 2回目は断られ、通知も増えない
+    expect(await applications.cancelParticipation(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'invalidState',
+    });
+    expect(db.notifications.filter((item) => item.participantId === application.id)).toEqual(sent);
+  });
+
+  it('承認待ちの申請はキャンセルできない（取り下げを使う）', async () => {
+    const { db, applications } = setup();
+    const pending = db.applications.find(
+      (item) => item.eventId === 'dev-weekday-night' && item.userId === 'dev-user-a',
+    );
+    if (!pending) throw new Error('承認待ちの申請がありません。');
+
+    expect(await applications.cancelParticipation(pending.id)).toEqual({
+      status: 'rejected',
+      reason: 'invalidState',
+    });
+  });
+
+  it('他人の申請は、ない場合と同じに扱う', async () => {
+    const { db, applications } = setup(HOST_ID);
+
+    expect(await applications.cancelParticipation(approvedOf(db).id)).toEqual({
+      status: 'rejected',
+      reason: 'notFound',
+    });
+    expect(approvedOf(db).status).toBe('approved');
+  });
+
+  it('開催が始まった募集では、キャンセルできない', async () => {
+    const { db, applications } = setup();
+    const ongoing = db.applications.find(
+      (item) => item.eventId === 'dev-ongoing' && item.userId === 'dev-user-a',
+    );
+    if (!ongoing) throw new Error('開催中の申請がありません。');
+
+    expect(await applications.cancelParticipation(ongoing.id)).toEqual({
+      status: 'rejected',
+      reason: 'notAccepting',
+    });
+  });
+});
+
+describe('申請の取り下げ（CND-10）', () => {
+  const pendingOf = (db: ReturnType<typeof setup>['db']) => {
+    const application = db.applications.find(
+      (item) => item.eventId === 'dev-weekday-night' && item.userId === 'dev-user-a',
+    );
+    if (!application) throw new Error('承認待ちの申請がありません。');
+    return application;
+  };
+
+  it('取り下げると状態と日時が残り、主催者には通知しない', async () => {
+    const { db, applications } = setup();
+    const application = pendingOf(db);
+    const before = db.notifications.length;
+
+    expect(await applications.retractApplication(application.id)).toEqual({ status: 'done' });
+
+    expect(application.status).toBe('retracted');
+    expect(application.retractedAt).toEqual(NOW);
+    expect(application.decidedAt).toBeNull();
+    expect(db.notifications).toHaveLength(before);
+  });
+
+  it('承認済みの申請は取り下げられない（キャンセルを使う）', async () => {
+    const { db, applications } = setup();
+    const approved = db.applications.find(
+      (item) => item.eventId === 'dev-family-morning' && item.userId === 'dev-user-a',
+    );
+    if (!approved) throw new Error('承認済みの申請がありません。');
+
+    expect(await applications.retractApplication(approved.id)).toEqual({
+      status: 'rejected',
+      reason: 'invalidState',
+    });
+  });
+
+  it('他人の申請は取り下げられない', async () => {
+    const { db, applications } = setup(HOST_ID);
+
+    expect(await applications.retractApplication(pendingOf(db).id)).toEqual({
+      status: 'rejected',
+      reason: 'notFound',
+    });
+  });
+
+  it('取り下げた申請は、主催者には承認・却下できない', async () => {
+    const { db, session, applications } = setup();
+    const application = pendingOf(db);
+    await applications.retractApplication(application.id);
+
+    session.setUserId('dev-host-minato');
+    expect(await applications.approveApplication(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'notPending',
+    });
+  });
+});
+
+describe('再申請（docs/11の2-2）', () => {
+  it('キャンセルの後は再申請でき、新しい申請になる。前の申請は残る', async () => {
+    const { db, applications, events } = setup();
+    // 利用者Aは dev-easy-morning（満員）をキャンセルしている
+    expect((await events.getEvent('dev-easy-morning'))?.myApplication).toMatchObject({
+      status: 'cancelled',
+      canReapply: true,
+    });
+
+    expect(await applications.applyToEvent('dev-easy-morning')).toEqual({ status: 'applied' });
+
+    const mine = db.applications.filter(
+      (item) => item.eventId === 'dev-easy-morning' && item.userId === 'dev-user-a',
+    );
+    expect(mine.map((item) => [item.attemptNo, item.status])).toEqual([
+      [1, 'cancelled'],
+      [2, 'pending'],
+    ]);
+    expect((await events.getEvent('dev-easy-morning'))?.myApplication?.status).toBe('pending');
+  });
+
+  it('取り下げの後も再申請できる', async () => {
+    const { db, applications } = setup();
+    const pending = db.applications.find(
+      (item) => item.eventId === 'dev-weekday-night' && item.userId === 'dev-user-a',
+    );
+    if (!pending) throw new Error('承認待ちの申請がありません。');
+    await applications.retractApplication(pending.id);
+
+    expect(await applications.applyToEvent('dev-weekday-night')).toEqual({ status: 'applied' });
+  });
+
+  it('同じ募集への申請は、合計3回まで', async () => {
+    const { db, applications, events } = setup();
+    const retractLatest = async () => {
+      const latest = db.applications.findLast(
+        (item) => item.eventId === 'dev-weekday-night' && item.userId === 'dev-user-a',
+      );
+      if (!latest) throw new Error('申請がありません。');
+      await applications.retractApplication(latest.id);
+    };
+
+    await retractLatest();
+    await applications.applyToEvent('dev-weekday-night');
+    await retractLatest();
+    await applications.applyToEvent('dev-weekday-night');
+    await retractLatest();
+
+    expect((await events.getEvent('dev-weekday-night'))?.myApplication).toMatchObject({
+      status: 'retracted',
+      canReapply: false,
+    });
+    expect(await applications.applyToEvent('dev-weekday-night')).toEqual({
+      status: 'rejected',
+      reason: 'attemptLimit',
+    });
+  });
+
+  it('却下の後は再申請できない', async () => {
+    const { applications, events } = setup();
+
+    expect((await events.getEvent('dev-spike-practice'))?.myApplication?.canReapply).toBe(false);
+    expect(await applications.applyToEvent('dev-spike-practice')).toEqual({
+      status: 'rejected',
+      reason: 'notReapplicable',
+    });
+  });
+
+  it('主催者の申請者一覧と、自分の申請には、最新の申請だけを示す', async () => {
+    const { session, applications } = setup();
+    await applications.applyToEvent('dev-easy-morning');
+
+    const mine = (await applications.getMyParticipations()).filter(
+      (item) => !item.event.hidden && item.event.id === 'dev-easy-morning',
+    );
+    expect(mine.map((item) => item.status)).toEqual(['pending']);
+
+    session.setUserId('dev-host-haru');
+    const list = await applicantsOf(applications, 'dev-easy-morning');
+    expect(
+      list.applicants
+        .filter((item) => item.profile.userId === 'dev-user-a')
+        .map((item) => item.status),
+    ).toEqual(['pending']);
   });
 });

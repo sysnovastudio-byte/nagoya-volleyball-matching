@@ -276,14 +276,21 @@ export interface DevApplicationRecord {
   id: string;
   eventId: string;
   userId: string;
+  /** この募集への何回目の申請か（1〜3） */
+  attemptNo: number;
   status: ApplicationStatus;
   appliedAt: Date;
+  /** 承認・却下の日時。キャンセル・承認取り消しの行にも残る（docs/06の4-5） */
   decidedAt: Date | null;
+  cancelledAt: Date | null;
+  retractedAt: Date | null;
 }
 
 /** 帯で選べる利用者の申請。状態ごとの表示を確かめるためのもの。 */
 const NAMED_APPLICATIONS: [eventId: string, userId: string, status: ApplicationStatus][] = [
   ['dev-family-morning', 'dev-user-a', 'approved'],
+  // 満員の募集で、キャンセルの後に再申請できることを確かめる
+  ['dev-easy-morning', 'dev-user-a', 'cancelled'],
   ['dev-weekday-night', 'dev-user-a', 'pending'],
   ['dev-spike-practice', 'dev-user-a', 'rejected'],
   ['dev-ongoing', 'dev-user-a', 'approved'],
@@ -316,13 +323,18 @@ export function createDevApplications(now: Date): DevApplicationRecord[] {
     const index = applications.length;
     // 申請の日時は数日前からずらす。回数の上限（直近24時間）には数えない
     const appliedAt = new Date(now.getTime() - 3 * DAY_MS - index * HOUR_MS);
+    const later = (hours: number) => new Date(appliedAt.getTime() + hours * HOUR_MS);
     applications.push({
       id: `dev-application-${index + 1}`,
       eventId,
       userId,
+      attemptNo: 1,
       status,
       appliedAt,
-      decidedAt: status === 'pending' ? null : new Date(appliedAt.getTime() + HOUR_MS),
+      // 状態ごとの日時は docs/06の4-5の組み合わせに合わせる
+      decidedAt: status === 'pending' || status === 'retracted' ? null : later(1),
+      cancelledAt: status === 'cancelled' ? later(2) : null,
+      retractedAt: status === 'retracted' ? later(1) : null,
     });
   };
 

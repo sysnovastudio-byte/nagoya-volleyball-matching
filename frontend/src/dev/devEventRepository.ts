@@ -1,3 +1,4 @@
+import { MAX_ATTEMPTS } from '../features/applications/types';
 import { EMPTY_FILTER, matchesFilter } from '../features/events/eventFilter';
 import { checkEventInput, EVENT_LIMITS } from '../features/events/eventRules';
 import type {
@@ -60,11 +61,15 @@ export function createDevEventRepository({
   /** ログインしている人。判定は表示の確認用に簡略化している（docs/06の6-3）。 */
   const currentUser = () => findDevUser(db, session.getUserId());
 
+  /** 見ている人の申請。古い順。 */
+  const myApplications = (eventId: string, userId: string | undefined) =>
+    db.applications
+      .filter((application) => application.eventId === eventId && application.userId === userId)
+      .sort((a, b) => a.attemptNo - b.attemptNo);
+
   /** 見ている人の、最新の申請。 */
   const myApplication = (eventId: string, userId: string | undefined) =>
-    db.applications.findLast(
-      (application) => application.eventId === eventId && application.userId === userId,
-    );
+    myApplications(eventId, userId).at(-1);
 
   return {
     listEvents: (cursor, filter = EMPTY_FILTER) => {
@@ -93,7 +98,8 @@ export function createDevEventRepository({
 
       const userId = currentUser()?.id;
       const isHost = record.hostId === userId;
-      const application = myApplication(record.id, userId);
+      const applications = myApplications(record.id, userId);
+      const application = applications.at(-1);
       // 終了・中止は、主催者と申請したことがある人だけ（DB-08）
       if (!PUBLIC_STATES.includes(state) && !isHost && !application) {
         return Promise.resolve(null);
@@ -101,7 +107,16 @@ export function createDevEventRepository({
       const detail: EventDetail = {
         ...toPublicEvent(record, state),
         isHost,
-        myApplication: application?.status ?? null,
+        myApplication: application
+          ? {
+              id: application.id,
+              status: application.status,
+              // キャンセル・取り下げの後だけ、合計3回まで再申請できる（docs/11の2-2）
+              canReapply:
+                (application.status === 'cancelled' || application.status === 'retracted') &&
+                applications.length < MAX_ATTEMPTS,
+            }
+          : null,
       };
       return Promise.resolve(detail);
     },

@@ -8,8 +8,13 @@ import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
+import { APPLICATION_STATUS_LABELS } from '../applications/format';
+import {
+  canChangeOwnApplication,
+  OwnApplicationActions,
+} from '../applications/OwnApplicationActions';
 import { useApplicationRepository } from '../applications/repositoryContext';
-import type { ApplyRejection } from '../applications/types';
+import { MAX_ATTEMPTS, type ApplyRejection } from '../applications/types';
 import { loginPath } from '../auth/loginRedirect';
 import { useViewer } from '../auth/sessionContext';
 import { EventStateBadge } from './EventStateBadge';
@@ -24,8 +29,8 @@ export interface EventDetailLocationState {
 }
 
 /**
- * SCR-006 募集詳細（EVT-03・APP-01）。立場ごとの表示は docs/10の5-3。
- * 取り下げ・キャンセル・質問・通報は、サイクル1では作らない（docs/10の7-3）。
+ * SCR-006 募集詳細（EVT-03・APP-01・APP-08・CND-10）。立場ごとの表示は docs/10の5-3。
+ * 通報は、サイクル4で作る（docs/04の9-3）。
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams();
@@ -216,7 +221,9 @@ const CLOSED_REASONS: Record<Exclude<EventState, 'open' | 'full'>, string> = {
 /** 承認済みの参加者が住所を見られるか（docs/06の5-4）。最終的な判定は取得の窓口が行う。 */
 function canSeeLocation(event: EventDetailData) {
   return (
-    event.myApplication === 'approved' && event.state !== 'ended' && event.state !== 'cancelled'
+    event.myApplication?.status === 'approved' &&
+    event.state !== 'ended' &&
+    event.state !== 'cancelled'
   );
 }
 
@@ -232,7 +239,7 @@ function EventActions({ event, apply }: EventActionsProps) {
     return <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>;
   }
   if (event.myApplication) {
-    return <MyApplicationStatus event={event} />;
+    return <MyApplicationStatus event={event} apply={apply} />;
   }
   if (event.state !== 'open' && event.state !== 'full') {
     return <p className="text-center font-bold text-sub">{CLOSED_REASONS[event.state]}</p>;
@@ -248,7 +255,12 @@ function EventActions({ event, apply }: EventActionsProps) {
   );
 }
 
-function ApplyActions({ event, apply }: EventActionsProps) {
+interface ApplyActionsProps extends EventActionsProps {
+  /** 再申請では「もう一度申請する」 */
+  label?: string;
+}
+
+function ApplyActions({ event, apply, label = '参加を申請する' }: ApplyActionsProps) {
   const viewer = useViewer();
   if (!viewer) return <GuestActions eventId={event.id} />;
   if (!viewer.profile) {
@@ -271,48 +283,96 @@ function ApplyActions({ event, apply }: EventActionsProps) {
         void apply.submit();
       }}
     >
-      {apply.submitting ? '申請しています' : '参加を申請する'}
+      {apply.submitting ? '申請しています' : label}
     </Button>
   );
 }
 
-/** 自分の申請の状態（docs/11の2-3）。開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3）。 */
-function MyApplicationStatus({ event }: { event: EventDetailData }) {
+/**
+ * 自分の申請の状態（docs/11の2-3）と、状態ごとの操作（docs/10の11-3）。
+ * 開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3）。
+ */
+function MyApplicationStatus({ event, apply }: EventActionsProps) {
+  const mine = event.myApplication;
+  if (!mine) return null;
   const started = event.state === 'ongoing' || event.state === 'ended';
-  const view = (() => {
-    switch (event.myApplication) {
+  // 申請を受け付けない理由。受け付ける（受付中・満員）なら null
+  const closedReason =
+    event.state === 'open' || event.state === 'full' ? null : CLOSED_REASONS[event.state];
+  const accepting = closedReason === null;
+  const text = (() => {
+    switch (mine.status) {
       case 'approved':
-        return {
-          label: '承認済み',
-          text: canSeeLocation(event)
-            ? '参加が承認されました。くわしい住所を表示しています。'
-            : '参加が承認されていました。',
-        };
+        return canSeeLocation(event)
+          ? '参加が承認されました。くわしい住所を表示しています。'
+          : '参加が承認されていました。';
       case 'pending':
         return started || event.state === 'cancelled'
-          ? { label: '受付終了', text: '承認されないまま、受付が終わりました。' }
-          : { label: '承認待ち', text: '申請しました。主催者の承認を待っています。' };
+          ? '承認されないまま、受付が終わりました。'
+          : '申請しました。主催者の承認を待っています。';
       case 'rejected':
-        return { label: '却下', text: 'この募集への申請は却下されました。' };
-      case null:
-        return null;
+        return 'この募集への申請は却下されました。';
+      case 'revoked':
+        return '主催者が参加の承認を取り消しました。この募集には、もう申請できません。';
+      case 'cancelled':
+        return '参加をキャンセルしました。';
+      case 'retracted':
+        return '申請を取り下げました。';
     }
   })();
-  if (!view) return null;
+  const label =
+    mine.status === 'pending' && (started || event.state === 'cancelled')
+      ? '受付終了'
+      : APPLICATION_STATUS_LABELS[mine.status];
+  const canReapplyNow = mine.canReapply && accepting;
+  // キャンセル・取り下げの後で、申請が合計3回に達した場合
+  const reachedLimit =
+    (mine.status === 'cancelled' || mine.status === 'retracted') && !mine.canReapply && accepting;
 
   return (
-    <div className="flex flex-col items-center gap-1 text-center">
-      <p>
-        <span className="sr-only">あなたの申請：</span>
-        <Badge tone={event.myApplication === 'approved' ? 'main' : 'neutral'}>{view.label}</Badge>
-      </p>
-      <p className="font-bold text-sub">{view.text}</p>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col items-center gap-1 text-center">
+        <p>
+          <span className="sr-only">あなたの申請：</span>
+          <Badge tone={mine.status === 'approved' ? 'main' : 'neutral'}>{label}</Badge>
+        </p>
+        <p className="font-bold text-sub">{text}</p>
+        {reachedLimit && (
+          <p className="text-sub">
+            同じ募集への申請は合計{MAX_ATTEMPTS}回までのため、もう申請できません。
+          </p>
+        )}
+        {(mine.status === 'cancelled' || mine.status === 'retracted') && closedReason && (
+          <p className="text-sub">{closedReason}</p>
+        )}
+      </div>
+      {canReapplyNow && (
+        <>
+          {event.state === 'full' && (
+            <p className="text-center font-bold text-sub">
+              満員です。申請すると主催者が判断します。
+            </p>
+          )}
+          <ApplyActions event={event} apply={apply} label="もう一度申請する" />
+          <p className="text-center text-sub">同じ募集への申請は合計{MAX_ATTEMPTS}回までです。</p>
+        </>
+      )}
+      {canChangeOwnApplication(event.state) && (
+        <OwnApplicationActions
+          applicationId={mine.id}
+          status={mine.status}
+          eventState={event.state}
+          onChanged={apply.onChanged}
+        />
+      )}
     </div>
   );
 }
 
 interface ApplyControl {
   submitting: boolean;
+  /** 申請・キャンセルなどの後に、募集を読み込み直す */
+  onChanged: () => void;
   /** 申請できなかった理由。申請できた場合は通知で示し、状態（承認待ち）は画面に残る */
   error: string | null;
   submit: () => Promise<void>;
@@ -324,6 +384,7 @@ const APPLY_ERRORS: Record<ApplyRejection, string> = {
   ownEvent: '自分の募集には申請できません。',
   alreadyApplied: 'この募集には、すでに申請しています。',
   notReapplicable: 'この募集には、もう申請できません。',
+  attemptLimit: `同じ募集への申請は、合計${MAX_ATTEMPTS}回までです。`,
   notAccepting: '受付が終わったため、申請できませんでした。',
   rateLimited: '申請の回数の上限（1日20件）に達しました。時間をおいてお試しください。',
   notFound: 'この募集は見つかりませんでした。',
@@ -353,7 +414,7 @@ function useApply(eventId: string, onChanged: () => void): ApplyControl {
     }
   };
 
-  return { submitting, error, submit };
+  return { submitting, error, submit, onChanged };
 }
 
 interface GuestActionsProps {

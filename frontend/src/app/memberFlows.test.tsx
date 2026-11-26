@@ -626,6 +626,83 @@ describe('申請者一覧', () => {
   });
 });
 
+describe('キャンセル・取り下げ・再申請（SCR-006）', () => {
+  it('承認済みの参加は、確認してからキャンセルし、住所を隠して再申請を示す', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/dev-family-morning', { userId: 'dev-user-a' });
+    await screen.findByText('ダミー住所E（架空）');
+
+    await user.click(await findFirstButton('参加をキャンセルする'));
+    const [group] = screen.getAllByRole('group', { name: '参加のキャンセルの確認' });
+    if (!group) throw new Error('確認がありません。');
+    expect(group).toHaveTextContent('くわしい住所を見られなくなり、主催者に知らせます');
+    await user.click(within(group).getByRole('button', { name: '参加をキャンセルする' }));
+
+    expect(await findToast()).toHaveTextContent('参加をキャンセルしました。');
+    await waitFor(() => {
+      expect(screen.queryByText('ダミー住所E（架空）')).not.toBeInTheDocument();
+    });
+    expect(screen.getAllByText('キャンセル').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'もう一度申請する' }).length).toBeGreaterThan(0);
+  });
+
+  it('キャンセルの確認は、やめると何もしない', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/dev-family-morning', { userId: 'dev-user-a' });
+
+    await user.click(await findFirstButton('参加をキャンセルする'));
+    const [group] = screen.getAllByRole('group', { name: '参加のキャンセルの確認' });
+    if (!group) throw new Error('確認がありません。');
+    await user.click(within(group).getByRole('button', { name: 'やめる' }));
+
+    expect(screen.queryByRole('group', { name: '参加のキャンセルの確認' })).not.toBeInTheDocument();
+    expect(screen.getByText('ダミー住所E（架空）')).toBeInTheDocument();
+  });
+
+  it('承認待ちの申請は、確認してから取り下げる', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/dev-weekday-night', { userId: 'dev-user-a' });
+
+    await user.click(await findFirstButton('申請を取り下げる'));
+    const [group] = screen.getAllByRole('group', { name: '申請の取り下げの確認' });
+    if (!group) throw new Error('確認がありません。');
+    await user.click(within(group).getByRole('button', { name: '申請を取り下げる' }));
+
+    expect(await findToast()).toHaveTextContent('申請を取り下げました。');
+    expect((await screen.findAllByText('取り下げ')).length).toBeGreaterThan(0);
+  });
+
+  it('キャンセルした満員の募集に、もう一度申請できる', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/dev-easy-morning', { userId: 'dev-user-a' });
+
+    expect((await screen.findAllByText('参加をキャンセルしました。')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('満員です。申請すると主催者が判断します。').length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByText('同じ募集への申請は合計3回までです。').length).toBeGreaterThan(0);
+    await user.click(await findFirstButton('もう一度申請する'));
+
+    expect(await findToast()).toHaveTextContent('参加を申請しました。');
+    expect((await screen.findAllByText('承認待ち')).length).toBeGreaterThan(0);
+  });
+
+  it('却下の後は、取り下げ・再申請の操作を出さない', async () => {
+    renderApp('/events/dev-spike-practice', { userId: 'dev-user-a' });
+
+    await screen.findAllByText('この募集への申請は却下されました。');
+    expect(screen.queryByRole('button', { name: 'もう一度申請する' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '申請を取り下げる' })).not.toBeInTheDocument();
+  });
+
+  it('開催中の承認済みには、キャンセルを出さない', async () => {
+    renderApp('/events/dev-ongoing', { userId: 'dev-user-a' });
+
+    await screen.findAllByText('承認済み');
+    expect(screen.queryByRole('button', { name: '参加をキャンセルする' })).not.toBeInTheDocument();
+  });
+});
+
 describe('申請と募集', () => {
   it('自分の申請の状態を示し、非表示の募集は開催日時だけを示す', async () => {
     renderApp('/activity', { userId: 'dev-user-a' });
@@ -643,6 +720,39 @@ describe('申請と募集', () => {
     expect(hidden).not.toHaveTextContent('非表示の会');
     expect(hidden).not.toHaveTextContent('承認済み');
     expect(within(section).getByRole('heading', { name: '終わった募集' })).toBeInTheDocument();
+  });
+
+  it('承認済みの参加を、この画面からキャンセルできる', async () => {
+    const user = userEvent.setup();
+    renderApp('/activity', { userId: 'dev-user-a' });
+
+    const section = await screen.findByRole('region', { name: '参加する側' });
+    const item = (
+      await within(section).findByRole('link', { name: '家族や友人と楽しむ午前バレー' })
+    ).closest('li');
+    if (!item) throw new Error('申請がありません。');
+    await user.click(within(item).getByRole('button', { name: '参加をキャンセルする' }));
+    await user.click(
+      within(within(item).getByRole('group')).getByRole('button', { name: '参加をキャンセルする' }),
+    );
+
+    expect(await findToast()).toHaveTextContent('参加をキャンセルしました。');
+    await waitFor(() => {
+      expect(item).toHaveTextContent('キャンセル');
+    });
+    expect(within(item).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('キャンセル・取り下げの申請には、操作を出さない', async () => {
+    renderApp('/activity', { userId: 'dev-user-a' });
+
+    const section = await screen.findByRole('region', { name: '参加する側' });
+    const item = (await within(section).findByRole('link', { name: '日曜朝のゆるバレー' })).closest(
+      'li',
+    );
+    if (!item) throw new Error('申請がありません。');
+    expect(item).toHaveTextContent('キャンセル');
+    expect(within(item).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('主催した募集と人数を示し、申請者一覧へ移れる', async () => {

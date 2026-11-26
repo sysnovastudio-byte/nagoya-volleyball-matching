@@ -2,10 +2,22 @@ import type { EventState } from '../events/types';
 import type { AgeGroup, PublicProfile } from '../profiles/types';
 
 /**
- * 申請の状態（docs/11の2-3）。サイクル1は承認待ち・承認済み・却下だけを扱う。
- * キャンセル・承認取り消し・取り下げ（APP-08・APP-11・CND-10）は、作るときに加える。
+ * 申請の状態（docs/11の2-3）。状態は後戻りしない（docs/06の4-5）。
+ * キャンセル・取り下げの後は再申請でき、新しい申請になる。却下・承認取り消しの後はできない。
  */
-export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
+export type ApplicationStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  /** 承認済みの本人がキャンセルした（APP-08） */
+  | 'cancelled'
+  /** 主催者が承認を取り消した（APP-11） */
+  | 'revoked'
+  /** 承認待ちの本人が取り下げた（CND-10） */
+  | 'retracted';
+
+/** 同じ募集への申請は、合計3回まで（docs/11の2-2、docs/06の4-5の attempt_no）。 */
+export const MAX_ATTEMPTS = 3;
 
 /** 申請を断る理由。画面は理由に応じて案内する。 */
 export type ApplyRejection =
@@ -15,8 +27,10 @@ export type ApplyRejection =
   | 'ownEvent'
   /** 承認待ち・承認済みの申請がすでにある */
   | 'alreadyApplied'
-  /** 却下された募集には、もう申請できない（docs/11の2-2） */
+  /** 却下・承認取り消しの後は、同じ募集に申請できない（docs/11の2-2） */
   | 'notReapplicable'
+  /** 同じ募集への申請が、合計3回に達した */
+  | 'attemptLimit'
   /** 締切・開催開始後・中止・非表示 */
   | 'notAccepting'
   | 'rateLimited'
@@ -38,7 +52,21 @@ export type DecisionRejection =
 
 export type DecisionResult = { status: 'done' } | { status: 'rejected'; reason: DecisionRejection };
 
-/** 申請者一覧の1人分。申請者のプロフィールは、ログイン済みに公開する項目だけ。 */
+/** キャンセル・取り下げを断る理由。 */
+export type OwnActionRejection =
+  | 'notFound'
+  /** キャンセルは承認済み、取り下げは承認待ちの申請だけ */
+  | 'invalidState'
+  /** 開催開始後・中止・非表示 */
+  | 'notAccepting';
+
+export type OwnActionResult =
+  { status: 'done' } | { status: 'rejected'; reason: OwnActionRejection };
+
+/**
+ * 申請者一覧の1人分。申請者のプロフィールは、ログイン済みに公開する項目だけ。
+ * 同じ人が再申請した場合は、最新の申請だけ（履歴の表示は公開後、M-14）。
+ */
 export interface Applicant {
   applicationId: string;
   status: ApplicationStatus;
@@ -85,6 +113,7 @@ export type EventSummary =
     }
   | { hidden: true; startsAt: string; endsAt: string };
 
+/** 自分の申請。同じ募集に複数の申請がある場合は、最新の1件だけ（履歴の表示は公開後、M-14）。 */
 export interface MyParticipation {
   applicationId: string;
   status: ApplicationStatus;
@@ -93,7 +122,8 @@ export interface MyParticipation {
 
 /**
  * 申請の窓口。将来は docs/06の6-5の関数（apply_to_event・approve_application・
- * reject_application・get_my_participations）を呼ぶ実装に置き換える。
+ * reject_application・cancel_participation・retract_application・get_my_participations）を
+ * 呼ぶ実装に置き換える。
  * 操作する人は、窓口が内部でログイン状態から決める。画面から自分のIDを渡さない。
  * 通信の失敗は例外、条件による拒否は結果で返す。
  */
@@ -108,9 +138,13 @@ export interface ApplicationRepository {
     options?: { expandCapacityTo?: number },
   ): Promise<DecisionResult>;
   rejectApplication(applicationId: string): Promise<DecisionResult>;
+  /** 自分の承認済みの参加をキャンセルする（APP-08）。主催者へ通知する */
+  cancelParticipation(applicationId: string): Promise<OwnActionResult>;
+  /** 自分の承認待ちの申請を取り下げる（CND-10）。主催者へは通知しない */
+  retractApplication(applicationId: string): Promise<OwnActionResult>;
   /** 自分が主催する募集の申請者。docs/06の6-5の list_event_applicants【提案・未承認】に対応する */
   listApplicants(eventId: string): Promise<ApplicantListResult>;
-  /** 自分の申請。終了・中止した募集の分も返す */
+  /** 自分の申請。終了・中止した募集の分も返す。募集ごとに最新の申請だけ */
   getMyParticipations(): Promise<MyParticipation[]>;
 }
 
