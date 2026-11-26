@@ -218,9 +218,10 @@ export function createDevEvents(now: Date): DevEventRecord[] {
     },
     {
       id: 'dev-b-ended',
-      title: '先週の練習会（終了）',
-      startsAt: new Date(now.getTime() - 7 * DAY_MS).toISOString(),
-      endsAt: new Date(now.getTime() - 7 * DAY_MS + 2 * HOUR_MS).toISOString(),
+      title: '10日前の練習会（終了）',
+      // 送信できる期間（終了の7日後まで）を過ぎた会話を確かめるため、10日前の募集にする
+      startsAt: new Date(now.getTime() - 10 * DAY_MS).toISOString(),
+      endsAt: new Date(now.getTime() - 10 * DAY_MS + 2 * HOUR_MS).toISOString(),
       area: 'atsuta',
       targetLevels: ['beginner'],
       description: null,

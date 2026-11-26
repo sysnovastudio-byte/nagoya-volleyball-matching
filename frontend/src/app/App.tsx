@@ -13,6 +13,7 @@ import { EventListPage } from '../features/events/EventListPage';
 import { ProfileEditPage } from '../features/profiles/ProfileEditPage';
 import { MyProfilePage, UserProfilePage } from '../features/profiles/ProfilePages';
 import { SettingsPage } from '../features/settings/SettingsPage';
+import { ConversationsPage } from '../features/conversations/ConversationsPage';
 import { AppLayout } from './AppLayout';
 import { NotFoundPage } from './NotFoundPage';
 import { PendingPage } from './PendingPage';
@@ -44,7 +45,8 @@ export const appRoutes = createRoutesFromElements(
       {/* 必須プロフィールが必要な画面。未登録なら SCR-014 へ移る（docs/11の3-4） */}
       <Route element={<RequireProfile />}>
         <Route path="events/new" element={<CreateEventPage />} />
-        <Route path="conversations" element={<PendingPage title="会話" />} />
+        <Route path="conversations" element={<ConversationsPage />} />
+        <Route path="conversations/:conversationId" element={<ConversationsPage />} />
       </Route>
       <Route path="events/:eventId/applicants" element={<ApplicantsPage />} />
       <Route path="activity" element={<ActivityPage />} />

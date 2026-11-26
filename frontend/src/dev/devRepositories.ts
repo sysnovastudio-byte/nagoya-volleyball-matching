@@ -1,3 +1,4 @@
+import { createDevConversationRepository } from './devConversationRepository';
 import { createDevApplicationRepository } from './devApplicationRepository';
 import { createDevAuthRepository } from './devAuthRepository';
 import { createDevDatabase } from './devDatabase';
@@ -30,6 +31,10 @@ export const devApplicationRepository = createDevApplicationRepository({
   session: devSession,
 });
 export const devProfileRepository = createDevProfileRepository({
+  db: devDatabase,
+  session: devSession,
+});
+export const devConversationRepository = createDevConversationRepository({
   db: devDatabase,
   session: devSession,
 });

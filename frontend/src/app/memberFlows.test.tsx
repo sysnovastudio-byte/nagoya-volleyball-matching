@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { createDevApplicationRepository } from '../dev/devApplicationRepository';
+import { createDevConversationRepository } from '../dev/devConversationRepository';
 import { createDevAuthRepository } from '../dev/devAuthRepository';
 import { createDevDatabase } from '../dev/devDatabase';
 import { createDevEventRepository } from '../dev/devEventRepository';
@@ -10,6 +11,8 @@ import { createDevProfileRepository } from '../dev/devProfileRepository';
 import { createDevSession } from '../dev/devSession';
 import { ApplicationRepositoryContext } from '../features/applications/repositoryContext';
 import { AuthRepositoryContext } from '../features/auth/repositoryContext';
+import { ConversationRepositoryContext } from '../features/conversations/repositoryContext';
+import type { ConversationRepository } from '../features/conversations/types';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
 import type { EventRepository } from '../features/events/types';
 import { ProfileRepositoryContext } from '../features/profiles/repositoryContext';
@@ -21,17 +24,31 @@ const HOSTED_EVENT = 'dev-beginner-afternoon';
 /** 開発用の窓口を、テストごとの新しいデータとログイン状態でつなぐ。 */
 function renderApp(
   path: string,
-  { userId = null, events }: { userId?: string | null; events?: Partial<EventRepository> } = {},
+  {
+    userId = null,
+    events,
+    conversations,
+  }: {
+    userId?: string | null;
+    events?: Partial<EventRepository>;
+    conversations?: Partial<ConversationRepository>;
+  } = {},
 ) {
   const db = createDevDatabase(new Date());
   const session = createDevSession(userId);
   const eventRepository = { ...createDevEventRepository({ db, session }), ...events };
+  const conversationRepository = {
+    ...createDevConversationRepository({ db, session }),
+    ...conversations,
+  };
   render(
     <AuthRepositoryContext value={createDevAuthRepository({ db, session })}>
       <EventRepositoryContext value={eventRepository}>
         <ApplicationRepositoryContext value={createDevApplicationRepository({ db, session })}>
           <ProfileRepositoryContext value={createDevProfileRepository({ db, session })}>
-            <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
+            <ConversationRepositoryContext value={conversationRepository}>
+              <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
+            </ConversationRepositoryContext>
           </ProfileRepositoryContext>
         </ApplicationRepositoryContext>
       </EventRepositoryContext>
@@ -103,9 +120,9 @@ describe('ログイン後の移動', () => {
 
     const [nav] = await screen.findAllByRole('navigation', { name: '主な移動' });
     if (!nav) throw new Error('移動がありません。');
-    await user.click(within(nav).getByRole('link', { name: '会話' }));
+    await user.click(within(nav).getByRole('link', { name: '通知' }));
 
-    expect(screen.getByRole('heading', { level: 1, name: '会話は準備中です' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: '通知は準備中です' })).toBeInTheDocument();
   });
 });
 
@@ -291,9 +308,9 @@ describe('募集作成', () => {
 
     const [nav] = screen.getAllByRole('navigation', { name: '主な移動' });
     if (!nav) throw new Error('移動がありません。');
-    await user.click(within(nav).getByRole('link', { name: '会話' }));
+    await user.click(within(nav).getByRole('link', { name: '通知' }));
 
-    expect(screen.getByRole('heading', { level: 1, name: '会話は準備中です' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: '通知は準備中です' })).toBeInTheDocument();
   });
 
   it('終了が開始より前なら翌日として扱い、深夜にかかる注意を示す', async () => {
@@ -1206,5 +1223,297 @@ describe('ヘッダーのニックネームと設定への入口', () => {
     await user.click(await screen.findByRole('link', { name: /^設定/ }));
 
     expect(await screen.findByRole('heading', { level: 1, name: '設定' })).toBeInTheDocument();
+  });
+});
+
+describe('主催者に質問する（SCR-006）', () => {
+  it('申請前でも質問を始められ、会話へ移る', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/events/dev-easy-morning', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('button', { name: '主催者に質問する' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'はる' })).toBeInTheDocument();
+    expect(screen.getByText('まだメッセージはありません。')).toBeInTheDocument();
+    expect(db.conversations.at(-1)).toMatchObject({
+      eventId: 'dev-easy-morning',
+      inquirerId: 'dev-user-a',
+    });
+  });
+
+  it('すでに会話があれば、その会話を開く', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/events/dev-beginner-afternoon', { userId: 'dev-user-a' });
+    const count = db.conversations.length;
+
+    await user.click(await screen.findByRole('button', { name: '主催者に質問する' }));
+
+    expect(await screen.findByText('ありがとうございます。申請してみます。')).toBeInTheDocument();
+    expect(db.conversations).toHaveLength(count);
+  });
+
+  it('承認済みの参加者には「主催者に連絡する」を示す', async () => {
+    renderApp('/events/dev-family-morning', { userId: 'dev-user-a' });
+
+    expect(await screen.findByRole('button', { name: '主催者に連絡する' })).toBeInTheDocument();
+  });
+
+  it('主催者には、自分の募集で示さない', async () => {
+    renderApp('/events/dev-beginner-afternoon', { userId: 'dev-user-b' });
+
+    await screen.findAllByRole('link', { name: '申請者を見る' });
+    expect(screen.queryByRole('button', { name: /主催者に/ })).not.toBeInTheDocument();
+  });
+
+  it('開催中で承認されていない人には示さない', async () => {
+    renderApp('/events/dev-ongoing', { userId: 'dev-user-minor' });
+
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('button', { name: /主催者に/ })).not.toBeInTheDocument();
+  });
+
+  it('未ログインには、ログインへの案内を示す', async () => {
+    renderApp('/events/dev-easy-morning');
+
+    expect(
+      await screen.findByRole('link', { name: 'ログインして主催者に質問する' }),
+    ).toHaveAttribute('href', '/login?next=%2Fevents%2Fdev-easy-morning');
+  });
+});
+
+describe('会話一覧（SCR-010）', () => {
+  it('当事者の会話だけを、相手・募集・日時で示す。非表示の募集はタイトルを出さない', async () => {
+    renderApp('/conversations', { userId: 'dev-user-a' });
+
+    const list = await screen.findByRole('list', { name: '会話の一覧' });
+    const items = within(list).getAllByRole('link');
+    expect(items).toHaveLength(4);
+    expect(within(list).getByText('はじめて歓迎！土曜の午後バレー')).toBeInTheDocument();
+    expect(within(list).getByText('非表示になった募集')).toBeInTheDocument();
+    expect(within(list).queryByText('非表示の会（見られない）')).not.toBeInTheDocument();
+    expect(within(list).getByText('メッセージなし')).toBeInTheDocument();
+  });
+
+  it('会話がなければ、その旨を示す', async () => {
+    renderApp('/conversations', { userId: 'dev-user-minor' });
+
+    expect(await screen.findByText('会話はまだありません')).toBeInTheDocument();
+  });
+
+  it('スマートフォンでは、一覧と会話を別の画面にし、一覧へ戻れる', async () => {
+    const user = userEvent.setup();
+    renderApp('/conversations', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('link', { name: /はじめて歓迎/ }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'そら' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '会話' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: '‹ 会話一覧へ' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '会話' })).toBeInTheDocument();
+  });
+
+  it('PCでは、左に一覧、右に会話を示す', async () => {
+    asPc();
+    try {
+      const user = userEvent.setup();
+      renderApp('/conversations', { userId: 'dev-user-a' });
+
+      expect(await screen.findByText('左の一覧から、会話を選んでください。')).toBeInTheDocument();
+      const list = await screen.findByRole('list', { name: '会話の一覧' });
+      await user.click(within(list).getByRole('link', { name: /はじめて歓迎/ }));
+
+      expect(await screen.findByRole('heading', { level: 1, name: 'そら' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: '会話' })).toBeInTheDocument();
+      expect(within(list).getByRole('link', { name: /はじめて歓迎/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      expect(screen.queryByRole('link', { name: '‹ 会話一覧へ' })).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('会話（SCR-011）', () => {
+  it('送信すると、自分のメッセージとして示し、入力を空にする', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/conversations/dev-conv-question', { userId: 'dev-user-a' });
+
+    const input = await screen.findByLabelText('メッセージ');
+    await user.type(input, '当日はよろしくお願いします。');
+    await user.click(screen.getByRole('button', { name: '送信' }));
+
+    expect(await screen.findByText('当日はよろしくお願いします。')).toBeInTheDocument();
+    expect(input).toHaveValue('');
+    expect(db.messages.at(-1)).toMatchObject({ senderId: 'dev-user-a' });
+  });
+
+  it('送信中は二重に押せず、メッセージは1件だけ作る', async () => {
+    const user = userEvent.setup();
+    let finish: () => void = () => undefined;
+    const send = vi.fn<ConversationRepository['send']>();
+    const { db, session } = renderApp('/conversations/dev-conv-question', {
+      userId: 'dev-user-a',
+      conversations: { send: (input) => send(input) },
+    });
+    const real = createDevConversationRepository({ db, session });
+    send.mockImplementation(
+      (input) =>
+        new Promise((resolve) => {
+          finish = () => {
+            void real.send(input).then(resolve);
+          };
+        }),
+    );
+    const count = db.messages.length;
+
+    await user.type(await screen.findByLabelText('メッセージ'), '二重に押します');
+    const button = screen.getByRole('button', { name: '送信' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(await screen.findByRole('button', { name: '送信中' })).toBeDisabled();
+    expect(send).toHaveBeenCalledTimes(1);
+    act(() => {
+      finish();
+    });
+    expect(await screen.findByText('二重に押します')).toBeInTheDocument();
+    expect(db.messages).toHaveLength(count + 1);
+  });
+
+  it('断られたら「送信できません」とだけ示し、入力を残す', async () => {
+    const user = userEvent.setup();
+    renderApp('/conversations/dev-conv-question', {
+      userId: 'dev-user-a',
+      conversations: {
+        send: () => Promise.resolve({ status: 'rejected', reason: 'notAllowed' }),
+      },
+    });
+
+    const input = await screen.findByLabelText('メッセージ');
+    await user.type(input, '送れないかもしれない');
+    await user.click(screen.getByRole('button', { name: '送信' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^送信できません$/);
+    expect(input).toHaveValue('送れないかもしれない');
+  });
+
+  it('通信に失敗しても、入力を残す', async () => {
+    const user = userEvent.setup();
+    renderApp('/conversations/dev-conv-question', {
+      userId: 'dev-user-a',
+      conversations: { send: () => Promise.reject(new Error('通信の失敗')) },
+    });
+
+    const input = await screen.findByLabelText('メッセージ');
+    await user.type(input, '届くかな');
+    await user.click(screen.getByRole('button', { name: '送信' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('送信できませんでした');
+    expect(input).toHaveValue('届くかな');
+  });
+
+  it('1,000文字を超えると送らず、文字数を示す', async () => {
+    const send = vi.fn<ConversationRepository['send']>();
+    renderApp('/conversations/dev-conv-question', {
+      userId: 'dev-user-a',
+      conversations: { send },
+    });
+
+    const input = await screen.findByLabelText('メッセージ');
+    fireEvent.change(input, { target: { value: 'あ'.repeat(1001) } });
+    expect(screen.getByText('1,001／1,000文字')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '送信' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('1,000文字以内');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('送信できる期間を過ぎた会話は、閲覧だけできる', async () => {
+    renderApp('/conversations/dev-conv-expired', { userId: 'dev-user-b' });
+
+    expect(
+      await screen.findByText('先日はありがとうございました。また参加したいです。'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/閲覧だけできます/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('メッセージ')).not.toBeInTheDocument();
+  });
+
+  it('当事者でない会話は、見つからないと示す', async () => {
+    renderApp('/conversations/dev-conv-question', { userId: 'dev-user-minor' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '会話が見つかりません' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/中学の部活/)).not.toBeInTheDocument();
+  });
+
+  it('相手の名前からプロフィールへ移り、会話へ戻れる', async () => {
+    const user = userEvent.setup();
+    renderApp('/conversations/dev-conv-question', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('link', { name: 'そら' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'そら' })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: /会話へ/ }));
+
+    expect(await screen.findByText(/中学の部活/)).toBeInTheDocument();
+  });
+
+  it('非表示の募集の会話では、タイトルを出さない', async () => {
+    renderApp('/conversations/dev-conv-hidden', { userId: 'dev-user-a' });
+
+    expect(await screen.findByText('非表示になった募集')).toBeInTheDocument();
+    expect(screen.queryByText('非表示の会（見られない）')).not.toBeInTheDocument();
+  });
+});
+
+describe('通しの流れ', () => {
+  it('作成 → 探す → 詳細 → 申請 → 承認 → 住所 → 連絡', async () => {
+    const user = userEvent.setup();
+    const { switchUser } = renderApp('/events/new', { userId: 'dev-user-b' });
+    const nav = async () => {
+      const [first] = await screen.findAllByRole('navigation', { name: '主な移動' });
+      if (!first) throw new Error('移動がありません。');
+      return first;
+    };
+
+    // 作成（主催者：そら）
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+    await screen.findByRole('heading', { level: 1, name: '日曜の練習会' });
+
+    // 探す → 詳細 → 申請（参加者：あおい）
+    switchUser('dev-user-a');
+    await user.click(within(await nav()).getByRole('link', { name: 'ホーム' }));
+    await user.click(await screen.findByRole('link', { name: /日曜の練習会/ }));
+    await screen.findByRole('heading', { level: 1, name: '日曜の練習会' });
+    expect(screen.queryByText('ダミー住所Q（架空）')).not.toBeInTheDocument();
+    await user.click((await screen.findAllByRole('button', { name: '参加を申請する' }))[0]!);
+    expect((await screen.findAllByText('承認待ち')).length).toBeGreaterThan(0);
+
+    // 承認（主催者）
+    switchUser('dev-user-b');
+    await user.click((await screen.findAllByRole('link', { name: '申請者を見る' }))[0]!);
+    await user.click(await screen.findByRole('button', { name: 'あおいさんを承認する' }));
+    expect(await findToast()).toHaveTextContent('あおいさんの参加を承認しました。');
+
+    // 住所 → 連絡（参加者）
+    switchUser('dev-user-a');
+    await user.click(within(await nav()).getByRole('link', { name: '申請と募集' }));
+    await user.click(await screen.findByRole('link', { name: /日曜の練習会/ }));
+    expect(await screen.findByText('ダミー住所Q（架空）')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '主催者に連絡する' }));
+    await user.type(await screen.findByLabelText('メッセージ'), '承認ありがとうございます。');
+    await user.click(screen.getByRole('button', { name: '送信' }));
+    expect(await screen.findByText('承認ありがとうございます。')).toBeInTheDocument();
+
+    // 主催者の会話一覧に届く
+    switchUser('dev-user-b');
+    await user.click(within(await nav()).getByRole('link', { name: '会話' }));
+    const list = await screen.findByRole('list', { name: '会話の一覧' });
+    await user.click(within(list).getByRole('link', { name: /あおい.*日曜の練習会/ }));
+    expect(await screen.findByText('承認ありがとうございます。')).toBeInTheDocument();
   });
 });
