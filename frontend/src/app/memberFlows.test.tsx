@@ -496,3 +496,67 @@ describe('申請者一覧', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('申請と募集', () => {
+  it('自分の申請の状態を示し、非表示の募集は開催日時だけを示す', async () => {
+    renderApp('/activity', { userId: 'dev-user-a' });
+
+    const section = await screen.findByRole('region', { name: '参加する側' });
+    const link = await within(section).findByRole('link', { name: '平日夜にしっかり動く会' });
+    expect(link.closest('li')).toHaveTextContent('承認待ち');
+    expect(
+      within(section).getByRole('link', { name: '家族や友人と楽しむ午前バレー' }).closest('li'),
+    ).toHaveTextContent('承認済み');
+    expect(
+      within(section).getByRole('link', { name: 'スパイク練習会' }).closest('li'),
+    ).toHaveTextContent('却下');
+    const hidden = within(section).getByText('非表示になった募集').closest('li');
+    expect(hidden).not.toHaveTextContent('非表示の会');
+    expect(hidden).not.toHaveTextContent('承認済み');
+    expect(within(section).getByRole('heading', { name: '終わった募集' })).toBeInTheDocument();
+  });
+
+  it('主催した募集と人数を示し、申請者一覧へ移れる', async () => {
+    renderApp('/activity', { userId: HOST });
+
+    const section = await screen.findByRole('region', { name: '主催する側' });
+    const item = (
+      await within(section).findByRole('link', { name: '木曜夜のミニゲーム会' })
+    ).closest('li');
+    if (!item) throw new Error('募集がありません。');
+    expect(item).toHaveTextContent('承認済み 6／6人・承認待ち 2人');
+    expect(within(item).getByRole('link', { name: '申請者を見る' })).toHaveAttribute(
+      'href',
+      '/events/dev-b-full/applicants',
+    );
+    expect(within(section).getByText('非表示になった募集')).toBeInTheDocument();
+    expect(within(section).queryByText('非表示になった会（主催）')).not.toBeInTheDocument();
+  });
+});
+
+describe('プロフィール', () => {
+  it('自分のプロフィールを示す', async () => {
+    renderApp('/profile', { userId: 'dev-user-a' });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'あおい' })).toBeInTheDocument();
+    expect(screen.getByText('初心者')).toBeInTheDocument();
+    expect(screen.getByText(/名古屋に引っ越してきて/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'プロフィールを編集' })).toBeInTheDocument();
+  });
+
+  it('ほかの人のプロフィールには、編集を出さない', async () => {
+    renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'そら' })).toBeInTheDocument();
+    expect(screen.getByText('経験者')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'プロフィールを編集' })).not.toBeInTheDocument();
+  });
+
+  it('プロフィール未登録なら、登録を案内する', async () => {
+    renderApp('/profile', { userId: 'dev-user-no-profile' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'プロフィールが登録されていません' }),
+    ).toBeInTheDocument();
+  });
+});

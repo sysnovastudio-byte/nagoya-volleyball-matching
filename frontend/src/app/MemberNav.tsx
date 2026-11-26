@@ -18,7 +18,7 @@ const ICON_PROPS = {
   className: 'size-6 shrink-0',
 } as const;
 
-/** ログイン後の5つの移動先（docs/11の5-1・追加-12）。まだない画面は仮の画面へつなぐ。 */
+/** ログイン後の5つの移動先（docs/11の5-1・追加-12）。まだない画面（会話・通知）は仮の画面へつなぐ。 */
 const NAV_ITEMS: NavItem[] = [
   {
     to: '/',
