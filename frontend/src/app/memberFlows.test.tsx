@@ -445,6 +445,76 @@ describe('募集詳細（主催者）', () => {
   });
 });
 
+describe('募集の中止（SCR-006）', () => {
+  it('主催者は、影響を確かめてから中止し、参加者に通知が届く', async () => {
+    const user = userEvent.setup();
+    const { switchUser } = renderApp(`/events/${HOSTED_EVENT}`, { userId: HOST });
+
+    const counts = await screen.findAllByText(
+      (_, element) =>
+        element?.tagName === 'P' && element.textContent === '承認待ち 3人・承認済み 9人',
+    );
+    expect(counts.length).toBeGreaterThan(0);
+    await user.click(await findFirstButton('募集を中止する'));
+    const [group] = screen.getAllByRole('group', { name: '募集の中止の確認' });
+    if (!group) throw new Error('確認がありません。');
+    expect(group).toHaveTextContent('元に戻せません');
+    expect(group).toHaveTextContent('承認待ち・承認済みの12人に通知します。');
+    await user.click(within(group).getByRole('button', { name: '募集を中止する' }));
+
+    expect(await findToast()).toHaveTextContent('募集を中止しました。');
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '募集を中止する' })).not.toBeInTheDocument();
+    });
+    expect(screen.getAllByText('中止').length).toBeGreaterThan(0);
+
+    // 承認待ちだった人に届く
+    switchUser('dev-user-minor');
+    const [nav] = await screen.findAllByRole('navigation', { name: '主な移動' });
+    if (!nav) throw new Error('移動がありません。');
+    await user.click(await within(nav).findByRole('link', { name: /^通知/ }));
+    expect(await screen.findByRole('link', { name: '募集が中止されました。' })).toHaveAttribute(
+      'href',
+      `/events/${HOSTED_EVENT}`,
+    );
+  });
+
+  it('中止の確認は、やめると何もしない', async () => {
+    const user = userEvent.setup();
+    renderApp(`/events/${HOSTED_EVENT}`, { userId: HOST });
+
+    await user.click(await findFirstButton('募集を中止する'));
+    const [group] = screen.getAllByRole('group', { name: '募集の中止の確認' });
+    if (!group) throw new Error('確認がありません。');
+    await user.click(within(group).getByRole('button', { name: 'やめる' }));
+
+    expect(screen.queryByRole('group', { name: '募集の中止の確認' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('受付中').length).toBeGreaterThan(0);
+  });
+
+  it('開催中の募集には、中止を出さない', async () => {
+    renderApp('/events/dev-ongoing', { userId: HOST });
+
+    await screen.findAllByRole('link', { name: '申請者を見る' });
+    expect(screen.queryByRole('button', { name: '募集を中止する' })).not.toBeInTheDocument();
+  });
+
+  it('中止された募集の参加者には、中止を示し、住所を見せない', async () => {
+    const user = userEvent.setup();
+    const { switchUser } = renderApp('/events/dev-family-morning', { userId: 'dev-host-yui' });
+    await user.click(await findFirstButton('募集を中止する'));
+    const [group] = screen.getAllByRole('group', { name: '募集の中止の確認' });
+    if (!group) throw new Error('確認がありません。');
+    await user.click(within(group).getByRole('button', { name: '募集を中止する' }));
+    await findToast();
+
+    switchUser('dev-user-a');
+    expect((await screen.findAllByText('この募集は中止されました。')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('ダミー住所E（架空）')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '参加をキャンセルする' })).not.toBeInTheDocument();
+  });
+});
+
 describe('設定', () => {
   it('未ログインで開くと、ログイン画面へ移る', async () => {
     const { switchUser } = renderApp('/settings');
