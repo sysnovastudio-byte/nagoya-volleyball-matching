@@ -10,27 +10,24 @@ import type { EventDetailLocationState } from './EventDetailPage';
 import {
   EMPTY_EVENT_FORM,
   isEventFormDirty,
-  parseJstDateTime,
+  scheduleFromForm,
+  TIME_OPTIONS,
   validateEventForm,
+  type EventFormErrors,
+  type EventFormField,
   type EventFormValues,
 } from './eventForm';
-import {
-  AREAS,
-  EVENT_LIMITS,
-  overlapsLateNight,
-  TARGET_LEVELS,
-  type EventField,
-  type EventFieldErrors,
-} from './eventRules';
+import { AREAS, EVENT_LIMITS, overlapsLateNight, TARGET_LEVELS } from './eventRules';
 import { areaLabel, levelLabel } from './format';
 import { useEventRepository } from './repositoryContext';
 import type { CreateEventRejection, TargetLevel } from './types';
 
 /** 誤りがあるときに、最初に移る入力欄の順（画面の並び順）。 */
-const FIELD_ORDER: EventField[] = [
+const FIELD_ORDER: EventFormField[] = [
   'title',
-  'startsAt',
-  'endsAt',
+  'date',
+  'startTime',
+  'endTime',
   'area',
   'targetLevels',
   'capacity',
@@ -42,7 +39,7 @@ const FIELD_ORDER: EventField[] = [
   'note',
 ];
 
-const fieldId = (field: EventField) =>
+const fieldId = (field: EventFormField) =>
   field === 'targetLevels' ? `event-level-${TARGET_LEVELS[0]}` : `event-${field}`;
 
 const REJECTION_MESSAGES: Record<CreateEventRejection, string> = {
@@ -88,7 +85,7 @@ function CreateEventForm() {
   const location = useLocation();
   const [clientRequestId] = useState(createRequestId);
   const [values, setValues] = useState<EventFormValues>(EMPTY_EVENT_FORM);
-  const [errors, setErrors] = useState<EventFieldErrors>({});
+  const [errors, setErrors] = useState<EventFormErrors>({});
   const [validated, setValidated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -173,9 +170,8 @@ function CreateEventForm() {
     else void navigate(-1);
   };
 
-  const startsAt = parseJstDateTime(values.startsAt);
-  const endsAt = parseJstDateTime(values.endsAt);
-  const lateNight = startsAt && endsAt ? overlapsLateNight(startsAt, endsAt) : false;
+  const schedule = scheduleFromForm(values);
+  const lateNight = schedule ? overlapsLateNight(schedule.startsAt, schedule.endsAt) : false;
 
   return (
     <div className="mx-auto w-full max-w-160 px-4 pt-4">
@@ -183,8 +179,6 @@ function CreateEventForm() {
       <p className="mb-4 text-muted">
         <RequiredMark required /> の項目は、入力が必要です。
       </p>
-
-      <HostNotice />
 
       <form
         noValidate
@@ -198,7 +192,6 @@ function CreateEventForm() {
           id="public-fields"
           title="全員に公開する項目"
           badge={<Badge>全員に公開</Badge>}
-          description="ログインしていない人を含め、誰でも見られます。住所や連絡先を書かないでください。"
           tone="public"
         >
           <FormField
@@ -212,6 +205,7 @@ function CreateEventForm() {
               <input
                 {...control}
                 type="text"
+                placeholder="例：初心者歓迎！土曜午後の練習"
                 value={values.title}
                 onChange={(event) => {
                   update('title', event.target.value);
@@ -221,45 +215,14 @@ function CreateEventForm() {
             )}
           </FormField>
 
-          <FormField
-            id="event-startsAt"
-            label="開始の日時"
-            required
-            hint="日本時間で入力します。今より後で、1年以内にしてください。"
-            error={errors.startsAt}
-          >
-            {(control) => (
-              <input
-                {...control}
-                type="datetime-local"
-                value={values.startsAt}
-                onChange={(event) => {
-                  update('startsAt', event.target.value);
-                }}
-                className={INPUT_CLASS}
-              />
-            )}
-          </FormField>
-
-          <FormField
-            id="event-endsAt"
-            label="終了の日時"
-            required
-            hint={`開始より後で、開催時間は${EVENT_LIMITS.maxDurationHours}時間以内にしてください。`}
-            error={errors.endsAt}
-          >
-            {(control) => (
-              <input
-                {...control}
-                type="datetime-local"
-                value={values.endsAt}
-                onChange={(event) => {
-                  update('endsAt', event.target.value);
-                }}
-                className={INPUT_CLASS}
-              />
-            )}
-          </FormField>
+          <ScheduleField
+            values={values}
+            errors={errors}
+            nextDay={schedule?.nextDay ?? false}
+            onChange={(field, value) => {
+              update(field, value);
+            }}
+          />
 
           {lateNight && (
             <p
@@ -271,13 +234,7 @@ function CreateEventForm() {
             </p>
           )}
 
-          <FormField
-            id="event-area"
-            label="開催エリア"
-            required
-            hint="名古屋市の16区から選びます。"
-            error={errors.area}
-          >
+          <FormField id="event-area" label="開催エリア" required error={errors.area}>
             {(control) => (
               <select
                 {...control}
@@ -306,13 +263,7 @@ function CreateEventForm() {
             }}
           />
 
-          <FormField
-            id="event-capacity"
-            label="募集人数"
-            required
-            hint={`主催者を含まない人数です。${EVENT_LIMITS.capacityMin}〜${EVENT_LIMITS.capacityMax}人。`}
-            error={errors.capacity}
-          >
+          <FormField id="event-capacity" label="募集人数" required error={errors.capacity}>
             {(control) => (
               <div className="flex items-center gap-2">
                 <input
@@ -335,7 +286,7 @@ function CreateEventForm() {
             id="event-fee"
             label="参加費"
             required
-            hint={`${EVENT_LIMITS.feeMin}〜${EVENT_LIMITS.feeMax.toLocaleString('ja-JP')}円。当日の支払いが基本です。アプリの中では支払いません。支払い方法は説明に書いてください。`}
+            hint="アプリの中では支払えません。"
             error={errors.fee}
           >
             {(control) => (
@@ -359,7 +310,7 @@ function CreateEventForm() {
           <FormField
             id="event-description"
             label="説明"
-            hint="練習の内容や、支払い方法など。住所や連絡先は書かないでください。"
+            hint="住所や連絡先は書かないでください。"
             error={errors.description}
             counter={{ value: values.description, max: EVENT_LIMITS.descriptionMax }}
           >
@@ -400,7 +351,6 @@ function CreateEventForm() {
           id="private-fields"
           title="承認された人だけに見せる項目"
           badge={<Badge tone="accent">承認された人だけ</Badge>}
-          description="主催者のあなたと、参加を承認した人だけが見られます。募集一覧や、承認する前の人には表示されません。"
           tone="private"
         >
           <FormField
@@ -445,7 +395,6 @@ function CreateEventForm() {
           <FormField
             id="event-note"
             label="集合場所など"
-            hint="入口や、当日の集まり方など。"
             error={errors.note}
             counter={{ value: values.note, max: EVENT_LIMITS.noteMax }}
           >
@@ -502,38 +451,16 @@ function CreateEventForm() {
   );
 }
 
-/** 主催者への案内（docs/10の11-3、docs/11の7-1・2-1）。 */
-function HostNotice() {
-  return (
-    <section
-      aria-labelledby="host-notice-heading"
-      className="rounded-2xl border border-line bg-surface p-4"
-    >
-      <h2 id="host-notice-heading" className="mb-1 font-bold">
-        募集を作る前に
-      </h2>
-      <ul className="list-disc pl-5">
-        <li>タイトル・説明・持ち物は、誰でも見られます。住所や連絡先を書かないでください。</li>
-        <li>参加費は、当日の支払いが基本です。</li>
-        <li>
-          18歳未満の人も申請できます。深夜（午後11時〜翌午前6時）に18歳未満の人を参加させたり、連れ出したりしないでください。
-        </li>
-      </ul>
-    </section>
-  );
-}
-
 interface FieldSectionProps {
   id: string;
   title: string;
   badge: ReactNode;
-  description: string;
   tone: 'public' | 'private';
   children: ReactNode;
 }
 
 /** 公開する項目と、承認された人だけの項目を、見た目ではっきり分ける。 */
-function FieldSection({ id, title, badge, description, tone, children }: FieldSectionProps) {
+function FieldSection({ id, title, badge, tone, children }: FieldSectionProps) {
   return (
     <section
       aria-labelledby={`${id}-heading`}
@@ -543,15 +470,12 @@ function FieldSection({ id, title, badge, description, tone, children }: FieldSe
           : 'border border-line bg-surface'
       }`}
     >
-      <div className="mb-1 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <h2 id={`${id}-heading`} className="text-lg font-bold">
           {title}
         </h2>
         {badge}
       </div>
-      <p className={`mb-4 ${tone === 'private' ? 'text-accent-ink' : 'text-muted'}`}>
-        {description}
-      </p>
       <div className="flex flex-col gap-5">{children}</div>
     </section>
   );
@@ -567,17 +491,11 @@ function TargetLevelField({ value, error, onChange }: TargetLevelFieldProps) {
   const errorId = 'event-targetLevels-error';
 
   return (
-    <fieldset
-      aria-describedby={error ? errorId : 'event-targetLevels-hint'}
-      className="flex flex-col gap-1"
-    >
+    <fieldset aria-describedby={error ? errorId : undefined} className="flex flex-col gap-1">
       <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
         対象レベル
         <RequiredMark required />
       </legend>
-      <p id="event-targetLevels-hint" className="text-muted">
-        当てはまるものを、すべて選びます。
-      </p>
       <div className="flex flex-wrap gap-x-4">
         {TARGET_LEVELS.map((level) => (
           <label
@@ -611,6 +529,134 @@ function TargetLevelField({ value, error, onChange }: TargetLevelFieldProps) {
         </p>
       )}
     </fieldset>
+  );
+}
+
+const jstToday = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+interface ScheduleFieldProps {
+  values: EventFormValues;
+  errors: EventFormErrors;
+  nextDay: boolean;
+  onChange: (field: 'date' | 'startTime' | 'endTime', value: string) => void;
+}
+
+/**
+ * 日時は「日付」「開始時刻」「終了時刻」で選ぶ。時刻は15分刻み。
+ * 終了が開始より前なら翌日として扱い、「翌日」と示す。24時間以内・開始は1年以内の決まりは変えない。
+ */
+function ScheduleField({ values, errors, nextDay, onChange }: ScheduleFieldProps) {
+  const today = jstToday.format(new Date());
+  const describedBy = (field: 'date' | 'startTime' | 'endTime') =>
+    errors[field] ? `event-${field}-error` : undefined;
+  const fieldError = (field: 'date' | 'startTime' | 'endTime') =>
+    errors[field] && (
+      <p id={`event-${field}-error`} className="font-bold text-danger">
+        {errors[field]}
+      </p>
+    );
+
+  return (
+    <fieldset className="flex flex-col gap-3">
+      <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
+        日時
+        <RequiredMark required />
+      </legend>
+      <label className="flex flex-col gap-1">
+        <span className="text-sub">日付</span>
+        <input
+          id="event-date"
+          type="date"
+          min={today}
+          value={values.date}
+          aria-invalid={errors.date ? true : undefined}
+          aria-describedby={describedBy('date')}
+          onChange={(event) => {
+            onChange('date', event.target.value);
+          }}
+          className={INPUT_CLASS}
+        />
+      </label>
+      {fieldError('date')}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-sub">開始時刻</span>
+          <TimeSelect
+            id="event-startTime"
+            value={values.startTime}
+            invalid={Boolean(errors.startTime)}
+            describedBy={describedBy('startTime')}
+            onChange={(value) => {
+              onChange('startTime', value);
+            }}
+          />
+        </label>
+        <span aria-hidden="true" className="pt-9">
+          〜
+        </span>
+        <label className="flex flex-col gap-1">
+          <span className="flex items-center gap-2 text-sub">
+            終了時刻
+            {nextDay && <Badge tone="accent">翌日</Badge>}
+          </span>
+          <TimeSelect
+            id="event-endTime"
+            value={values.endTime}
+            invalid={Boolean(errors.endTime)}
+            describedBy={
+              [nextDay ? 'event-endTime-nextDay' : '', describedBy('endTime') ?? '']
+                .filter(Boolean)
+                .join(' ') || undefined
+            }
+            onChange={(value) => {
+              onChange('endTime', value);
+            }}
+          />
+        </label>
+      </div>
+      {nextDay && (
+        <p id="event-endTime-nextDay" className="text-sub">
+          終了時刻が開始より前のため、翌日の{values.endTime}に終わります。
+        </p>
+      )}
+      {fieldError('startTime')}
+      {fieldError('endTime')}
+    </fieldset>
+  );
+}
+
+interface TimeSelectProps {
+  id: string;
+  value: string;
+  invalid: boolean;
+  describedBy: string | undefined;
+  onChange: (value: string) => void;
+}
+
+function TimeSelect({ id, value, invalid, describedBy, onChange }: TimeSelectProps) {
+  return (
+    <select
+      id={id}
+      value={value}
+      aria-invalid={invalid ? true : undefined}
+      aria-describedby={describedBy}
+      onChange={(event) => {
+        onChange(event.target.value);
+      }}
+      className={INPUT_CLASS}
+    >
+      <option value="">選ぶ</option>
+      {TIME_OPTIONS.map((time) => (
+        <option key={time} value={time}>
+          {time}
+        </option>
+      ))}
+    </select>
   );
 }
 

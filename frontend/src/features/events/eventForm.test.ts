@@ -4,6 +4,8 @@ import {
   isEventFormDirty,
   parseInteger,
   parseJstDateTime,
+  scheduleFromForm,
+  TIME_OPTIONS,
   validateEventForm,
   type EventFormValues,
 } from './eventForm';
@@ -14,8 +16,9 @@ const NOW = new Date('2026-11-25T03:00:00Z');
 
 const VALID: EventFormValues = {
   title: '土曜の午後バレー',
-  startsAt: '2026-12-05T13:00',
-  endsAt: '2026-12-05T16:00',
+  date: '2026-12-05',
+  startTime: '13:00',
+  endTime: '16:00',
   area: 'nakamura',
   targetLevels: ['beginner'],
   capacity: '12',
@@ -63,7 +66,17 @@ describe('入力の検証', () => {
 
     expect(result.ok).toBe(false);
     expect(Object.keys(result.ok ? {} : result.errors).sort()).toEqual(
-      ['address', 'area', 'capacity', 'endsAt', 'fee', 'startsAt', 'targetLevels', 'title'].sort(),
+      [
+        'address',
+        'area',
+        'capacity',
+        'date',
+        'endTime',
+        'fee',
+        'startTime',
+        'targetLevels',
+        'title',
+      ].sort(),
     );
   });
 
@@ -123,35 +136,62 @@ describe('入力の検証', () => {
 });
 
 describe('日時の検証', () => {
+  it('時刻は15分刻みで、00:00〜23:45', () => {
+    expect(TIME_OPTIONS).toHaveLength(96);
+    expect(TIME_OPTIONS.slice(0, 3)).toEqual(['00:00', '00:15', '00:30']);
+    expect(TIME_OPTIONS.at(-1)).toBe('23:45');
+  });
+
+  it('日付・開始時刻・終了時刻から、開始と終了の日時を作る', () => {
+    expect(scheduleFromForm(VALID)).toEqual({
+      startsAt: new Date('2026-12-05T04:00:00Z'),
+      endsAt: new Date('2026-12-05T07:00:00Z'),
+      nextDay: false,
+    });
+  });
+
+  it('終了が開始より前なら、翌日として扱う', () => {
+    const schedule = scheduleFromForm({ date: '2026-12-05', startTime: '22:00', endTime: '01:30' });
+    expect(schedule).toEqual({
+      startsAt: new Date('2026-12-05T13:00:00Z'),
+      endsAt: new Date('2026-12-05T16:30:00Z'),
+      nextDay: true,
+    });
+    const result = validateEventForm({ ...VALID, startTime: '22:00', endTime: '01:30' }, NOW, 'r');
+    expect(result.ok && result.input.endsAt).toBe('2026-12-05T16:30:00.000Z');
+  });
+
+  it('15分刻みでない時刻は受け付けない', () => {
+    expect(scheduleFromForm({ ...VALID, startTime: '13:10' })).toBeNull();
+  });
+
+  it('開始と終了が同じ時刻なら誤り', () => {
+    expect(errorsOf({ endTime: '13:00' }).endTime).toBe(
+      '終了時刻は、開始時刻と違う時刻にしてください。',
+    );
+  });
+
   it('開始は今より後', () => {
-    expect(errorsOf({ startsAt: '2026-11-25T12:00', endsAt: '2026-11-25T14:00' }).startsAt).toBe(
+    expect(errorsOf({ date: '2026-11-25', startTime: '12:00', endTime: '14:00' }).startTime).toBe(
       '開始は、今より後の日時にしてください。',
     );
     expect(
-      errorsOf({ startsAt: '2026-11-25T12:01', endsAt: '2026-11-25T14:00' }).startsAt,
+      errorsOf({ date: '2026-11-25', startTime: '12:15', endTime: '14:00' }).startTime,
     ).toBeUndefined();
   });
 
   it('開始は1年以内', () => {
     expect(
-      errorsOf({ startsAt: '2027-11-25T12:00', endsAt: '2027-11-25T14:00' }).startsAt,
+      errorsOf({ date: '2027-11-25', startTime: '12:00', endTime: '14:00' }).startTime,
     ).toBeUndefined();
-    expect(errorsOf({ startsAt: '2027-11-25T12:01', endsAt: '2027-11-25T14:00' }).startsAt).toBe(
+    expect(errorsOf({ date: '2027-11-25', startTime: '12:15', endTime: '14:00' }).startTime).toBe(
       '開始は、1年以内の日時にしてください。',
     );
   });
 
-  it('終了は開始より後', () => {
-    expect(errorsOf({ endsAt: '2026-12-05T13:00' }).endsAt).toBe(
-      '終了は、開始より後の日時にしてください。',
-    );
-  });
-
-  it('開催時間は24時間以内', () => {
-    expect(errorsOf({ endsAt: '2026-12-06T13:00' }).endsAt).toBeUndefined();
-    expect(errorsOf({ endsAt: '2026-12-06T13:01' }).endsAt).toBe(
-      '開催時間は、24時間以内にしてください。',
-    );
+  it('開催時間は、翌日にかかっても24時間未満になる', () => {
+    const result = validateEventForm({ ...VALID, startTime: '13:00', endTime: '12:45' }, NOW, 'r');
+    expect(result.ok).toBe(true);
   });
 
   it('日時は、端末の時間帯によらず日本時間として読む', () => {

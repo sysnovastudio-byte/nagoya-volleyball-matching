@@ -54,18 +54,27 @@ async function findToast() {
   return region;
 }
 
-/** 日本時間で、今日から数えた日の時刻を datetime-local の形で返す。 */
-function jstLocal(daysFromNow: number, hour: number) {
+/** 日本時間で、今日から数えた日を「YYYY-MM-DD」の形で返す。 */
+function jstDate(daysFromNow: number) {
   const date = new Date(Date.now() + 9 * 60 * 60 * 1000);
   date.setUTCDate(date.getUTCDate() + daysFromNow);
-  date.setUTCHours(hour, 0, 0, 0);
-  return date.toISOString().slice(0, 16);
+  return date.toISOString().slice(0, 10);
+}
+
+async function fillSchedule(
+  user: ReturnType<typeof userEvent.setup>,
+  daysFromNow: number,
+  start: string,
+  end: string,
+) {
+  fireEvent.change(screen.getByLabelText('日付'), { target: { value: jstDate(daysFromNow) } });
+  await user.selectOptions(screen.getByLabelText('開始時刻'), start);
+  await user.selectOptions(screen.getByLabelText(/終了時刻/), end);
 }
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/タイトル/), '日曜の練習会');
-  fireEvent.change(screen.getByLabelText(/開始の日時/), { target: { value: jstLocal(7, 13) } });
-  fireEvent.change(screen.getByLabelText(/終了の日時/), { target: { value: jstLocal(7, 16) } });
+  await fillSchedule(user, 7, '13:00', '16:00');
   await user.selectOptions(screen.getByLabelText(/開催エリア/), '中区');
   await user.click(screen.getByLabelText('初心者'));
   await user.type(screen.getByLabelText(/募集人数/), '8');
@@ -287,16 +296,43 @@ describe('募集作成', () => {
     expect(screen.getByRole('heading', { level: 1, name: '会話は準備中です' })).toBeInTheDocument();
   });
 
-  it('深夜にかかる場合は注意を示す', async () => {
+  it('終了が開始より前なら翌日として扱い、深夜にかかる注意を示す', async () => {
+    const user = userEvent.setup();
     renderApp('/events/new', { userId: 'dev-user-a' });
     await screen.findByRole('heading', { level: 1, name: '募集を作る' });
 
-    fireEvent.change(screen.getByLabelText(/開始の日時/), { target: { value: jstLocal(7, 21) } });
-    fireEvent.change(screen.getByLabelText(/終了の日時/), {
-      target: { value: jstLocal(8, 1) },
-    });
+    await fillSchedule(user, 7, '21:00', '01:00');
 
+    expect(screen.getByText('翌日')).toBeInTheDocument();
+    expect(screen.getByLabelText(/終了時刻/)).toHaveAccessibleDescription(
+      '終了時刻が開始より前のため、翌日の01:00に終わります。',
+    );
     expect(screen.getByText(/深夜（午後11時〜翌午前6時）にかかります。/)).toBeInTheDocument();
+  });
+
+  it('タイトルに入力例を示し、時刻は15分刻みで選ぶ', async () => {
+    renderApp('/events/new', { userId: 'dev-user-a' });
+
+    expect(await screen.findByLabelText(/タイトル/)).toHaveAttribute(
+      'placeholder',
+      '例：初心者歓迎！土曜午後の練習',
+    );
+    const options = within(screen.getByLabelText('開始時刻')).getAllByRole('option');
+    expect(options.slice(1, 4).map((option) => option.textContent)).toEqual([
+      '00:00',
+      '00:15',
+      '00:30',
+    ]);
+    expect(options).toHaveLength(97);
+  });
+
+  it('説明書きは、残すと決めたものだけ', async () => {
+    renderApp('/events/new', { userId: 'dev-user-a' });
+
+    expect(await screen.findByText('アプリの中では支払えません。')).toBeInTheDocument();
+    expect(screen.getByText('住所や連絡先は書かないでください。')).toBeInTheDocument();
+    expect(screen.queryByText('募集を作る前に')).not.toBeInTheDocument();
+    expect(screen.queryByText(/名古屋市の16区から選びます/)).not.toBeInTheDocument();
   });
 
   it('公開する項目と、承認された人だけの項目を分けて示す', async () => {
