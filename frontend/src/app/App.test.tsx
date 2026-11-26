@@ -1,12 +1,12 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthRepositoryContext } from '../features/auth/repositoryContext';
 import type { AuthRepository } from '../features/auth/types';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
 import type { EventDetail, EventRepository } from '../features/events/types';
-import { App } from './App';
+import { appRoutes } from './App';
 
 const EVENT: EventDetail = {
   id: 'event-1',
@@ -46,9 +46,7 @@ function renderApp(path: string, repository = createRepository()) {
   render(
     <AuthRepositoryContext value={guestAuth}>
       <EventRepositoryContext value={repository}>
-        <MemoryRouter initialEntries={[path]}>
-          <App />
-        </MemoryRouter>
+        <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
       </EventRepositoryContext>
     </AuthRepositoryContext>,
   );

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { createDevAuthRepository } from '../dev/devAuthRepository';
 import { createDevDatabase } from '../dev/devDatabase';
@@ -9,7 +9,7 @@ import { createDevSession } from '../dev/devSession';
 import { AuthRepositoryContext } from '../features/auth/repositoryContext';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
 import type { EventRepository } from '../features/events/types';
-import { App } from './App';
+import { appRoutes } from './App';
 
 const HOST = 'dev-user-b';
 const HOSTED_EVENT = 'dev-beginner-afternoon';
@@ -25,9 +25,7 @@ function renderApp(
   render(
     <AuthRepositoryContext value={createDevAuthRepository({ db, session })}>
       <EventRepositoryContext value={eventRepository}>
-        <MemoryRouter initialEntries={[path]}>
-          <App />
-        </MemoryRouter>
+        <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
       </EventRepositoryContext>
     </AuthRepositoryContext>,
   );
@@ -235,6 +233,42 @@ describe('募集作成', () => {
     await user.click(screen.getByRole('button', { name: 'やめる' }));
     await user.click(screen.getByRole('button', { name: '入力をやめる' }));
     expect(await screen.findByText('これからの募集')).toBeInTheDocument();
+  });
+
+  it('入力中に下部の移動を押したときも確認し、続けるなら入力を残す', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/new', { userId: 'dev-user-a' });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await user.type(screen.getByLabelText(/タイトル/), '途中');
+    const homeLink = () => {
+      const [nav] = screen.getAllByRole('navigation', { name: '主な移動' });
+      if (!nav) throw new Error('移動がありません。');
+      return within(nav).getByRole('link', { name: 'ホーム' });
+    };
+
+    await user.click(homeLink());
+    expect(
+      screen.getByText('入力した内容は保存されません。入力をやめますか？'),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '入力を続ける' }));
+    expect(screen.getByRole('heading', { level: 1, name: '募集を作る' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/タイトル/)).toHaveValue('途中');
+
+    await user.click(homeLink());
+    await user.click(screen.getByRole('button', { name: '入力をやめる' }));
+    expect(await screen.findByText('これからの募集')).toBeInTheDocument();
+  });
+
+  it('何も入力していなければ、確認せずに移る', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/new', { userId: 'dev-user-a' });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+
+    const [nav] = screen.getAllByRole('navigation', { name: '主な移動' });
+    if (!nav) throw new Error('移動がありません。');
+    await user.click(within(nav).getByRole('link', { name: '会話' }));
+
+    expect(screen.getByRole('heading', { level: 1, name: '会話は準備中です' })).toBeInTheDocument();
   });
 
   it('深夜にかかる場合は注意を示す', async () => {

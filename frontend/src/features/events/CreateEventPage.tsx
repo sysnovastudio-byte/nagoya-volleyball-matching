@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useBlocker, useLocation, useNavigate } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
@@ -101,11 +101,18 @@ function CreateEventForm() {
   const [validated, setValidated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  // 公開に成功した後の移動は、確認せずに通す
+  const createdRef = useRef(false);
   // 状態の更新を待たずに、二重の送信を止める
   const submittingRef = useRef(false);
   const submitErrorRef = useRef<HTMLParagraphElement>(null);
   const dirty = isEventFormDirty(values);
+
+  // 入力中に、画面の中のリンク・下部の移動・戻る操作・「やめる」で移るときは確認する
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty && !createdRef.current && currentLocation.pathname !== nextLocation.pathname,
+  );
 
   // 入力中に、再読み込み・タブを閉じるときは、ブラウザの確認を出す
   useEffect(() => {
@@ -137,7 +144,7 @@ function CreateEventForm() {
     event.preventDefault();
     if (submittingRef.current) return;
     setSubmitError(null);
-    setConfirmingLeave(false);
+    if (blocker.state === 'blocked') blocker.reset();
 
     const result = validateEventForm(values, new Date(), clientRequestId);
     setValidated(true);
@@ -155,6 +162,7 @@ function CreateEventForm() {
       const created = await repository.createEvent(result.input);
       if (created.status === 'created') {
         const state: EventDetailLocationState = { justCreated: true };
+        createdRef.current = true;
         // 戻る操作で、送信済みの入力画面に戻らないようにする
         await navigate(`/events/${created.eventId}`, { replace: true, state });
         return;
@@ -476,23 +484,18 @@ function CreateEventForm() {
               {submitError}
             </p>
           )}
-          {confirmingLeave ? (
+          {blocker.state === 'blocked' ? (
             <LeaveConfirm
               onContinue={() => {
-                setConfirmingLeave(false);
+                blocker.reset();
               }}
-              onLeave={leave}
+              onLeave={() => {
+                blocker.proceed();
+              }}
             />
           ) : (
             <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                disabled={submitting}
-                onClick={() => {
-                  if (dirty) setConfirmingLeave(true);
-                  else leave();
-                }}
-              >
+              <Button variant="secondary" disabled={submitting} onClick={leave}>
                 やめる
               </Button>
               <div className="flex grow flex-col">

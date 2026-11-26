@@ -75,6 +75,7 @@ interface MemberNavProps {
 
 /**
  * ログイン後の主な移動。スマートフォンは下部、PCは上部に置く。
+ * 下部のラベルだけは、例外として12pxとし、アイコンを併記する（docs/11の5-1）。
  * 未読の通知の数は、通知（SCR-012）を作るときに加える。
  */
 export function MemberNav({ placement }: MemberNavProps) {
