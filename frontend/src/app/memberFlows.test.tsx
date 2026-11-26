@@ -104,13 +104,16 @@ describe('ログイン後の移動', () => {
   it('5つの移動先を示す', async () => {
     renderApp('/', { userId: 'dev-user-a' });
 
-    const [nav] = await screen.findAllByRole('navigation', { name: '主な移動' });
-    if (!nav) throw new Error('移動がありません。');
-    expect(
+    // 1つ目はPCの上部、2つ目はスマートフォンの下部
+    const [top, bottom] = await screen.findAllByRole('navigation', { name: '主な移動' });
+    if (!top || !bottom) throw new Error('移動がありません。');
+    const labels = (nav: HTMLElement) =>
       within(nav)
         .getAllByRole('link')
-        .map((link) => link.textContent),
-    ).toEqual(['ホーム', '申請と募集', '会話', '通知', 'プロフィール']);
+        .map((link) => link.textContent);
+    // PCの上部は「プロフィール」の代わりにニックネームを示す（読み上げでは「プロフィール：」を添える）
+    expect(labels(top)).toEqual(['ホーム', '申請と募集', '会話', '通知', 'プロフィール：あおい']);
+    expect(labels(bottom)).toEqual(['ホーム', '申請と募集', '会話', '通知', 'プロフィール']);
     expect(screen.queryByRole('link', { name: 'ログイン' })).not.toBeInTheDocument();
   });
 

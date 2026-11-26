@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router';
+import { useViewer } from '../features/auth/sessionContext';
 
 interface NavItem {
   to: string;
@@ -18,7 +19,7 @@ const ICON_PROPS = {
   className: 'size-6 shrink-0',
 } as const;
 
-/** ログイン後の5つの移動先（docs/11の5-1・追加-12）。まだない画面（会話・通知）は仮の画面へつなぐ。 */
+/** ログイン後の5つの移動先（docs/11の5-1・追加-12）。まだない画面（通知）は仮の画面へつなぐ。 */
 const NAV_ITEMS: NavItem[] = [
   {
     to: '/',
@@ -80,6 +81,8 @@ interface MemberNavProps {
  */
 export function MemberNav({ placement }: MemberNavProps) {
   const isBottom = placement === 'bottom';
+  // PCの上部では「プロフィール」の代わりにニックネームを示す（docs/11の5-1、2026-11-26）
+  const nickname = useViewer()?.profile?.nickname;
 
   return (
     <nav aria-label="主な移動">
@@ -100,7 +103,14 @@ export function MemberNav({ placement }: MemberNavProps) {
               }
             >
               {item.icon}
-              <span className="text-center">{item.label}</span>
+              {!isBottom && item.to === '/profile' && nickname ? (
+                <>
+                  <span className="sr-only">プロフィール：</span>
+                  <span className="max-w-40 truncate">{nickname}</span>
+                </>
+              ) : (
+                <span className="text-center">{item.label}</span>
+              )}
             </NavLink>
           </li>
         ))}
