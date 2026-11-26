@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { Avatar } from './Avatar';
+import type { ProfileLocationState } from './ProfileEditPage';
 import { displayName, experienceLabel } from './format';
 import { useProfileRepository } from './repositoryContext';
 import type { PublicProfile } from './types';
@@ -17,12 +18,13 @@ import type { PublicProfile } from './types';
 export function MyProfilePage() {
   const repository = useProfileRepository();
   const { result, retry } = useResource('my-profile', () => repository.getMyProfile());
+  const saved = (useLocation().state as ProfileLocationState | null)?.profileSaved === true;
 
   if (result.status === 'loading') return <Loading />;
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   if (!result.value) return <NoProfile />;
   return (
-    <ProfileView profile={result.value}>
+    <ProfileView profile={result.value} notice={saved ? 'プロフィールを保存しました。' : null}>
       <ButtonLink to="/profile/edit">プロフィールを編集</ButtonLink>
       <ButtonLink to="/settings" variant="secondary">
         設定
@@ -79,18 +81,27 @@ function NoProfile() {
 
 interface ProfileViewProps {
   profile: PublicProfile;
+  notice?: string | null;
   /** 本人の操作 */
   children?: ReactNode;
 }
 
 /** 画像（の代わりの絵柄）と名前、公開項目の順（docs/11の5-1）。 */
-function ProfileView({ profile, children }: ProfileViewProps) {
+function ProfileView({ profile, notice = null, children }: ProfileViewProps) {
   const name = displayName(profile);
   useDocumentTitle(`${name}のプロフィール`);
   const experience = experienceLabel(profile);
 
   return (
     <div className="mx-auto w-full max-w-160 px-4 py-6">
+      {notice && (
+        <p
+          role="status"
+          className="mb-4 rounded-xl border border-main bg-main-tint px-4 py-3 font-bold text-main-strong"
+        >
+          {notice}
+        </p>
+      )}
       <div className="mb-5 flex items-center gap-4">
         <Avatar size="large" />
         <h1 className="min-w-0 text-2xl font-bold break-words">{name}</h1>

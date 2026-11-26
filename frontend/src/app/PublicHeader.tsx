@@ -15,8 +15,10 @@ interface PublicHeaderProps {
  */
 export function PublicHeader({ mode }: PublicHeaderProps) {
   const { pathname, search } = useLocation();
-  // ログイン画面・新規登録の画面から、さらに戻り先を重ねない
-  const here = pathname === '/login' || pathname === '/signup' ? '/' : `${pathname}${search}`;
+  // ログイン・新規登録・メール認証の画面から、さらに戻り先を重ねない
+  const isAuthPage =
+    pathname === '/login' || pathname.startsWith('/signup') || pathname.startsWith('/auth/');
+  const here = isAuthPage ? '/' : `${pathname}${search}`;
 
   return (
     <header className="border-b border-line bg-surface">

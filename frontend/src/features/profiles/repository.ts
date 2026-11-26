@@ -7,6 +7,7 @@ const notConnected = () => Promise.reject(new Error('データの取得先に接
 const notConnectedRepository: ProfileRepository = {
   getProfiles: notConnected,
   getMyProfile: notConnected,
+  saveProfile: notConnected,
 };
 
 /** 開発時だけ、ダミーデータの実装を動的に読み込む（events/repository.ts と同じ方法）。 */
@@ -18,6 +19,7 @@ function createRepository(): ProfileRepository {
     return {
       getProfiles: async (userIds) => (await repository()).getProfiles(userIds),
       getMyProfile: async () => (await repository()).getMyProfile(),
+      saveProfile: async (input) => (await repository()).saveProfile(input),
     };
   }
   return notConnectedRepository;

@@ -1,12 +1,16 @@
 import { createRoutesFromElements, Route } from 'react-router';
 import { ActivityPage } from '../features/applications/ActivityPage';
 import { ApplicantsPage } from '../features/applications/ApplicantsPage';
+import { ConfirmEmailPage, VerificationSentPage } from '../features/auth/EmailVerificationPages';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireLogin } from '../features/auth/RequireLogin';
+import { RequireProfile } from '../features/auth/RequireProfile';
 import { SessionProvider } from '../features/auth/SessionProvider';
+import { SignUpPage } from '../features/auth/SignUpPage';
 import { CreateEventPage } from '../features/events/CreateEventPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventListPage } from '../features/events/EventListPage';
+import { ProfileEditPage } from '../features/profiles/ProfileEditPage';
 import { MyProfilePage, UserProfilePage } from '../features/profiles/ProfilePages';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { AppLayout } from './AppLayout';
@@ -31,17 +35,22 @@ export const appRoutes = createRoutesFromElements(
     <Route index element={<EventListPage />} />
     <Route path="events/:eventId" element={<EventDetailPage />} />
     <Route path="login" element={<LoginPage />} />
-    <Route path="signup" element={<PendingPage title="新規登録" />} />
+    <Route path="signup" element={<SignUpPage />} />
+    <Route path="signup/sent" element={<VerificationSentPage />} />
+    <Route path="auth/confirm" element={<ConfirmEmailPage />} />
 
     {/* 要ログインの画面。仮の画面は、作るときに置き換える */}
     <Route element={<RequireLogin />}>
-      <Route path="events/new" element={<CreateEventPage />} />
+      {/* 必須プロフィールが必要な画面。未登録なら SCR-014 へ移る（docs/11の3-4） */}
+      <Route element={<RequireProfile />}>
+        <Route path="events/new" element={<CreateEventPage />} />
+        <Route path="conversations" element={<PendingPage title="会話" />} />
+      </Route>
       <Route path="events/:eventId/applicants" element={<ApplicantsPage />} />
       <Route path="activity" element={<ActivityPage />} />
-      <Route path="conversations" element={<PendingPage title="会話" />} />
       <Route path="notifications" element={<PendingPage title="通知" />} />
       <Route path="profile" element={<MyProfilePage />} />
-      <Route path="profile/edit" element={<PendingPage title="プロフィールの入力" />} />
+      <Route path="profile/edit" element={<ProfileEditPage />} />
       <Route path="users/:userId" element={<UserProfilePage />} />
     </Route>
     {/* 要ログイン。ログアウトの後の移動先が違うため、画面の中で確認する */}

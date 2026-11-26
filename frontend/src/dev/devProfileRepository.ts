@@ -1,3 +1,4 @@
+import { validateProfileForm } from '../features/profiles/profileRules';
 import type { ProfileRepository, PublicProfile } from '../features/profiles/types';
 import { findDevUser, type DevDatabase } from './devDatabase';
 import type { DevSession } from './devSession';
@@ -27,7 +28,7 @@ interface DevProfileRepositoryOptions {
 
 /**
  * 【開発専用】プロフィールの取得。**ここでの判定は画面の確認用であり、権限の確認にはならない。**
- * 本番では get_profiles（docs/06の6-5）がログイン済みかを確かめる。
+ * 本番では get_profiles・save_profile（docs/06の6-5）がログイン済みかなどを確かめる。
  */
 export function createDevProfileRepository({
   db,
@@ -46,6 +47,17 @@ export function createDevProfileRepository({
     getMyProfile: () => {
       const user = findDevUser(db, session.getUserId());
       return Promise.resolve((user && toPublicProfile(user)) ?? null);
+    },
+    saveProfile: (input) => {
+      const user = findDevUser(db, session.getUserId());
+      if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
+      // 画面と同じ検証。本番では save_profile が確かめる
+      const checked = validateProfileForm({ ...input, bio: input.bio ?? '' });
+      if (!checked.ok) return Promise.resolve({ status: 'rejected', reason: 'invalid' });
+      user.profile = { ...checked.input };
+      // ログイン状態の表示（ニックネーム・プロフィールの有無）を更新する
+      session.notify();
+      return Promise.resolve({ status: 'saved' });
     },
   };
 }

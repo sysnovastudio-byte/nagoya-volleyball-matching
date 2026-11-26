@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
+import { notConnectedAuthRepository } from '../features/auth/repository';
 import { AuthRepositoryContext } from '../features/auth/repositoryContext';
 import type { AuthRepository } from '../features/auth/types';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
@@ -30,6 +31,9 @@ const EVENT: EventDetail = {
 const guestAuth: AuthRepository = {
   getViewer: () => Promise.resolve(null),
   onViewerChange: () => () => undefined,
+  signIn: () => Promise.reject(new Error('使わない')),
+  signUp: () => Promise.reject(new Error('使わない')),
+  verifyEmail: () => Promise.reject(new Error('使わない')),
   signOut: () => Promise.resolve(),
 };
 
@@ -169,24 +173,41 @@ describe('募集詳細（未ログイン）', () => {
   });
 });
 
-describe('まだない画面', () => {
-  it('準備中であることを示す', () => {
-    renderApp('/signup');
-
-    expect(screen.getByText('新規登録は準備中です')).toBeInTheDocument();
-  });
-
-  it('ログイン画面では、開発用の帯で切り替えるよう案内する', () => {
-    renderApp('/login');
-
-    expect(screen.getByText(/開発用の帯で利用者を切り替えてください/)).toBeInTheDocument();
-
-    expect(screen.getByText('ログインは準備中です')).toBeInTheDocument();
-  });
-
+describe('ページがない場合', () => {
   it('知らないアドレスでは、ページがないことを示す', () => {
     renderApp('/unknown');
 
     expect(screen.getByText('ページが見つかりません')).toBeInTheDocument();
+  });
+});
+
+describe('本番用のビルドの認証', () => {
+  function renderWithoutAuth(path: string) {
+    render(
+      <AuthRepositoryContext value={notConnectedAuthRepository}>
+        <EventRepositoryContext value={createRepository()}>
+          <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
+        </EventRepositoryContext>
+      </AuthRepositoryContext>,
+    );
+  }
+
+  it('ログインは「接続していません」になる', async () => {
+    const user = userEvent.setup();
+    renderWithoutAuth('/login');
+
+    await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
+    await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '今はログインできません。認証の仕組みに接続していません。',
+    );
+  });
+
+  it('メール認証のリンクも「接続していません」になる', async () => {
+    renderWithoutAuth('/auth/confirm?token=dev-verify-success');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('認証の仕組みに接続していません');
   });
 });

@@ -10,19 +10,26 @@ export interface DevSession {
   getUserId: () => string | null;
   setUserId: (userId: string | null) => void;
   subscribe: (listener: () => void) => () => void;
+  /** 利用者は同じまま、プロフィールなどが変わったことを知らせる */
+  notify: () => void;
 }
 
 export function createDevSession(initialUserId: string | null = null): DevSession {
   let userId = initialUserId;
   const listeners = new Set<() => void>();
 
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
+
   return {
     getUserId: () => userId,
     setUserId: (next) => {
       if (next === userId) return;
       userId = next;
-      for (const listener of listeners) listener();
+      notify();
     },
+    notify,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {

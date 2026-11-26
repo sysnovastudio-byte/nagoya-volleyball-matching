@@ -19,8 +19,18 @@ export type PublicProfile =
   /** 退会した人。名前の代わりに「退会したユーザー」と表示する（docs/06の4-2） */
   | { userId: string; isWithdrawn: true };
 
+/** プロフィールの保存で送る内容（docs/06の6-5の save_profile）。サイクル1は3項目だけ（M-01）。 */
+export interface ProfileInput {
+  nickname: string;
+  experienceLevel: ExperienceLevel;
+  bio: string | null;
+}
+
+export type SaveProfileResult =
+  { status: 'saved' } | { status: 'rejected'; reason: 'notLoggedIn' | 'invalid' };
+
 /**
- * プロフィールの取得の窓口。将来は docs/06の6-5の get_profiles と get_my_profile【提案・未承認】を呼ぶ実装に置き換える。
+ * プロフィールの取得の窓口。将来は docs/06の6-5の get_profiles・get_my_profile【提案・未承認】・save_profile を呼ぶ実装に置き換える。
  * 自分のプロフィールは、窓口が内部でログイン状態から決める。画面から自分のIDを渡さない。
  */
 export interface ProfileRepository {
@@ -28,4 +38,6 @@ export interface ProfileRepository {
   getProfiles(userIds: string[]): Promise<PublicProfile[]>;
   /** 自分のプロフィール。未登録と未ログインは null を返す。 */
   getMyProfile(): Promise<PublicProfile | null>;
+  /** 自分のプロフィールを登録・更新する（save_profile）。保存したら、ログイン状態の表示も変わる。 */
+  saveProfile(input: ProfileInput): Promise<SaveProfileResult>;
 }

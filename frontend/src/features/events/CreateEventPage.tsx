@@ -69,22 +69,13 @@ export function CreateEventPage() {
   useDocumentTitle('募集を作る');
   const viewer = useViewer();
 
-  // 画面の切り替えは表示のためだけのもの。作成の可否は取得の窓口（本番はDB）が判定する
+  // 画面の切り替えは表示のためだけのもの。作成の可否は取得の窓口（本番はDB）が判定する。
+  // プロフィール未登録の人は、経路の RequireProfile が入力画面へ移す
   if (viewer?.ageCategory === 'minor') {
     return (
       <StatusMessage title="18歳未満の方は、募集を作成できません" headingLevel="h1">
         <p>参加の申請と、主催者への質問はできます。</p>
         <ButtonLink to="/">募集一覧へ</ButtonLink>
-      </StatusMessage>
-    );
-  }
-  if (viewer && !viewer.profile) {
-    return (
-      <StatusMessage title="プロフィールを登録してください" headingLevel="h1">
-        <p>募集を作るには、ニックネームと経験レベルの登録が必要です。</p>
-        <ButtonLink to={`/profile/edit?${new URLSearchParams({ next: '/events/new' }).toString()}`}>
-          プロフィールを登録する
-        </ButtonLink>
       </StatusMessage>
     );
   }
