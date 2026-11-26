@@ -15,9 +15,9 @@ import { ProfileEditPage } from '../features/profiles/ProfileEditPage';
 import { MyProfilePage, UserProfilePage } from '../features/profiles/ProfilePages';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { ConversationsPage } from '../features/conversations/ConversationsPage';
+import { NotificationsPage } from '../features/notifications/NotificationsPage';
 import { AppLayout } from './AppLayout';
 import { NotFoundPage } from './NotFoundPage';
-import { PendingPage } from './PendingPage';
 
 /** すべての画面の外側。ログイン状態を、どの画面からも読めるようにする。 */
 function RootLayout() {
@@ -52,7 +52,7 @@ export const appRoutes = createRoutesFromElements(
       </Route>
       <Route path="events/:eventId/applicants" element={<ApplicantsPage />} />
       <Route path="activity" element={<ActivityPage />} />
-      <Route path="notifications" element={<PendingPage title="通知" />} />
+      <Route path="notifications" element={<NotificationsPage />} />
       <Route path="profile" element={<MyProfilePage />} />
       <Route path="profile/edit" element={<ProfileEditPage />} />
       <Route path="users/:userId" element={<UserProfilePage />} />

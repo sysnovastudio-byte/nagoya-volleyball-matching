@@ -7,6 +7,7 @@ import { createDevConversationRepository } from '../dev/devConversationRepositor
 import { createDevAuthRepository } from '../dev/devAuthRepository';
 import { createDevDatabase } from '../dev/devDatabase';
 import { createDevEventRepository } from '../dev/devEventRepository';
+import { createDevNotificationRepository } from '../dev/devNotificationRepository';
 import { createDevProfileRepository } from '../dev/devProfileRepository';
 import { createDevSession } from '../dev/devSession';
 import { ApplicationRepositoryContext } from '../features/applications/repositoryContext';
@@ -14,6 +15,7 @@ import { AuthRepositoryContext } from '../features/auth/repositoryContext';
 import { ConversationRepositoryContext } from '../features/conversations/repositoryContext';
 import type { ConversationRepository } from '../features/conversations/types';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
+import { NotificationRepositoryContext } from '../features/notifications/repositoryContext';
 import type { EventRepository } from '../features/events/types';
 import { ProfileRepositoryContext } from '../features/profiles/repositoryContext';
 import { appRoutes } from './App';
@@ -47,7 +49,13 @@ function renderApp(
         <ApplicationRepositoryContext value={createDevApplicationRepository({ db, session })}>
           <ProfileRepositoryContext value={createDevProfileRepository({ db, session })}>
             <ConversationRepositoryContext value={conversationRepository}>
-              <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />
+              <NotificationRepositoryContext
+                value={createDevNotificationRepository({ db, session })}
+              >
+                <RouterProvider
+                  router={createMemoryRouter(appRoutes, { initialEntries: [path] })}
+                />
+              </NotificationRepositoryContext>
             </ConversationRepositoryContext>
           </ProfileRepositoryContext>
         </ApplicationRepositoryContext>
@@ -112,20 +120,24 @@ describe('ログイン後の移動', () => {
         .getAllByRole('link')
         .map((link) => link.textContent);
     // PCの上部は「プロフィール」の代わりにニックネームを示す（読み上げでは「プロフィール：」を添える）
-    expect(labels(top)).toEqual(['ホーム', '申請と募集', '会話', '通知', 'プロフィール：あおい']);
-    expect(labels(bottom)).toEqual(['ホーム', '申請と募集', '会話', '通知', 'プロフィール']);
+    // 通知には未読の数を示す（利用者Aには、未読が2件ある）
+    await waitFor(() => {
+      expect(labels(top)).toEqual([
+        'ホーム',
+        '申請と募集',
+        '会話',
+        '2通知（未読2件）',
+        'プロフィール：あおい',
+      ]);
+    });
+    expect(labels(bottom)).toEqual([
+      'ホーム',
+      '申請と募集',
+      '会話',
+      '2通知（未読2件）',
+      'プロフィール',
+    ]);
     expect(screen.queryByRole('link', { name: 'ログイン' })).not.toBeInTheDocument();
-  });
-
-  it('まだない画面は、仮の画面を示す', async () => {
-    const user = userEvent.setup();
-    renderApp('/', { userId: 'dev-user-a' });
-
-    const [nav] = await screen.findAllByRole('navigation', { name: '主な移動' });
-    if (!nav) throw new Error('移動がありません。');
-    await user.click(within(nav).getByRole('link', { name: '通知' }));
-
-    expect(screen.getByRole('heading', { level: 1, name: '通知は準備中です' })).toBeInTheDocument();
   });
 });
 
@@ -311,9 +323,9 @@ describe('募集作成', () => {
 
     const [nav] = screen.getAllByRole('navigation', { name: '主な移動' });
     if (!nav) throw new Error('移動がありません。');
-    await user.click(within(nav).getByRole('link', { name: '通知' }));
+    await user.click(within(nav).getByRole('link', { name: /^通知/ }));
 
-    expect(screen.getByRole('heading', { level: 1, name: '通知は準備中です' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: '通知' })).toBeInTheDocument();
   });
 
   it('終了が開始より前なら翌日として扱い、深夜にかかる注意を示す', async () => {
@@ -724,6 +736,74 @@ describe('申請者一覧（PC）', () => {
 
     expect(await screen.findByRole('button', { name: 'こはるさんを承認する' })).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('通知一覧（SCR-012）', () => {
+  it('自分の通知を新しい順に示し、開くと未読の数が消える', async () => {
+    const user = userEvent.setup();
+    renderApp('/', { userId: 'dev-user-a' });
+
+    const [nav] = await screen.findAllByRole('navigation', { name: '主な移動' });
+    if (!nav) throw new Error('移動がありません。');
+    await user.click(await within(nav).findByRole('link', { name: '通知（未読2件）' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: '通知' })).toBeInTheDocument();
+    const items = screen.getAllByRole('listitem').filter((item) => item.closest('main'));
+    expect(items.map((item) => within(item).getByText(/。$/).textContent)).toEqual([
+      '参加が承認されました。',
+      '募集が非表示になりました。',
+      '参加の申請は却下されました。',
+    ]);
+    // 開いた時点の未読には印を残し、移動の数は消える
+    expect(within(items[0] ?? document.body).getByText('未読')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(nav).getByRole('link', { name: '通知' })).toBeInTheDocument();
+    });
+  });
+
+  it('非表示の募集は名前を示さず、移る先も示さない', async () => {
+    renderApp('/notifications', { userId: 'dev-user-a' });
+
+    const text = await screen.findByText('募集が非表示になりました。');
+    expect(text.closest('a')).toBeNull();
+    const row = text.closest('li');
+    if (!row) throw new Error('通知の行がありません。');
+    expect(within(row).getByText(/非表示になった募集/)).toBeInTheDocument();
+    expect(within(row).queryByText(/非表示の会/)).not.toBeInTheDocument();
+  });
+
+  it('承認の通知から募集詳細へ移る', async () => {
+    const user = userEvent.setup();
+    renderApp('/notifications', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('link', { name: '参加が承認されました。' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '家族や友人と楽しむ午前バレー' }),
+    ).toBeInTheDocument();
+  });
+
+  it('申請すると主催者に届き、通知から申請者一覧へ移る', async () => {
+    const user = userEvent.setup();
+    const { switchUser } = renderApp(`/events/${HOSTED_EVENT}`, { userId: 'dev-user-a' });
+    await user.click(await findFirstButton('参加を申請する'));
+
+    switchUser(HOST);
+    const [nav] = await screen.findAllByRole('navigation', { name: '主な移動' });
+    if (!nav) throw new Error('移動がありません。');
+    await user.click(await within(nav).findByRole('link', { name: '通知（未読2件）' }));
+    await user.click(await screen.findByRole('link', { name: 'あおいさんが参加を申請しました。' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請者一覧' }),
+    ).toBeInTheDocument();
+  });
+
+  it('通知がなければ、その旨を示す', async () => {
+    renderApp('/notifications', { userId: 'dev-user-no-profile' });
+
+    expect(await screen.findByText('まだ通知はありません。')).toBeInTheDocument();
   });
 });
 

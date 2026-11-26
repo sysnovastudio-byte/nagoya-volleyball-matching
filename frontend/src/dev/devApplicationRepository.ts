@@ -8,7 +8,8 @@ import type {
 } from '../features/applications/types';
 import { APPLICATION_LIMITS } from '../features/applications/types';
 import { countApplications, devEventState, findDevUser, type DevDatabase } from './devDatabase';
-import type { DevEventRecord } from './devEvents';
+import type { DevApplicationRecord, DevEventRecord } from './devEvents';
+import { notifyParticipantChange } from './devNotifications';
 import { toPublicProfile } from './devProfileRepository';
 import type { DevSession } from './devSession';
 import { markDevModule } from './marker';
@@ -78,6 +79,13 @@ export function createDevApplicationRepository({
     }
     application.status = next;
     application.decidedAt = current;
+    // 申請者へ通知する（CND-04）。本番では同じトランザクションで作る（docs/06の5-13）
+    notifyParticipantChange(
+      db,
+      application,
+      next === 'approved' ? 'application_approved' : 'application_rejected',
+      current,
+    );
     return { status: 'done' };
   };
 
@@ -122,14 +130,17 @@ export function createDevApplicationRepository({
         return Promise.resolve({ status: 'rejected', reason: 'rateLimited' });
       }
 
-      db.applications.push({
+      const application: DevApplicationRecord = {
         id: `dev-application-${db.applications.length + 1}`,
         eventId,
         userId: user.id,
         status: 'pending',
         appliedAt: current,
         decidedAt: null,
-      });
+      };
+      db.applications.push(application);
+      // 主催者へ通知する（NTF-01）
+      notifyParticipantChange(db, application, 'application_received', current);
       return Promise.resolve({ status: 'applied' });
     },
 
