@@ -1,0 +1,305 @@
+import { useState, type FormEvent } from 'react';
+import { Link, Navigate, useSearchParams } from 'react-router';
+import { useDocumentTitle } from '../../app/useDocumentTitle';
+import { useResource } from '../../app/useResource';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
+import { StatusMessage } from '../../components/ui/StatusMessage';
+import { NEXT_PARAM, safeNextPath } from '../auth/loginRedirect';
+import { useViewer } from '../auth/sessionContext';
+import { levelLabel } from '../events/format';
+import {
+  EMPTY_PROFILE_FORM,
+  EXPERIENCE_LEVELS,
+  PROFILE_LIMITS,
+  validateProfileForm,
+  type ProfileField,
+  type ProfileFieldErrors,
+  type ProfileFormValues,
+} from './profileRules';
+import { useProfileRepository } from './repositoryContext';
+import type { PublicProfile } from './types';
+
+/** 保存した後に、プロフィールの画面へ渡す印。 */
+export interface ProfileLocationState {
+  profileSaved?: boolean;
+}
+
+const FIELD_ORDER: ProfileField[] = ['nickname', 'experienceLevel', 'bio'];
+
+function fieldId(field: ProfileField) {
+  return `profile-${field}`;
+}
+
+/**
+ * SCR-014 プロフィール登録・編集（PROF-01）。サイクル1は、ニックネーム・経験レベル・自己紹介だけ（M-01）。
+ * 画像・年代などの項目と、「18歳以上に変更」の操作は作らない。
+ * 保存した後は、戻り先（next）があればそこへ、なければ登録はホーム、編集はプロフィールへ戻る（追加-10）。
+ */
+export function ProfileEditPage() {
+  const repository = useProfileRepository();
+  const viewer = useViewer();
+  const [searchParams] = useSearchParams();
+  const next = searchParams.get(NEXT_PARAM);
+  const { result, retry } = useResource('my-profile-edit', () => repository.getMyProfile());
+  // 保存の後、ログイン状態の表示が新しくなってから移る。古いままだと、戻り先でまた入力画面へ移されるため
+  const [savedTo, setSavedTo] = useState<string | null>(null);
+
+  if (savedTo) {
+    if (!viewer?.profile) return <Saving />;
+    const state: ProfileLocationState = { profileSaved: true };
+    return <Navigate replace to={savedTo} state={state} />;
+  }
+  if (result.status === 'loading') return <Saving loading />;
+  if (result.status === 'error') return <LoadError onRetry={retry} />;
+
+  const isFirstTime = result.value === null;
+  const destination = next !== null ? safeNextPath(next) : isFirstTime ? '/' : '/profile';
+
+  return (
+    <ProfileForm
+      initial={result.value}
+      isFirstTime={isFirstTime}
+      laterPath={destination}
+      onSaved={() => {
+        setSavedTo(destination);
+      }}
+    />
+  );
+}
+
+function Saving({ loading = false }: { loading?: boolean }) {
+  useDocumentTitle('プロフィール');
+  return (
+    <div role="status" className="px-4 py-12 text-center text-muted">
+      {loading ? 'プロフィールを読み込んでいます' : '保存しました。移動しています'}
+    </div>
+  );
+}
+
+function LoadError({ onRetry }: { onRetry: () => void }) {
+  useDocumentTitle('プロフィール');
+  return (
+    <StatusMessage title="プロフィールを読み込めませんでした" headingLevel="h1" role="alert">
+      <p>通信の状態を確認して、もう一度お試しください。</p>
+      <Button onClick={onRetry}>もう一度読み込む</Button>
+    </StatusMessage>
+  );
+}
+
+function toFormValues(profile: PublicProfile | null): ProfileFormValues {
+  if (!profile || profile.isWithdrawn) return EMPTY_PROFILE_FORM;
+  return {
+    nickname: profile.nickname,
+    experienceLevel: profile.experienceLevel,
+    bio: profile.bio ?? '',
+  };
+}
+
+interface ProfileFormProps {
+  initial: PublicProfile | null;
+  isFirstTime: boolean;
+  /** 「あとで入力する」「やめる」で戻る先 */
+  laterPath: string;
+  onSaved: () => void;
+}
+
+function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormProps) {
+  const title = isFirstTime ? 'プロフィールを登録' : 'プロフィールを編集';
+  useDocumentTitle(title);
+  const repository = useProfileRepository();
+  const [values, setValues] = useState<ProfileFormValues>(() => toFormValues(initial));
+  const [errors, setErrors] = useState<ProfileFieldErrors>({});
+  const [validated, setValidated] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const update = (next: ProfileFormValues) => {
+    setValues(next);
+    if (validated) {
+      const checked = validateProfileForm(next);
+      setErrors(checked.ok ? {} : checked.errors);
+    }
+  };
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (submitting) return;
+    setSubmitError(null);
+    const checked = validateProfileForm(values);
+    setValidated(true);
+    if (!checked.ok) {
+      setErrors(checked.errors);
+      const first = FIELD_ORDER.find((field) => checked.errors[field]);
+      if (first) document.getElementById(fieldId(first))?.focus();
+      return;
+    }
+    setErrors({});
+
+    setSubmitting(true);
+    try {
+      const result = await repository.saveProfile(checked.input);
+      if (result.status === 'saved') {
+        onSaved();
+        return;
+      }
+      setSubmitError(
+        result.reason === 'notLoggedIn'
+          ? 'ログインの状態が変わりました。ログインし直してください。'
+          : '入力の内容を確かめてください。',
+      );
+    } catch {
+      setSubmitError('保存できませんでした。通信の状態を確認して、もう一度お試しください。');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-160 px-4 py-6">
+      <h1 className="mb-2 text-2xl font-bold">{title}</h1>
+      {isFirstTime && (
+        <p className="mb-2">
+          募集への申請や募集の作成には、ニックネームと経験レベルの登録が必要です。
+        </p>
+      )}
+      <p className="mb-4 text-muted">
+        <RequiredMark required /> の項目は、入力が必要です。
+      </p>
+
+      {/* 公開範囲を項目ごとに示す（docs/11の5-1） */}
+      <div className="mb-6 rounded-xl border border-line bg-surface px-4 py-3">
+        <p>
+          この画面の項目は、<strong>ログインしている利用者</strong>
+          に公開されます。ログインしていない人には公開されません。
+        </p>
+        <p className="text-muted">メールアドレスは、ほかの利用者に公開されません。</p>
+      </div>
+
+      <form
+        noValidate
+        aria-label={title}
+        onSubmit={(event) => {
+          void onSubmit(event);
+        }}
+        className="flex flex-col gap-6"
+      >
+        {submitError && (
+          <p
+            role="alert"
+            className="rounded-xl border border-danger px-4 py-3 font-bold text-danger"
+          >
+            {submitError}
+          </p>
+        )}
+
+        <FormField
+          id={fieldId('nickname')}
+          label="ニックネーム"
+          required
+          hint={<ScopeHint text="ほかの人と同じニックネームでも登録できます。" />}
+          error={errors.nickname}
+          counter={{ value: values.nickname.trim(), max: PROFILE_LIMITS.nicknameMax }}
+        >
+          {(control) => (
+            <input
+              {...control}
+              type="text"
+              autoComplete="nickname"
+              value={values.nickname}
+              onChange={(event) => {
+                update({ ...values, nickname: event.target.value });
+              }}
+              className={INPUT_CLASS}
+            />
+          )}
+        </FormField>
+
+        <fieldset
+          aria-describedby={[
+            'profile-experienceLevel-hint',
+            errors.experienceLevel ? 'profile-experienceLevel-error' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          className="flex flex-col gap-1"
+        >
+          <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
+            経験レベル
+            <RequiredMark required />
+          </legend>
+          <p id="profile-experienceLevel-hint" className="text-muted">
+            <ScopeHint />
+          </p>
+          <div className="flex flex-wrap gap-x-4">
+            {EXPERIENCE_LEVELS.map((level, index) => (
+              <label key={level} className="flex min-h-11 items-center gap-2">
+                <input
+                  id={index === 0 ? fieldId('experienceLevel') : undefined}
+                  type="radio"
+                  name="experienceLevel"
+                  value={level}
+                  checked={values.experienceLevel === level}
+                  aria-invalid={errors.experienceLevel ? true : undefined}
+                  onChange={() => {
+                    update({ ...values, experienceLevel: level });
+                  }}
+                  className="size-5"
+                />
+                {levelLabel(level)}
+              </label>
+            ))}
+          </div>
+          {errors.experienceLevel && (
+            <p id="profile-experienceLevel-error" className="font-bold text-danger">
+              {errors.experienceLevel}
+            </p>
+          )}
+        </fieldset>
+
+        <FormField
+          id={fieldId('bio')}
+          label="自己紹介"
+          hint={<ScopeHint text="連絡先や住所は書かないでください。" />}
+          error={errors.bio}
+          counter={{ value: values.bio.trim(), max: PROFILE_LIMITS.bioMax }}
+        >
+          {(control) => (
+            <textarea
+              {...control}
+              rows={5}
+              value={values.bio}
+              onChange={(event) => {
+                update({ ...values, bio: event.target.value });
+              }}
+              className={INPUT_CLASS}
+            />
+          )}
+        </FormField>
+
+        <div className="flex flex-col gap-2">
+          <Button type="submit" disabled={submitting}>
+            {submitting ? '保存しています' : '保存する'}
+          </Button>
+          <Link
+            to={laterPath}
+            className="inline-flex min-h-11 items-center justify-center font-bold text-main-strong hover:underline"
+          >
+            {isFirstTime ? 'あとで入力する' : 'やめる'}
+          </Link>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/** 項目ごとの公開範囲。 */
+function ScopeHint({ text }: { text?: string }) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-2">
+      <Badge>ログインした人に公開</Badge>
+      {text && <span>{text}</span>}
+    </span>
+  );
+}

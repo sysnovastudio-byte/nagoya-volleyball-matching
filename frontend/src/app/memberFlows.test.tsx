@@ -311,13 +311,20 @@ describe('募集作成', () => {
     expect(screen.queryByRole('button', { name: '公開する' })).not.toBeInTheDocument();
   });
 
-  it('プロフィール未登録の人には、登録を案内する', async () => {
+  it('プロフィール未登録の人は、入力画面へ移り、保存すると募集作成に戻る', async () => {
+    const user = userEvent.setup();
     renderApp('/events/new', { userId: 'dev-user-no-profile' });
 
-    expect(await screen.findByRole('link', { name: 'プロフィールを登録する' })).toHaveAttribute(
-      'href',
-      '/profile/edit?next=%2Fevents%2Fnew',
-    );
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'プロフィールを登録' }),
+    ).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/ニックネーム/), 'ななみ');
+    await user.click(screen.getByLabelText('初心者'));
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '募集を作る' }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -742,5 +749,135 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     renderApp(`/auth/confirm?token=${token}`);
 
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+  });
+});
+
+describe('プロフィール登録・編集（SCR-014）', () => {
+  it('ログインした後、プロフィールが未登録なら入力画面へ移り、保存すると元の画面に戻る', async () => {
+    const user = userEvent.setup();
+    const { switchUser } = renderApp('/login?next=%2Factivity');
+    await screen.findByRole('heading', { level: 1, name: 'ログイン' });
+
+    // 開発用の帯で、プロフィール未登録の利用者としてログインする
+    switchUser('dev-user-no-profile');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'プロフィールを登録' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'あとで入力する' })).toHaveAttribute(
+      'href',
+      '/activity',
+    );
+
+    await user.type(screen.getByLabelText(/ニックネーム/), '  ななみ  ');
+    await user.click(screen.getByLabelText('経験者'));
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '申請と募集' }),
+    ).toBeInTheDocument();
+  });
+
+  it('登録 → 認証 → プロフィール入力 → ホームまで通せる', async () => {
+    const user = userEvent.setup();
+    renderApp('/signup');
+    await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
+    await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
+    await user.click(screen.getByLabelText('18歳以上'));
+    await user.click(screen.getByLabelText('利用規約に同意します'));
+    await user.click(screen.getByLabelText('プライバシーポリシーに同意します'));
+    await user.click(screen.getByLabelText(/通報されたメッセージを、運営者が確認すること/));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
+    await user.click(await screen.findByRole('link', { name: '認証に成功するリンク' }));
+    await user.click(await screen.findByRole('link', { name: 'プロフィールを入力する' }));
+
+    await user.type(await screen.findByLabelText(/ニックネーム/), 'ななみ');
+    await user.click(screen.getByLabelText('未経験者'));
+    await user.type(screen.getByLabelText(/自己紹介/), 'よろしくお願いします。');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'バレーしたい人、集まれ！' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getAllByRole('link', { name: 'プロフィール' })[0] as HTMLElement);
+    expect(await screen.findByRole('heading', { level: 1, name: 'ななみ' })).toBeInTheDocument();
+    expect(screen.getByText('よろしくお願いします。')).toBeInTheDocument();
+  });
+
+  it('入力の誤りを、項目の近くに示す', async () => {
+    const user = userEvent.setup();
+    renderApp('/profile/edit', { userId: 'dev-user-no-profile' });
+
+    await user.type(await screen.findByLabelText(/ニックネーム/), '   ');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(screen.getByText('ニックネームを入力してください。')).toBeInTheDocument();
+    expect(screen.getByText('経験レベルを選んでください。')).toBeInTheDocument();
+    expect(screen.getByLabelText(/ニックネーム/)).toHaveFocus();
+  });
+
+  it('項目ごとに公開範囲を示す', async () => {
+    renderApp('/profile/edit', { userId: 'dev-user-a' });
+
+    await screen.findByRole('heading', { level: 1, name: 'プロフィールを編集' });
+    expect(screen.getAllByText('ログインした人に公開')).toHaveLength(3);
+  });
+
+  it('SCR-013 の「編集」から移り、今の内容を入れて始め、保存するとプロフィールに戻る', async () => {
+    const user = userEvent.setup();
+    renderApp('/profile', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('link', { name: 'プロフィールを編集' }));
+    const nickname = await screen.findByLabelText(/ニックネーム/);
+    expect(nickname).toHaveValue('あおい');
+    expect(screen.getByLabelText('初心者')).toBeChecked();
+    await user.clear(nickname);
+    await user.type(nickname, 'あおい2');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(await screen.findByText('プロフィールを保存しました。')).toHaveAttribute(
+      'role',
+      'status',
+    );
+    expect(screen.getByRole('heading', { level: 1, name: 'あおい2' })).toBeInTheDocument();
+  });
+});
+
+describe('サイクル1の流れ', () => {
+  it('作成 → 探す → 詳細 → 申請 → 承認 → 住所 を通せる', async () => {
+    const user = userEvent.setup();
+    const { switchUser } = renderApp('/events/new', { userId: HOST });
+
+    // 作成（利用者B）
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+    expect((await screen.findAllByText('募集を公開しました。')).length).toBeGreaterThan(0);
+
+    // 探す → 詳細 → 申請（利用者A）
+    switchUser('dev-user-a');
+    const [home] = screen.getAllByRole('link', { name: 'ホーム' });
+    if (!home) throw new Error('ホームへの移動がありません。');
+    await user.click(home);
+    await user.click(await screen.findByRole('link', { name: /日曜の練習会/ }));
+    await user.click(
+      (await screen.findAllByRole('button', { name: '参加を申請する' }))[0] as HTMLElement,
+    );
+    expect(await screen.findByText('参加を申請しました。')).toBeInTheDocument();
+    expect(screen.queryByText('ダミー住所Q（架空）')).not.toBeInTheDocument();
+
+    // 承認（利用者B）
+    switchUser(HOST);
+    await user.click(
+      (await screen.findAllByRole('link', { name: '申請者を見る' }))[0] as HTMLElement,
+    );
+    await user.click(await screen.findByRole('button', { name: 'あおいさんを承認する' }));
+    expect(await screen.findByText('あおいさんの参加を承認しました。')).toBeInTheDocument();
+
+    // 住所（利用者A）
+    switchUser('dev-user-a');
+    // 利用者Aには申請者一覧を見せない。そこから募集詳細へ移る
+    await screen.findByRole('heading', { level: 1, name: '申請者一覧を表示できません' });
+    await user.click(screen.getByRole('link', { name: '募集詳細へ' }));
+    expect(await screen.findByText('ダミー住所Q（架空）')).toBeInTheDocument();
   });
 });
