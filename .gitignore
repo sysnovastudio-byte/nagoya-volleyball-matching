@@ -64,6 +64,8 @@ logs/
 # ===== Claude Code の個人設定 =====
 .claude/settings.local.json
 CLAUDE.local.md
+# Codespaces で書き出す確認事項（CLAUDE.md の「作業後の報告」）
+review/
 
 # ===== OS / エディタ =====
 Thumbs.db
