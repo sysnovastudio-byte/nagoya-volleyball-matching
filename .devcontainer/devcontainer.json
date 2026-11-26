@@ -1,0 +1,13 @@
+{
+  "name": "nagoya-volleyball-matching",
+  // Node.js 26系LTS（Q-06、frontend/package.json の engines ">=26"）に合わせる
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:26",
+  "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash",
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite",
+      "onAutoForward": "openPreview"
+    }
+  }
+}
