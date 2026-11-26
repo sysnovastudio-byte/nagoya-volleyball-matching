@@ -332,6 +332,8 @@ describe('募集作成', () => {
     expect(await screen.findByText('アプリの中では支払えません。')).toBeInTheDocument();
     expect(screen.getByText('住所や連絡先は書かないでください。')).toBeInTheDocument();
     expect(screen.queryByText('募集を作る前に')).not.toBeInTheDocument();
+    // 18歳未満が参加し得ることは、深夜にかからなくても常に示す（docs/11の7-1）
+    expect(screen.getByText('18歳未満の人も申請できます。')).toBeInTheDocument();
     expect(screen.queryByText(/名古屋市の16区から選びます/)).not.toBeInTheDocument();
   });
 

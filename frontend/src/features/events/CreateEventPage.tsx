@@ -179,6 +179,10 @@ function CreateEventForm() {
       <p className="mb-4 text-muted">
         <RequiredMark required /> の項目は、入力が必要です。
       </p>
+      {/* 主催者への案内（docs/11の7-1）。説明書きを減らしても、この1行は常に残す */}
+      <p className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">
+        18歳未満の人も申請できます。
+      </p>
 
       <form
         noValidate
