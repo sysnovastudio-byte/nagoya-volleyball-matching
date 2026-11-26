@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { backState } from '../../app/BackLink';
 import { useResource } from '../../app/useResource';
 import { Button } from '../../components/ui/Button';
 import { INPUT_CLASS } from '../../components/ui/FormField';
@@ -16,30 +15,15 @@ import type { ConversationDetail, Message } from './types';
 
 interface ConversationViewProps {
   conversationId: string;
-  /** スマートフォンでは、一覧へ戻る道を示す */
-  showBackToList: boolean;
   /** 送信したときに、一覧の並びを更新する */
   onChanged: () => void;
 }
 
 /** SCR-011 会話。閲覧と送信。編集・削除はできない（docs/11の3-3）。 */
-export function ConversationView({
-  conversationId,
-  showBackToList,
-  onChanged,
-}: ConversationViewProps) {
+export function ConversationView({ conversationId, onChanged }: ConversationViewProps) {
   const repository = useConversationRepository();
   const { result, retry, reload } = useResource(`conversation:${conversationId}`, () =>
     repository.getMessages(conversationId),
-  );
-
-  const back = showBackToList && (
-    <Link
-      to="/conversations"
-      className="inline-flex min-h-11 items-center font-bold text-main-strong"
-    >
-      ‹ 会話一覧へ
-    </Link>
   );
 
   if (result.status === 'loading') {
@@ -54,7 +38,6 @@ export function ConversationView({
       <StatusMessage title="会話を読み込めませんでした" headingLevel="h1" role="alert">
         <p>通信の状態を確認して、もう一度お試しください。</p>
         <Button onClick={retry}>もう一度読み込む</Button>
-        {back}
       </StatusMessage>
     );
   }
@@ -72,7 +55,6 @@ export function ConversationView({
   return (
     <Conversation
       detail={result.value}
-      back={back}
       onRefresh={reload}
       onSent={() => {
         reload();
@@ -84,15 +66,13 @@ export function ConversationView({
 
 interface ConversationProps {
   detail: ConversationDetail;
-  back: ReactNode;
   onRefresh: () => void;
   onSent: () => void;
 }
 
-function Conversation({ detail, back, onRefresh, onSent }: ConversationProps) {
+function Conversation({ detail, onRefresh, onSent }: ConversationProps) {
   const { conversation } = detail;
   const { event, partner } = conversation;
-  const here = `/conversations/${conversation.id}`;
   // 送信した直後は、読み込み直す前でも自分のメッセージを示す
   const [sent, setSent] = useState<Message[]>([]);
   const messages = [
@@ -113,7 +93,6 @@ function Conversation({ detail, back, onRefresh, onSent }: ConversationProps) {
       className="flex grow flex-col lg:min-h-[32rem] lg:rounded-2xl lg:border lg:border-line lg:bg-surface"
     >
       <header className="border-b border-line bg-surface px-4 pt-2 pb-3 lg:rounded-t-2xl">
-        {back}
         <div className="flex items-center gap-3">
           <Avatar />
           <div className="flex min-w-0 grow flex-col">
@@ -121,12 +100,7 @@ function Conversation({ detail, back, onRefresh, onSent }: ConversationProps) {
               {partner.isWithdrawn ? (
                 displayName(partner)
               ) : (
-                // 相手のプロフィールへ。会話へ戻る道を渡す
-                <Link
-                  to={`/users/${partner.userId}`}
-                  state={backState(here, '会話へ')}
-                  className="text-main-strong underline"
-                >
+                <Link to={`/users/${partner.userId}`} className="text-main-strong underline">
                   {displayName(partner)}
                 </Link>
               )}
@@ -135,11 +109,7 @@ function Conversation({ detail, back, onRefresh, onSent }: ConversationProps) {
               {event.hidden ? (
                 conversationEventTitle(event)
               ) : (
-                <Link
-                  to={`/events/${event.id}`}
-                  state={backState(here, '会話へ')}
-                  className="underline"
-                >
+                <Link to={`/events/${event.id}`} className="underline">
                   {event.title}
                 </Link>
               )}

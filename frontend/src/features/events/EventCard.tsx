@@ -1,17 +1,14 @@
 import { Link } from 'react-router';
-import type { BackState } from '../../app/BackLink';
 import { EventStateBadge } from './EventStateBadge';
 import { areaLabel, formatFee, formatTimeRange, levelsLabel, toDateParts } from './format';
 import type { PublicEvent } from './types';
 
 interface EventCardProps {
   event: PublicEvent;
-  /** 詳細から戻る先（絞り込みの条件を付けた一覧など） */
-  backState?: BackState;
 }
 
 /** 募集一覧の一件（docs/10の11-3）。くわしい住所は扱わない。 */
-export function EventCard({ event, backState }: EventCardProps) {
+export function EventCard({ event }: EventCardProps) {
   const start = toDateParts(event.startsAt);
   const isOpen = event.state === 'open';
 
@@ -37,7 +34,6 @@ export function EventCard({ event, backState }: EventCardProps) {
           {/* カード全体を押せるようにする */}
           <Link
             to={`/events/${event.id}`}
-            state={backState}
             className="after:absolute after:inset-0 after:rounded-2xl"
           >
             {event.title}

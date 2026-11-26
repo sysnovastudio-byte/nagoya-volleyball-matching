@@ -31,7 +31,6 @@ export function ConversationsPage() {
       // 別の会話へ移ったときに、入力中の内容や誤りを持ち越さない
       key={conversationId}
       conversationId={conversationId}
-      showBackToList={!isPc}
       onChanged={list.reload}
     />
   );

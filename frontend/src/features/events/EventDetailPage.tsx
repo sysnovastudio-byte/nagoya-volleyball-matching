@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
-import { BackLink, type BackState } from '../../app/BackLink';
 import { useToast } from '../../app/toastContext';
 import { StartConversationButton } from '../conversations/StartConversationButton';
 import { useFlashToast } from '../../app/useFlashToast';
@@ -20,7 +19,7 @@ import { useEvent } from './useEvent';
 import { useEventLocation } from './useEventLocation';
 
 /** 作成の直後に、募集詳細へ渡す印。 */
-export interface EventDetailLocationState extends BackState {
+export interface EventDetailLocationState {
   justCreated?: boolean;
 }
 
@@ -91,9 +90,6 @@ function EventDetail({ event, onChanged }: EventDetailProps) {
   return (
     <article className="flex grow flex-col">
       <div className="mx-auto w-full max-w-288 grow px-4 pt-2 pb-8">
-        {/* 申請と募集などから来た場合は、その画面に戻る */}
-        <BackLink fallback={{ to: '/', label: '募集一覧へ' }} />
-
         {apply.error && (
           <p
             role="alert"

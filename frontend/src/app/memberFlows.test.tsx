@@ -1055,7 +1055,7 @@ describe('指摘の不具合', () => {
 
     const section = await screen.findByRole('region', { name: '主催する側' });
     await user.click(await within(section).findByRole('link', { name: '木曜夜のミニゲーム会' }));
-    await user.click(await screen.findByRole('link', { name: '申請と募集へ' }));
+    await user.click(await screen.findByRole('button', { name: '申請と募集に戻る' }));
 
     expect(
       await screen.findByRole('heading', { level: 1, name: '申請と募集' }),
@@ -1065,7 +1065,12 @@ describe('指摘の不具合', () => {
   it('2. 募集一覧から開いた募集詳細は、募集一覧に戻る', async () => {
     renderApp(`/events/${HOSTED_EVENT}`, { userId: HOST });
 
-    expect(await screen.findByRole('link', { name: '募集一覧へ' })).toHaveAttribute('href', '/');
+    // 前の画面がない（アドレスを直接開いた）ので、親の画面（募集一覧）に戻る
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: '募集一覧に戻る' }));
+
+    expect(await screen.findByRole('link', { name: /はじめて歓迎/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /に戻る$/ })).not.toBeInTheDocument();
   });
 
   it('3. 申請者一覧から開いたプロフィールに、申請者一覧へ戻るボタンがある', async () => {
@@ -1074,7 +1079,7 @@ describe('指摘の不具合', () => {
 
     await user.click(await screen.findByRole('link', { name: 'こはる' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'こはる' })).toBeInTheDocument();
-    await user.click(screen.getByRole('link', { name: '申請者一覧へ' }));
+    await user.click(screen.getByRole('button', { name: '申請者一覧に戻る' }));
 
     expect(
       await screen.findByRole('heading', { level: 1, name: '申請者一覧' }),
@@ -1226,10 +1231,13 @@ describe('募集の絞り込み（EVT-05）', () => {
     renderApp('/?area=nakamura');
 
     await user.click(await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }));
-    expect(await screen.findByRole('link', { name: '募集一覧へ' })).toHaveAttribute(
-      'href',
-      '/?area=nakamura',
-    );
+    await user.click(await screen.findByRole('button', { name: '募集一覧に戻る' }));
+
+    // 来た画面に戻るため、条件（中村区）は残る
+    expect(
+      await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /日曜朝のゆるバレー/ })).not.toBeInTheDocument();
   });
 });
 
@@ -1365,7 +1373,7 @@ describe('会話一覧（SCR-010）', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'そら' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '会話' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: '‹ 会話一覧へ' }));
+    await user.click(screen.getByRole('button', { name: '会話一覧に戻る' }));
     expect(await screen.findByRole('heading', { level: 1, name: '会話' })).toBeInTheDocument();
   });
 
@@ -1385,7 +1393,7 @@ describe('会話一覧（SCR-010）', () => {
         'aria-current',
         'page',
       );
-      expect(screen.queryByRole('link', { name: '‹ 会話一覧へ' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /に戻る$/ })).not.toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();
     }
@@ -1512,7 +1520,7 @@ describe('会話（SCR-011）', () => {
 
     await user.click(await screen.findByRole('link', { name: 'そら' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'そら' })).toBeInTheDocument();
-    await user.click(screen.getByRole('link', { name: /会話へ/ }));
+    await user.click(screen.getByRole('button', { name: '会話に戻る' }));
 
     expect(await screen.findByText(/中学の部活/)).toBeInTheDocument();
   });
@@ -1572,5 +1580,78 @@ describe('通しの流れ', () => {
     const list = await screen.findByRole('list', { name: '会話の一覧' });
     await user.click(within(list).getByRole('link', { name: /あおい.*日曜の練習会/ }));
     expect(await screen.findByText('承認ありがとうございます。')).toBeInTheDocument();
+  });
+});
+
+describe('戻るボタン（docs/11の5-1）', () => {
+  it.each(['/', '/activity', '/conversations', '/notifications', '/profile'])(
+    '下部の移動から直接開く画面（%s）には置かない',
+    async (path) => {
+      renderApp(path, { userId: 'dev-user-a' });
+
+      await screen.findByRole('heading', { level: 1 });
+      expect(screen.queryByRole('button', { name: /に戻る$|^戻る$/ })).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['/events/dev-easy-morning', '募集一覧に戻る'],
+    ['/events/new', '募集一覧に戻る'],
+    ['/events/dev-beginner-afternoon/applicants', '募集詳細に戻る'],
+    ['/conversations/dev-conv-question', '会話一覧に戻る'],
+    ['/profile/edit', 'プロフィールに戻る'],
+    ['/users/dev-host-haru', '募集一覧に戻る'],
+    ['/settings', 'プロフィールに戻る'],
+    ['/terms', '新規登録に戻る'],
+    ['/unknown', '募集一覧に戻る'],
+  ])('前の画面がなければ、親の画面を示す（%s → %s）', async (path, label) => {
+    renderApp(path, { userId: path.endsWith('applicants') ? 'dev-user-b' : 'dev-user-a' });
+
+    const button = await screen.findByRole('button', { name: label });
+    // 「←」を添え、押せる範囲は44px以上にする
+    expect(button).toHaveTextContent(`←${label}`);
+    expect(button).toHaveClass('min-h-11');
+  });
+
+  it('未ログインの画面にも置く', async () => {
+    renderApp('/login');
+
+    expect(await screen.findByRole('button', { name: '募集一覧に戻る' })).toBeInTheDocument();
+  });
+
+  it('前の画面がなければ、押すと親の画面へ移る', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/dev-beginner-afternoon/applicants', { userId: 'dev-user-b' });
+
+    await user.click(await screen.findByRole('button', { name: '募集詳細に戻る' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'はじめて歓迎！土曜の午後バレー' }),
+    ).toBeInTheDocument();
+  });
+
+  it('アプリの中で来た画面の名前を示し、その画面に戻る', async () => {
+    const user = userEvent.setup();
+    renderApp('/conversations/dev-conv-question', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }));
+    await user.click(await screen.findByRole('button', { name: '会話に戻る' }));
+
+    expect(await screen.findByText(/中学の部活/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '会話一覧に戻る' })).toBeInTheDocument();
+  });
+
+  it('入力中の募集作成では、「やめる」と同じ確認を出す', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/new', { userId: 'dev-user-a' });
+
+    await user.type(await screen.findByLabelText(/タイトル/), '日曜の練習会');
+    await user.click(screen.getByRole('button', { name: '募集一覧に戻る' }));
+
+    expect(
+      await screen.findByText('入力した内容は保存されません。入力をやめますか？'),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '入力を続ける' }));
+    expect(screen.getByLabelText(/タイトル/)).toHaveValue('日曜の練習会');
   });
 });
