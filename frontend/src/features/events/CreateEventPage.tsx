@@ -179,10 +179,6 @@ function CreateEventForm() {
       <p className="mb-4 text-muted">
         <RequiredMark required /> の項目は、入力が必要です。
       </p>
-      {/* 主催者への案内（docs/11の7-1）。説明書きを減らしても、この1行は常に残す */}
-      <p className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">
-        18歳未満の人も申請できます。
-      </p>
 
       <form
         noValidate
@@ -428,6 +424,10 @@ function CreateEventForm() {
               {submitError}
             </p>
           )}
+          {/* 主催者への案内（docs/11の7-1）。公開ボタンの近くに常に示す。文字は16pxのまま色を控えめにする */}
+          <p className="mb-2 text-muted">
+            18歳未満の人が参加することがあります。深夜（23時〜翌6時）にかかる参加はさせないでください。
+          </p>
           {blocker.state === 'blocked' ? (
             <LeaveConfirm
               onContinue={() => {
@@ -438,15 +438,14 @@ function CreateEventForm() {
               }}
             />
           ) : (
-            <div className="flex gap-2">
-              <Button variant="secondary" disabled={submitting} onClick={leave}>
+            // 「公開する」を目立たせ、「やめる」は下に控えめに置く（2026-11-26）
+            <div className="flex flex-col gap-1">
+              <Button type="submit" disabled={submitting}>
+                {submitting ? '公開しています' : '公開する'}
+              </Button>
+              <Button variant="text" disabled={submitting} onClick={leave}>
                 やめる
               </Button>
-              <div className="flex grow flex-col">
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? '公開しています' : '公開する'}
-                </Button>
-              </div>
             </div>
           )}
         </div>
