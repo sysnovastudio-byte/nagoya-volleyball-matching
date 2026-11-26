@@ -261,7 +261,7 @@ describe('会話の開始', () => {
     });
   });
 
-  it('主催者は、自分の募集で会話を始められない（MSG-06 は作らない）', async () => {
+  it('主催者は、自分の募集で「主催者に質問する」の形では始められない', async () => {
     expect(
       await setup('dev-user-b').repository.startConversation('dev-beginner-afternoon'),
     ).toEqual({ status: 'rejected', reason: 'notAllowed' });
@@ -275,6 +275,137 @@ describe('会話の開始', () => {
     expect(
       await setup('dev-user-no-profile').repository.startConversation('dev-easy-morning'),
     ).toEqual({ status: 'rejected', reason: 'profileRequired' });
+  });
+});
+
+describe('主催者からの会話の開始（MSG-06）', () => {
+  const HOST_ID = 'dev-user-b';
+  const HOSTED_EVENT = 'dev-beginner-afternoon';
+
+  /** 利用者Bの募集の、指定した状態の申請。 */
+  const applicationOf = (
+    db: ReturnType<typeof setup>['db'],
+    eventId: string,
+    status: 'pending' | 'approved' | 'rejected',
+    userId?: string,
+  ) => {
+    const application = db.applications.find(
+      (item) =>
+        item.eventId === eventId &&
+        item.status === status &&
+        (userId === undefined || item.userId === userId),
+    );
+    if (!application) throw new Error(`${eventId} に ${status} の申請がありません。`);
+    return application;
+  };
+
+  it('承認待ちの申請者と始められ、メッセージがない間は主催者の一覧だけに出る', async () => {
+    const { db, session, repository } = setup(HOST_ID);
+    const application = applicationOf(db, HOSTED_EVENT, 'pending', 'dev-user-minor');
+
+    const result = await repository.startConversationWithApplicant(application.id);
+
+    expect(result.status).toBe('opened');
+    const conversation = db.conversations.at(-1);
+    expect(conversation).toMatchObject({
+      eventId: HOSTED_EVENT,
+      hostId: HOST_ID,
+      inquirerId: 'dev-user-minor',
+      startedBy: HOST_ID,
+    });
+    const hostList = await repository.listMine();
+    expect(hostList.find((item) => item.id === conversation?.id)?.role).toBe('host');
+    session.setUserId('dev-user-minor');
+    expect((await repository.listMine()).map((item) => item.id)).not.toContain(conversation?.id);
+  });
+
+  it('承認済みの参加者とも始められる。すでにあれば、その会話を開く', async () => {
+    const { db, repository } = setup(HOST_ID);
+    const application = applicationOf(db, HOSTED_EVENT, 'approved');
+
+    const first = await repository.startConversationWithApplicant(application.id);
+    const count = db.conversations.length;
+    const second = await repository.startConversationWithApplicant(application.id);
+
+    expect(second).toEqual(first);
+    expect(db.conversations).toHaveLength(count);
+  });
+
+  it('利用者Aが質問した会話があれば、その会話を開く', async () => {
+    const { db, session, repository } = setup('dev-user-a');
+    const question = db.conversations.find(
+      (item) => item.eventId === HOSTED_EVENT && item.inquirerId === 'dev-user-a',
+    );
+    if (!question) throw new Error('質問の会話がありません。');
+    db.applications.push({
+      id: 'dev-application-test',
+      eventId: HOSTED_EVENT,
+      userId: 'dev-user-a',
+      attemptNo: 1,
+      status: 'pending',
+      appliedAt: NOW,
+      decidedAt: null,
+      cancelledAt: null,
+      retractedAt: null,
+      revokedAt: null,
+      revokeReason: null,
+    });
+
+    session.setUserId(HOST_ID);
+    expect(await repository.startConversationWithApplicant('dev-application-test')).toEqual({
+      status: 'opened',
+      conversationId: question.id,
+    });
+  });
+
+  it('却下した申請者とは始められない', async () => {
+    const { db, repository } = setup(HOST_ID);
+    const application = applicationOf(db, HOSTED_EVENT, 'rejected');
+
+    expect(await repository.startConversationWithApplicant(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+  });
+
+  it('他人の募集の申請者とは始められない', async () => {
+    const { db, repository } = setup('dev-host-haru');
+    const application = applicationOf(db, HOSTED_EVENT, 'pending');
+
+    expect(await repository.startConversationWithApplicant(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+  });
+
+  it('送信できる期間（終了の7日後まで）を過ぎた募集では、新しく始められない', async () => {
+    const { db, repository } = setup(HOST_ID);
+    // dev-b-ended は10日前に終了した。会話のない承認済みの人を選ぶ
+    const application = db.applications.find(
+      (item) =>
+        item.eventId === 'dev-b-ended' &&
+        item.status === 'approved' &&
+        !db.conversations.some(
+          (conversation) =>
+            conversation.eventId === 'dev-b-ended' && conversation.inquirerId === item.userId,
+        ),
+    );
+    if (!application) throw new Error('承認済みの申請がありません。');
+
+    expect(await repository.startConversationWithApplicant(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+  });
+
+  it('非表示の募集では、新しく始められない', async () => {
+    const { db, repository } = setup(HOST_ID);
+    const application = applicationOf(db, 'dev-b-hidden', 'pending');
+
+    expect(await repository.startConversationWithApplicant(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
   });
 });
 

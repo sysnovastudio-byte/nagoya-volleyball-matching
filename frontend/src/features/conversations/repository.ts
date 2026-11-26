@@ -6,6 +6,7 @@ const notConnected = () => Promise.reject(new Error('データの取得先に接
 /** まだ接続していない場合の実装。本番用のビルドでは、今はこれを使う。 */
 const notConnectedRepository: ConversationRepository = {
   startConversation: notConnected,
+  startConversationWithApplicant: notConnected,
   listMine: notConnected,
   getMessages: notConnected,
   send: notConnected,
@@ -19,6 +20,8 @@ function createRepository(): ConversationRepository {
     );
     return {
       startConversation: async (eventId) => (await repository()).startConversation(eventId),
+      startConversationWithApplicant: async (applicationId) =>
+        (await repository()).startConversationWithApplicant(applicationId),
       listMine: async () => (await repository()).listMine(),
       getMessages: async (id) => (await repository()).getMessages(id),
       send: async (input) => (await repository()).send(input),

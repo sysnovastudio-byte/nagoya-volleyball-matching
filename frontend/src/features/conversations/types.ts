@@ -63,7 +63,7 @@ export type SendMessageResult =
 
 /**
  * 会話の窓口。将来は docs/06の6-5の関数を呼ぶ実装に置き換える。
- * - startConversation → start_conversation
+ * - startConversation・startConversationWithApplicant → start_conversation
  * - listMine → get_my_conversations
  * - getMessages → messages の取得（当事者だけ、RLS）
  * - send → send_message
@@ -72,6 +72,11 @@ export type SendMessageResult =
 export interface ConversationRepository {
   /** 募集の主催者との会話を始める。すでにある場合は、その会話を返す。 */
   startConversation(eventId: string): Promise<StartConversationResult>;
+  /**
+   * 主催者が、自分の募集の申請者との会話を始める（MSG-06）。すでにある場合は、その会話を返す。
+   * 相手の申請が承認待ち・承認済みで、送信できる期間内の場合だけ（docs/06の6-5の DB-10）
+   */
+  startConversationWithApplicant(applicationId: string): Promise<StartConversationResult>;
   /** 自分が当事者の会話。新しく動いた順。未ログインは空を返す。 */
   listMine(): Promise<ConversationSummary[]>;
   /** 会話とメッセージ。当事者でない・ない場合は、どちらも null を返す。 */
