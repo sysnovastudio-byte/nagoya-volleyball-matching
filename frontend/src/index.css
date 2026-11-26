@@ -14,6 +14,10 @@
   --color-main-tint: #e8f2f6;
   --color-muted: #5f667a;
   --color-line: #dde2ea;
+  --color-field-line: #7a8296;
+  --color-accent-tint: #fcf3e6;
+  --color-accent-ink: #8a5a10;
+  --color-danger: #b3261e;
 
   /* 書体は未定（R-07）のため、端末の標準を使う */
   --font-sans:

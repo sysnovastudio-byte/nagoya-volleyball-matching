@@ -1,9 +1,14 @@
+import { lazyDev } from '../../lib/lazyDev';
 import type { EventRepository } from './types';
+
+const notConnected = () => Promise.reject(new Error('データの取得先に接続していません。'));
 
 /** まだ接続していない場合の実装。本番用のビルドでは、今はこれを使う。 */
 const notConnectedRepository: EventRepository = {
-  list: () => Promise.reject(new Error('データの取得先に接続していません。')),
-  get: () => Promise.reject(new Error('データの取得先に接続していません。')),
+  listEvents: notConnected,
+  getEvent: notConnected,
+  getLocation: notConnected,
+  createEvent: notConnected,
 };
 
 /**
@@ -13,16 +18,14 @@ const notConnectedRepository: EventRepository = {
  */
 function createRepository(): EventRepository {
   if (import.meta.env.DEV) {
-    const load = async () => {
-      const { createDevEventRepository } = await import('./dev/devEventRepository');
-      return createDevEventRepository();
-    };
-    let loading: Promise<EventRepository> | undefined;
-    const repository = () => (loading ??= load());
-
+    const repository = lazyDev(
+      async () => (await import('../../dev/devRepositories')).devEventRepository,
+    );
     return {
-      list: async (cursor) => (await repository()).list(cursor),
-      get: async (id) => (await repository()).get(id),
+      listEvents: async (cursor) => (await repository()).listEvents(cursor),
+      getEvent: async (id) => (await repository()).getEvent(id),
+      getLocation: async (eventId) => (await repository()).getLocation(eventId),
+      createEvent: async (input) => (await repository()).createEvent(input),
     };
   }
   return notConnectedRepository;

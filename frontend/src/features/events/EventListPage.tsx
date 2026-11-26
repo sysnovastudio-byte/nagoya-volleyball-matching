@@ -1,6 +1,7 @@
 import { useDocumentTitle } from '../../app/useDocumentTitle';
-import { Button } from '../../components/ui/Button';
+import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
+import { useViewer } from '../auth/sessionContext';
 import { EventCard } from './EventCard';
 import { HeroBand } from './HeroBand';
 import { useEventList } from './useEventList';
@@ -10,6 +11,9 @@ const SKELETON_COUNT = 3;
 /** SCR-005 ホーム・募集一覧（EVT-02）。検索（EVT-05）は限定公開までに加える。 */
 export function EventListPage() {
   useDocumentTitle('募集一覧');
+  const viewer = useViewer();
+  // 表示の切り替えだけ。作成の可否は取得の窓口（本番はDB）が判定する
+  const canCreate = viewer !== null && viewer.ageCategory === 'adult';
 
   return (
     <>
@@ -22,10 +26,30 @@ export function EventListPage() {
           <h2 id="event-list-heading" className="text-xl font-bold md:text-2xl">
             これからの募集
           </h2>
-          <p className="text-muted">開催日の順</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="text-muted">開催日の順</p>
+            {canCreate && (
+              <div className="hidden lg:block">
+                <ButtonLink to="/events/new">募集を作る</ButtonLink>
+              </div>
+            )}
+          </div>
         </div>
+        {viewer?.ageCategory === 'minor' && (
+          <p className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">
+            18歳未満の方は、募集を作成できません。参加の申請と、主催者への質問はできます。
+          </p>
+        )}
         <EventList />
       </section>
+      {canCreate && (
+        // スマートフォンでは下部の移動の上に固定し、重ねない
+        <div className="sticky bottom-(--member-nav-h) z-10 border-t border-line bg-surface px-4 py-3 lg:hidden">
+          <div className="mx-auto flex max-w-160 flex-col">
+            <ButtonLink to="/events/new">募集を作る</ButtonLink>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 import { Link } from 'react-router';
 
-type Variant = 'primary' | 'secondary' | 'text';
+type Variant = 'primary' | 'secondary' | 'danger' | 'text';
 type Size = 'normal' | 'small';
 
 const BASE =
@@ -10,6 +10,7 @@ const BASE =
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-main text-white hover:bg-main-strong',
   secondary: 'border border-sub bg-surface text-sub hover:bg-main-tint',
+  danger: 'bg-danger text-white hover:brightness-90',
   text: 'text-main-strong hover:underline',
 };
 

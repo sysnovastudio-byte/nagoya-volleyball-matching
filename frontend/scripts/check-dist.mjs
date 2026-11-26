@@ -1,11 +1,12 @@
-// 本番用のビルド結果に、開発専用のダミーデータが含まれていないことを確かめる。
+// 本番用のビルド結果に、開発専用のダミーデータ・開発用の帯が含まれていないことを確かめる。
+// src/dev/ の各ファイルは、この目印を含む markDevModule('DEV-ONLY-DUMMY-DATA:<ファイル名>') を呼ぶ。
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DIST_DIR = fileURLToPath(new URL('../dist', import.meta.url));
 
-// src/features/events/dev/devEvents.ts の DEV_DATA_MARKER と同じ値にする。
+// src/dev/marker.ts の DEV_DATA_MARKER と同じ値にする。
 const MARKER = 'DEV-ONLY-DUMMY-DATA';
 
 const entries = await readdir(DIST_DIR, { recursive: true, withFileTypes: true });

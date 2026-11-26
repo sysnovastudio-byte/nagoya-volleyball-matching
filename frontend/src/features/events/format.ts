@@ -96,8 +96,12 @@ export function areaLabel(area: Area) {
   return AREA_LABELS[area];
 }
 
+export function levelLabel(level: TargetLevel) {
+  return LEVEL_LABELS[level];
+}
+
 export function levelsLabel(levels: TargetLevel[]) {
-  return levels.map((level) => LEVEL_LABELS[level]).join('・');
+  return levels.map(levelLabel).join('・');
 }
 
 export function stateLabel(state: EventState) {
