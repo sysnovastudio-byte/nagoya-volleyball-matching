@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router';
 import { useViewer } from '../features/auth/sessionContext';
+import { useUnreadNotifications } from '../features/notifications/unreadContext';
 
 interface NavItem {
   to: string;
@@ -19,7 +20,7 @@ const ICON_PROPS = {
   className: 'size-6 shrink-0',
 } as const;
 
-/** ログイン後の5つの移動先（docs/11の5-1・追加-12）。まだない画面（通知）は仮の画面へつなぐ。 */
+/** ログイン後の5つの移動先（docs/11の5-1・追加-12）。 */
 const NAV_ITEMS: NavItem[] = [
   {
     to: '/',
@@ -77,12 +78,13 @@ interface MemberNavProps {
 /**
  * ログイン後の主な移動。スマートフォンは下部、PCは上部に置く。
  * 下部のラベルだけは、例外として12pxとし、アイコンを併記する（docs/11の5-1）。
- * 未読の通知の数は、通知（SCR-012）を作るときに加える。
+ * 通知には未読の数を示す（docs/10の11-5）。
  */
 export function MemberNav({ placement }: MemberNavProps) {
   const isBottom = placement === 'bottom';
   // PCの上部では「プロフィール」の代わりにニックネームを示す（docs/11の5-1、2026-11-26）
   const nickname = useViewer()?.profile?.nickname;
+  const unread = useUnreadNotifications().count ?? 0;
 
   return (
     <nav aria-label="主な移動">
@@ -102,7 +104,19 @@ export function MemberNav({ placement }: MemberNavProps) {
                 }`
               }
             >
-              {item.icon}
+              {item.to === '/notifications' && unread > 0 ? (
+                <span className="relative">
+                  {item.icon}
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-1.5 left-3.5 min-w-5 rounded-full bg-danger px-1 text-center text-xs leading-5 text-white"
+                  >
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                </span>
+              ) : (
+                item.icon
+              )}
               {!isBottom && item.to === '/profile' && nickname ? (
                 <>
                   <span className="sr-only">プロフィール：</span>
@@ -110,6 +124,9 @@ export function MemberNav({ placement }: MemberNavProps) {
                 </>
               ) : (
                 <span className="text-center">{item.label}</span>
+              )}
+              {item.to === '/notifications' && unread > 0 && (
+                <span className="sr-only">（未読{unread}件）</span>
               )}
             </NavLink>
           </li>

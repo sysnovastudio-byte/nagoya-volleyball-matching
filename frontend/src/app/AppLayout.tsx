@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { useSession } from '../features/auth/sessionContext';
+import { UnreadNotificationsProvider } from '../features/notifications/UnreadNotificationsProvider';
 import { BackButton } from './BackButton';
 import { MemberNav } from './MemberNav';
 import { PublicHeader } from './PublicHeader';
@@ -24,40 +25,42 @@ export function AppLayout() {
 
   return (
     <ToastProvider>
-      {/* --member-nav-h：下部の移動の高さ。画面下に固定する操作は、この高さだけ上に置き、重ねない */}
-      <div
-        className={`flex min-h-dvh flex-col ${
-          isMember
-            ? '[--member-nav-h:calc(4.5rem+env(safe-area-inset-bottom))] lg:[--member-nav-h:0px]'
-            : '[--member-nav-h:0px]'
-        }`}
-      >
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:z-30 focus:m-2 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-3 focus:font-bold"
+      <UnreadNotificationsProvider>
+        {/* --member-nav-h：下部の移動の高さ。画面下に固定する操作は、この高さだけ上に置き、重ねない */}
+        <div
+          className={`flex min-h-dvh flex-col ${
+            isMember
+              ? '[--member-nav-h:calc(4.5rem+env(safe-area-inset-bottom))] lg:[--member-nav-h:0px]'
+              : '[--member-nav-h:0px]'
+          }`}
         >
-          本文へ移動
-        </a>
-        {DevBar && (
-          <Suspense fallback={null}>
-            <DevBar />
-          </Suspense>
-        )}
-        <PublicHeader mode={mode} />
-        <main
-          id="main"
-          tabIndex={-1}
-          className="flex grow flex-col pb-(--member-nav-h) outline-none"
-        >
-          <BackButton />
-          <Outlet />
-        </main>
-        {isMember && (
-          <div className="fixed inset-x-0 bottom-0 z-20 h-(--member-nav-h) border-t border-line bg-surface pt-1 pb-[env(safe-area-inset-bottom)] lg:hidden">
-            <MemberNav placement="bottom" />
-          </div>
-        )}
-      </div>
+          <a
+            href="#main"
+            className="sr-only focus:not-sr-only focus:absolute focus:z-30 focus:m-2 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-3 focus:font-bold"
+          >
+            本文へ移動
+          </a>
+          {DevBar && (
+            <Suspense fallback={null}>
+              <DevBar />
+            </Suspense>
+          )}
+          <PublicHeader mode={mode} />
+          <main
+            id="main"
+            tabIndex={-1}
+            className="flex grow flex-col pb-(--member-nav-h) outline-none"
+          >
+            <BackButton />
+            <Outlet />
+          </main>
+          {isMember && (
+            <div className="fixed inset-x-0 bottom-0 z-20 h-(--member-nav-h) border-t border-line bg-surface pt-1 pb-[env(safe-area-inset-bottom)] lg:hidden">
+              <MemberNav placement="bottom" />
+            </div>
+          )}
+        </div>
+      </UnreadNotificationsProvider>
     </ToastProvider>
   );
 }

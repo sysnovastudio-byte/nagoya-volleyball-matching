@@ -12,6 +12,7 @@ import {
   type DevConversationRecord,
   type DevMessageRecord,
 } from './devConversations';
+import { createDevNotifications, type DevNotificationRecord } from './devNotifications';
 import { createDevUsers, type DevUser } from './devUsers';
 import { markDevModule } from './marker';
 
@@ -37,20 +38,26 @@ export interface DevDatabase {
   /** 会話（docs/06の4-7）とメッセージ（4-8） */
   conversations: DevConversationRecord[];
   messages: DevMessageRecord[];
+  /** 通知（docs/06の4-11） */
+  notifications: DevNotificationRecord[];
 }
 
 export function createDevDatabase(now: Date): DevDatabase {
   const { conversations, messages } = createDevConversations(now);
+  const users = createDevUsers();
+  const events = createDevEvents(now);
+  const applications = createDevApplications(now);
   return {
-    users: createDevUsers(),
-    events: createDevEvents(now),
+    users,
+    events,
     locations: createDevLocations(),
-    applications: createDevApplications(now),
+    applications,
     eventCreations: [],
     agreements: [],
     pendingVerifications: [],
     conversations,
     messages,
+    notifications: createDevNotifications({ users, events, applications }, now),
   };
 }
 

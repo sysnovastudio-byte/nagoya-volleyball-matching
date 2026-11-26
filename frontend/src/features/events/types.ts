@@ -51,8 +51,13 @@ export interface PublicEvent {
 export interface EventDetail extends PublicEvent {
   /** 見ている人が主催者か。判定は取得の窓口が行い、画面はIDを扱わない */
   isHost: boolean;
-  /** 見ている人の申請の状態。未申請・主催者・未ログインは null */
-  myApplication: ApplicationStatus | null;
+  /** 見ている人の最新の申請。未申請・主催者・未ログインは null */
+  myApplication: {
+    id: string;
+    status: ApplicationStatus;
+    /** キャンセル・取り下げの後で、申請が合計3回に達していない（docs/11の2-2） */
+    canReapply: boolean;
+  } | null;
 }
 
 /** 主催した募集（docs/06の6-5の get_my_events）。非表示の募集は開催日時だけ（docs/11の4-4）。 */

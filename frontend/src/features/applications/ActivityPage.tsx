@@ -8,6 +8,8 @@ import { EventStateBadge } from '../events/EventStateBadge';
 import { formatDateTimeRange } from '../events/format';
 import { useEventRepository } from '../events/repositoryContext';
 import type { EventState, MyEvent } from '../events/types';
+import { APPLICATION_STATUS_LABELS } from './format';
+import { OwnApplicationActions } from './OwnApplicationActions';
 import { useApplicationRepository } from './repositoryContext';
 import { SegmentedControl } from './SegmentedControl';
 import type { EventSummary, MyParticipation } from './types';
@@ -31,8 +33,8 @@ function splitByTime<T>(items: T[], eventOf: (item: T) => EventSummary | MyEvent
 }
 
 /**
- * SCR-009 申請・募集の管理（APP-07・EVT-06）。自分の申請の状態と、主催した募集を示す。
- * キャンセル・取り下げ（APP-08・CND-10）は、サイクル1では作らない（docs/10の7-3）。
+ * SCR-009 申請・募集の管理（APP-07・APP-08・CND-10・EVT-06）。
+ * 自分の申請の状態と、主催した募集を示す。承認待ちは取り下げ、承認済みはキャンセルできる。
  */
 export function ActivityPage() {
   useDocumentTitle('申請と募集');
@@ -68,7 +70,7 @@ export function ActivityPage() {
             参加する側
           </h2>
           <ResourceView resource={participations} onRetry={participations.retry}>
-            {(items) => <ParticipationList items={items} />}
+            {(items) => <ParticipationList items={items} onChanged={participations.reload} />}
           </ResourceView>
         </section>
 
@@ -132,13 +134,12 @@ function Group<T>({ title, items, render }: GroupProps<T>) {
   );
 }
 
-const PARTICIPATION_LABELS = {
-  pending: '承認待ち',
-  approved: '承認済み',
-  rejected: '却下',
-} as const;
+interface ParticipationListProps {
+  items: MyParticipation[];
+  onChanged: () => void;
+}
 
-function ParticipationList({ items }: { items: MyParticipation[] }) {
+function ParticipationList({ items, onChanged }: ParticipationListProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -151,7 +152,7 @@ function ParticipationList({ items }: { items: MyParticipation[] }) {
   }
   const { upcoming, past } = splitByTime(items, (item) => item.event);
   const render = (item: MyParticipation) => (
-    <ParticipationItem key={item.applicationId} item={item} />
+    <ParticipationItem key={item.applicationId} item={item} onChanged={onChanged} />
   );
   return (
     <>
@@ -161,7 +162,7 @@ function ParticipationList({ items }: { items: MyParticipation[] }) {
   );
 }
 
-function ParticipationItem({ item }: { item: MyParticipation }) {
+function ParticipationItem({ item, onChanged }: { item: MyParticipation; onChanged: () => void }) {
   const { event } = item;
   // 開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3）
   const label =
@@ -171,7 +172,7 @@ function ParticipationItem({ item }: { item: MyParticipation }) {
     event.state !== 'full' &&
     event.state !== 'closed'
       ? '受付終了'
-      : PARTICIPATION_LABELS[item.status];
+      : APPLICATION_STATUS_LABELS[item.status];
 
   return (
     <li className="rounded-2xl border border-line bg-surface p-4">
@@ -182,6 +183,16 @@ function ParticipationItem({ item }: { item: MyParticipation }) {
           <span className="text-sub">あなたの申請</span>
           <Badge tone={item.status === 'approved' ? 'main' : 'neutral'}>{label}</Badge>
         </p>
+      )}
+      {!event.hidden && (
+        <div className="mt-2 flex empty:hidden">
+          <OwnApplicationActions
+            applicationId={item.applicationId}
+            status={item.status}
+            eventState={event.state}
+            onChanged={onChanged}
+          />
+        </div>
       )}
     </li>
   );
