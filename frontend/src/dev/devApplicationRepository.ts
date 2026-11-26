@@ -1,3 +1,4 @@
+import { EVENT_LIMITS } from '../features/events/eventRules';
 import type {
   Applicant,
   ApplicationRepository,
@@ -49,7 +50,11 @@ export function createDevApplicationRepository({
   };
 
   /** 承認・却下の共通の確認（docs/06の5-1の手順2〜4）。 */
-  const decide = (applicationId: string, next: 'approved' | 'rejected'): DecisionResult => {
+  const decide = (
+    applicationId: string,
+    next: 'approved' | 'rejected',
+    expandCapacityTo?: number,
+  ): DecisionResult => {
     const user = currentUser();
     const application = db.applications.find((item) => item.id === applicationId);
     const record = application && db.events.find((event) => event.id === application.eventId);
@@ -63,8 +68,13 @@ export function createDevApplicationRepository({
       return { status: 'rejected', reason: 'notAccepting' };
     }
     if (application.status !== 'pending') return { status: 'rejected', reason: 'notPending' };
+    // 満員の場合は、承認と同時に定員を1人増やす。定員は常に承認済み人数以上に保つ（docs/11の2-2）
     if (next === 'approved' && countApplications(db, record.id, 'approved') >= record.capacity) {
-      return { status: 'rejected', reason: 'full' };
+      if (record.capacity >= EVENT_LIMITS.capacityMax) {
+        return { status: 'rejected', reason: 'capacityLimit' };
+      }
+      if (expandCapacityTo !== record.capacity + 1) return { status: 'rejected', reason: 'full' };
+      record.capacity = expandCapacityTo;
     }
     application.status = next;
     application.decidedAt = current;
@@ -121,7 +131,8 @@ export function createDevApplicationRepository({
       return Promise.resolve({ status: 'applied' });
     },
 
-    approveApplication: (applicationId) => Promise.resolve(decide(applicationId, 'approved')),
+    approveApplication: (applicationId, options) =>
+      Promise.resolve(decide(applicationId, 'approved', options?.expandCapacityTo)),
     rejectApplication: (applicationId) => Promise.resolve(decide(applicationId, 'rejected')),
 
     listApplicants: (eventId) => {

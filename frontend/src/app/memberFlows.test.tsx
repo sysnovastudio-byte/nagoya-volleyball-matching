@@ -473,13 +473,36 @@ describe('申請者一覧', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('こはるさんの申請を却下しました。');
   });
 
-  it('満員の募集では、承認待ちを残したまま承認できない', async () => {
+  it('満員の募集では、定員を増やすことを確かめてから承認する', async () => {
+    const user = userEvent.setup();
     renderApp('/events/dev-b-full/applicants', { userId: HOST });
 
-    expect(await screen.findByText(/定員に達したため、今は承認できません/)).toBeInTheDocument();
-    const approveButtons = screen.getAllByRole('button', { name: /を承認する$/ });
-    expect(approveButtons).toHaveLength(2);
-    for (const button of approveButtons) expect(button).toBeDisabled();
+    expect(
+      await screen.findByText('定員に達しています。承認すると、定員を1人増やします。'),
+    ).toBeInTheDocument();
+    const [first] = screen.getAllByRole('button', { name: /を承認する$/ });
+    await user.click(first as HTMLElement);
+
+    const confirm = screen.getByRole('group', { name: /の承認の確認$/ });
+    expect(confirm).toHaveTextContent('定員を7人に増やして承認します。');
+    await user.click(within(confirm).getByRole('button', { name: '定員を7人にして承認する' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /定員を7人に増やして、.+さんの参加を承認しました。/,
+    );
+    expect(await screen.findByText(/定員7人/)).toBeInTheDocument();
+  });
+
+  it('定員を増やす確認は、やめると承認しない', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/events/dev-b-full/applicants', { userId: HOST });
+
+    const [first] = await screen.findAllByRole('button', { name: /を承認する$/ });
+    await user.click(first as HTMLElement);
+    await user.click(screen.getByRole('button', { name: 'やめる' }));
+
+    expect(db.events.find((event) => event.id === 'dev-b-full')?.capacity).toBe(6);
+    expect(screen.getAllByRole('button', { name: /を承認する$/ })).toHaveLength(2);
   });
 
   it('他人の募集の申請者一覧は見られない', async () => {

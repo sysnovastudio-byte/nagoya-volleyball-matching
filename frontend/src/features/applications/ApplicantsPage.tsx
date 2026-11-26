@@ -9,6 +9,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { EventStateBadge } from '../events/EventStateBadge';
+import { EVENT_LIMITS } from '../events/eventRules';
 import { formatDateTimeRange } from '../events/format';
 import { Avatar } from '../profiles/Avatar';
 import { displayName, experienceLabel } from '../profiles/format';
@@ -110,7 +111,8 @@ function Forbidden({ eventId, reason }: ForbiddenProps) {
 const DECISION_ERRORS: Record<DecisionRejection, string> = {
   notFound: '申請が見つかりませんでした。',
   notPending: 'この申請は、すでに承認または却下されています。',
-  full: '定員に達しているため、承認できませんでした。',
+  full: '定員が変わったため、承認できませんでした。もう一度お試しください。',
+  capacityLimit: `定員が上限の${EVENT_LIMITS.capacityMax}人のため、これ以上増やせません。`,
   notAccepting: '開催が始まったか、受付ができない状態のため、操作できませんでした。',
 };
 
@@ -137,11 +139,13 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
   const repository = useApplicationRepository();
   const [tab, setTab] = useState<Tab>('pending');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<{ id: string; kind: ConfirmKind } | null>(null);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
   const { event, applicants } = list;
   const isFull = event.approvedCount >= event.capacity;
+  // 満員のときは、承認と同時に定員を1人増やす。上限を超える場合は承認できない
+  const expandTo = isFull && event.capacity < EVENT_LIMITS.capacityMax ? event.capacity + 1 : null;
   const remaining = Math.max(event.capacity - event.approvedCount, 0);
   const counts = { pending: 0, approved: 0, other: 0 };
   for (const applicant of applicants) counts[tabOf(applicant)] += 1;
@@ -156,7 +160,10 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
     try {
       const result =
         decision === 'approve'
-          ? await repository.approveApplication(applicant.applicationId)
+          ? await repository.approveApplication(
+              applicant.applicationId,
+              expandTo === null ? undefined : { expandCapacityTo: expandTo },
+            )
           : await repository.rejectApplication(applicant.applicationId);
       setNotice(
         result.status === 'done'
@@ -164,12 +171,14 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
               tone: 'success',
               text:
                 decision === 'approve'
-                  ? `${name}さんの参加を承認しました。`
+                  ? expandTo === null
+                    ? `${name}さんの参加を承認しました。`
+                    : `定員を${expandTo}人に増やして、${name}さんの参加を承認しました。`
                   : `${name}さんの申請を却下しました。`,
             }
           : { tone: 'error', text: DECISION_ERRORS[result.reason] },
       );
-      setConfirmingId(null);
+      setConfirming(null);
       onChanged();
     } catch {
       setNotice({
@@ -204,7 +213,9 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
         </p>
         {isFull && counts.pending > 0 && event.canDecide && (
           <p className="mt-1 text-sub">
-            定員に達したため、今は承認できません。承認待ちの申請は残り、空きが出れば承認できます。
+            {expandTo === null
+              ? `定員が上限の${EVENT_LIMITS.capacityMax}人に達しているため、これ以上は承認できません。`
+              : '定員に達しています。承認すると、定員を1人増やします。'}
           </p>
         )}
         {locked && <p className="mt-1 text-sub">{locked}</p>}
@@ -233,7 +244,7 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
         value={tab}
         onChange={(next) => {
           setTab(next);
-          setConfirmingId(null);
+          setConfirming(null);
         }}
       />
 
@@ -246,16 +257,22 @@ function Applicants({ list, onChanged }: ApplicantsProps) {
             <DecisionActions
               name={displayName(applicant.profile)}
               visible={event.canDecide && applicant.status === 'pending'}
-              canApprove={!isFull}
+              canApprove={!isFull || expandTo !== null}
+              expandTo={expandTo}
               busy={busyId === applicant.applicationId}
               disabled={busyId !== null}
-              confirming={confirmingId === applicant.applicationId}
-              onApprove={() => void decide(applicant, 'approve')}
-              onAskReject={() => {
-                setConfirmingId(applicant.applicationId);
+              confirming={confirming?.id === applicant.applicationId ? confirming.kind : null}
+              onApprove={() => {
+                // 定員を増やす場合は、確認してから承認する
+                if (expandTo === null) void decide(applicant, 'approve');
+                else setConfirming({ id: applicant.applicationId, kind: 'expand' });
               }}
-              onCancelReject={() => {
-                setConfirmingId(null);
+              onConfirmApprove={() => void decide(applicant, 'approve')}
+              onAskReject={() => {
+                setConfirming({ id: applicant.applicationId, kind: 'reject' });
+              }}
+              onCancel={() => {
+                setConfirming(null);
               }}
               onReject={() => void decide(applicant, 'reject')}
             />
@@ -420,35 +437,45 @@ function ApplicantCard({ applicant, children }: ApplicantCardProps) {
   );
 }
 
+type ConfirmKind = 'reject' | 'expand';
+
 interface DecisionActionsProps {
   name: string;
   /** 承認待ちで、承認・却下できる期間の場合だけ出す */
   visible: boolean;
   canApprove: boolean;
+  /** 満員の場合に、承認と同時に増やした後の定員。満員でなければ null */
+  expandTo: number | null;
   busy: boolean;
   disabled: boolean;
-  confirming: boolean;
+  confirming: ConfirmKind | null;
   onApprove: () => void;
+  onConfirmApprove: () => void;
   onAskReject: () => void;
-  onCancelReject: () => void;
+  onCancel: () => void;
   onReject: () => void;
 }
 
-/** 承認・却下。却下は取り消せないため確認を挟む（docs/11の5-1）。 */
+/**
+ * 承認・却下。却下は取り消せないため確認を挟む（docs/11の5-1）。
+ * 満員の募集で承認するときは、定員を増やすことを確認する（docs/11の2-2）。
+ */
 function DecisionActions({
   name,
   visible,
   canApprove,
+  expandTo,
   busy,
   disabled,
   confirming,
   onApprove,
+  onConfirmApprove,
   onAskReject,
-  onCancelReject,
+  onCancel,
   onReject,
 }: DecisionActionsProps) {
   if (!visible) return null;
-  if (confirming) {
+  if (confirming === 'reject') {
     return (
       <div
         role="group"
@@ -462,7 +489,26 @@ function DecisionActions({
           <Button variant="danger" size="small" disabled={disabled} onClick={onReject}>
             {busy ? '却下しています' : '却下する'}
           </Button>
-          <Button variant="secondary" size="small" disabled={disabled} onClick={onCancelReject}>
+          <Button variant="secondary" size="small" disabled={disabled} onClick={onCancel}>
+            やめる
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  if (confirming === 'expand' && expandTo !== null) {
+    return (
+      <div
+        role="group"
+        aria-label={`${name}さんの承認の確認`}
+        className="rounded-xl border border-main p-3"
+      >
+        <p className="mb-2 font-bold">定員を{expandTo}人に増やして承認します。よろしいですか？</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="small" disabled={disabled} onClick={onConfirmApprove}>
+            {busy ? '承認しています' : `定員を${expandTo}人にして承認する`}
+          </Button>
+          <Button variant="secondary" size="small" disabled={disabled} onClick={onCancel}>
             やめる
           </Button>
         </div>
