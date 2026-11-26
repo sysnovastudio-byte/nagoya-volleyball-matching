@@ -463,15 +463,27 @@ describe('募集詳細（申請者）', () => {
     expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
   });
 
-  it.each([
-    ['満員', 'dev-easy-morning', '満員のため、今は申請できません。'],
-    ['受付終了', 'dev-spike-practice', '受付は終了しました。'],
-  ])('%sの募集では、申請できない案内を示す', async (_, eventId, message) => {
+  it('受付終了の募集では、申請できない案内を示す', async () => {
     // 却下の記録がない利用者にする
-    renderApp(`/events/${eventId}`, { userId: 'dev-user-minor' });
+    renderApp('/events/dev-spike-practice', { userId: 'dev-user-minor' });
 
-    expect((await screen.findAllByText(message)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('受付は終了しました。')).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: '参加を申請する' })).not.toBeInTheDocument();
+  });
+
+  it('満員の募集でも、主催者が判断することを添えて申請できる', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/dev-easy-morning', { userId: 'dev-user-minor' });
+
+    expect(
+      (await screen.findAllByText('満員です。申請すると主催者が判断します。')).length,
+    ).toBeGreaterThan(0);
+    const [button] = screen.getAllByRole('button', { name: '参加を申請する' });
+    if (!button) throw new Error('申請のボタンがありません。');
+    await user.click(button);
+
+    expect(await findToast()).toHaveTextContent('申請しました');
+    expect((await screen.findAllByText('承認待ち')).length).toBeGreaterThan(0);
   });
 
   it('開催中の承認済みは、終了日時まで住所を示す', async () => {

@@ -209,8 +209,8 @@ function TextSection({ title, children }: TextSectionProps) {
   );
 }
 
-const CLOSED_REASONS: Record<Exclude<EventState, 'open'>, string> = {
-  full: '満員のため、今は申請できません。',
+/** 申請できない状態の理由。満員では申請できる（docs/11の2-2） */
+const CLOSED_REASONS: Record<Exclude<EventState, 'open' | 'full'>, string> = {
   closed: '受付は終了しました。',
   ongoing: '開催中のため、申請できません。',
   ended: 'この募集は終了しました。',
@@ -231,8 +231,6 @@ interface EventActionsProps {
 
 /** 立場ごとの操作（docs/10の5-3）。1つだけを目立たせる。 */
 function EventActions({ event, apply }: EventActionsProps) {
-  const viewer = useViewer();
-
   if (event.isHost) {
     // 件数の表示・編集・締切・中止は、限定公開までに加える
     return <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>;
@@ -240,9 +238,22 @@ function EventActions({ event, apply }: EventActionsProps) {
   if (event.myApplication) {
     return <MyApplicationStatus event={event} />;
   }
-  if (event.state !== 'open') {
+  if (event.state !== 'open' && event.state !== 'full') {
     return <p className="text-center font-bold text-sub">{CLOSED_REASONS[event.state]}</p>;
   }
+  return (
+    <div className="flex flex-col gap-2">
+      {/* 満員でも申請でき、承認するかは主催者が判断する（docs/11の2-2） */}
+      {event.state === 'full' && (
+        <p className="text-center font-bold text-sub">満員です。申請すると主催者が判断します。</p>
+      )}
+      <ApplyActions event={event} apply={apply} />
+    </div>
+  );
+}
+
+function ApplyActions({ event, apply }: EventActionsProps) {
+  const viewer = useViewer();
   if (!viewer) return <GuestActions eventId={event.id} />;
   if (!viewer.profile) {
     return (
@@ -318,7 +329,6 @@ const APPLY_ERRORS: Record<ApplyRejection, string> = {
   alreadyApplied: 'この募集には、すでに申請しています。',
   notReapplicable: 'この募集には、もう申請できません。',
   notAccepting: '受付が終わったため、申請できませんでした。',
-  full: '満員になったため、申請できませんでした。',
   rateLimited: '申請の回数の上限（1日20件）に達しました。時間をおいてお試しください。',
   notFound: 'この募集は見つかりませんでした。',
 };
