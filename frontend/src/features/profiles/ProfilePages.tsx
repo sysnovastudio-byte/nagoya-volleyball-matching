@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useFlashToast } from '../../app/useFlashToast';
 import { NotFoundPage } from '../../app/NotFoundPage';
@@ -7,7 +7,8 @@ import { useResource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
-import { BlockActions, useBlockState } from '../safety/BlockActions';
+import { OverflowMenu } from '../../components/ui/OverflowMenu';
+import { BlockConfirm, BlockedNotice, useBlockState } from '../safety/BlockActions';
 import { Avatar } from './Avatar';
 import { displayName, experienceLabel } from './format';
 import { useProfileRepository } from './repositoryContext';
@@ -17,7 +18,7 @@ import type { AgeGroup, MyProfile, PublicProfile } from './types';
 /**
  * SCR-013 プロフィール（PROF-03）。ニックネーム・経験レベル・自己紹介と、画像の代わりの絵柄。
  * 年代は本人にだけ示す（主催者は申請者一覧で見る）。性別・活動地域（M-01）は加えない。
- * ほかの人のプロフィールでは、ブロックと解除ができる（SAFE-04・CND-06）。通報はサイクル4で加える。
+ * ほかの人のプロフィールでは、「…」のメニューから通報（SAFE-01）とブロック（SAFE-04）ができ、解除（CND-06）もここで行う。
  */
 export function MyProfilePage() {
   const repository = useProfileRepository();
@@ -53,26 +54,53 @@ export function UserProfilePage() {
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   const [profile] = result.value;
   if (!profile) return <NotFoundPage />;
-  return (
-    <ProfileView profile={profile}>
-      {/* 退会した人はブロックできない（相手がいない） */}
-      {!profile.isWithdrawn && <ProfileBlock userId={profile.userId} name={displayName(profile)} />}
-    </ProfileView>
-  );
+  // 退会した人は、通報（DB-30）もブロックもできない（相手がいない）
+  if (profile.isWithdrawn) return <ProfileView profile={profile} />;
+  return <OtherProfile profile={profile} />;
 }
 
-/** 他人のプロフィールの、ブロックと解除。自分自身の場合は、窓口が状態を返さないため出さない。 */
-function ProfileBlock({ userId, name }: { userId: string; name: string }) {
+/**
+ * ほかの人のプロフィールの「…」のメニュー（通報・ブロック）と、ブロック中の解除。
+ * 自分自身の場合は、ブロックの窓口が状態を返さないため、メニューを出さない。
+ */
+function OtherProfile({ profile }: { profile: PublicProfile }) {
+  const { userId } = profile;
+  const name = displayName(profile);
   const { blockedByMe, reload } = useBlockState(userId);
-  if (blockedByMe === null) return null;
-  return (
-    <BlockActions
-      userId={userId}
-      name={name}
-      blockedByMe={blockedByMe}
-      allowUnblock
-      onChanged={reload}
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
+
+  const menu = blockedByMe !== null && (
+    <OverflowMenu
+      label={`${name}さんへの操作`}
+      items={[
+        { label: '通報する', to: `/report/user/${userId}` },
+        ...(blockedByMe
+          ? []
+          : [
+              {
+                label: 'ブロックする',
+                onSelect: () => {
+                  setConfirmingBlock(true);
+                },
+              },
+            ]),
+      ]}
     />
+  );
+  return (
+    <ProfileView profile={profile} menu={menu}>
+      {blockedByMe === true && <BlockedNotice userId={userId} onChanged={reload} />}
+      {blockedByMe === false && confirmingBlock && (
+        <BlockConfirm
+          userId={userId}
+          name={name}
+          onChanged={reload}
+          onClose={() => {
+            setConfirmingBlock(false);
+          }}
+        />
+      )}
+    </ProfileView>
   );
 }
 
@@ -141,12 +169,14 @@ interface ProfileViewProps {
   profile: PublicProfile;
   /** 本人のプロフィールの場合だけ渡す。ほかの人の画面には出さない */
   ageGroup?: AgeGroup | null;
-  /** 本人の操作 */
+  /** 本人の操作。ほかの人の場合は、ブロックの確認・解除 */
   children?: ReactNode;
+  /** 名前の横の「…」のメニュー（ほかの人のプロフィールだけ） */
+  menu?: ReactNode;
 }
 
 /** 画像（の代わりの絵柄）と名前、公開項目の順（docs/11の5-1）。 */
-function ProfileView({ profile, ageGroup, children }: ProfileViewProps) {
+function ProfileView({ profile, ageGroup, children, menu }: ProfileViewProps) {
   const name = displayName(profile);
   useDocumentTitle(`${name}のプロフィール`);
   const experience = experienceLabel(profile);
@@ -155,7 +185,8 @@ function ProfileView({ profile, ageGroup, children }: ProfileViewProps) {
     <div className="mx-auto w-full max-w-160 px-4 py-6">
       <div className="mb-5 flex items-center gap-4">
         <Avatar size="large" />
-        <h1 className="min-w-0 text-2xl font-bold break-words">{name}</h1>
+        <h1 className="min-w-0 grow text-2xl font-bold break-words">{name}</h1>
+        {menu}
       </div>
       {!profile.isWithdrawn && (
         <dl className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4">

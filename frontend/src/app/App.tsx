@@ -12,6 +12,7 @@ import { CreateEventPage } from '../features/events/CreateEventPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventListPage } from '../features/events/EventListPage';
 import { ProfileEditPage } from '../features/profiles/ProfileEditPage';
+import { ReportPage } from '../features/reports/ReportPage';
 import { MyProfilePage, UserProfilePage } from '../features/profiles/ProfilePages';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { ConversationsPage } from '../features/conversations/ConversationsPage';
@@ -56,6 +57,8 @@ export const appRoutes = createRoutesFromElements(
       <Route path="profile" element={<MyProfilePage />} />
       <Route path="profile/edit" element={<ProfileEditPage />} />
       <Route path="users/:userId" element={<UserProfilePage />} />
+      {/* 通報（SCR-019）。管理者・利用停止中の人は RequireLogin が案内を示す */}
+      <Route path="report/:kind/:targetId" element={<ReportPage />} />
     </Route>
     {/* 要ログイン。ログアウトの後の移動先が違うため、画面の中で確認する */}
     <Route path="settings" element={<SettingsPage />} />

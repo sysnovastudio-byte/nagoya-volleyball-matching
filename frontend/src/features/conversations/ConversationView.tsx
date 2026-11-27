@@ -8,7 +8,8 @@ import { textLength } from '../../lib/text';
 import { formatDateTimeRange } from '../events/format';
 import { Avatar } from '../profiles/Avatar';
 import { displayName } from '../profiles/format';
-import { BlockActions, useBlockState } from '../safety/BlockActions';
+import { OverflowMenu, type OverflowMenuItem } from '../../components/ui/OverflowMenu';
+import { BlockConfirm, useBlockState } from '../safety/BlockActions';
 import { conversationEventTitle, messageDay, messageTime } from './format';
 import { MESSAGE_MAX_LENGTH, REJECTED_MESSAGES, checkMessageBody } from './messageRules';
 import { useConversationRepository } from './repositoryContext';
@@ -23,7 +24,8 @@ interface ConversationViewProps {
 /**
  * SCR-011 会話。閲覧と送信。編集・削除はできない（docs/11の3-3）。
  * 開いたら、表示したメッセージまで読んだことにする（M-09）。相手には既読を示さない。
- * 相手のブロック（SAFE-04）もここでできる。解除は相手のプロフィールで行う（M-12）。
+ * 「…」のメニューから、相手のメッセージの通報（SAFE-01）とブロック（SAFE-04）ができる。
+ * 解除は相手のプロフィールで行う（M-12）。
  */
 export function ConversationView({ conversationId, onChanged }: ConversationViewProps) {
   const repository = useConversationRepository();
@@ -113,6 +115,34 @@ function Conversation({ detail, onRefresh, onRead, onSent }: ConversationProps) 
   ];
   const lastRef = useRef<HTMLLIElement>(null);
   const lastId = messages.at(-1)?.id;
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
+  // 通報するメッセージを選んでいる間は、相手のメッセージに通報の入口を出す
+  const [choosingReport, setChoosingReport] = useState(false);
+  const menuItems: OverflowMenuItem[] = [
+    ...(messages.some((message) => !message.isMine)
+      ? [
+          {
+            label: 'メッセージを通報する',
+            onSelect: () => {
+              setChoosingReport(true);
+              setConfirmingBlock(false);
+            },
+          },
+        ]
+      : []),
+    // 退会した相手（null）と、ブロック中の相手には出さない
+    ...(block.blockedByMe === false
+      ? [
+          {
+            label: 'ブロックする',
+            onSelect: () => {
+              setConfirmingBlock(true);
+              setChoosingReport(false);
+            },
+          },
+        ]
+      : []),
+  ];
 
   useEffect(() => {
     // 最新のメッセージが見える位置に移す。テストの環境にはないため、ある場合だけ呼ぶ
@@ -154,16 +184,35 @@ function Conversation({ detail, onRefresh, onRead, onSent }: ConversationProps) 
           <Button variant="text" size="small" onClick={onRefresh}>
             更新する
           </Button>
+          <OverflowMenu label="この会話の操作" items={menuItems} />
         </div>
-        {block.blockedByMe === false && (
-          <div className="mt-2 flex justify-end">
-            <BlockActions
+        {confirmingBlock && block.blockedByMe === false && (
+          <div className="mt-2">
+            <BlockConfirm
               userId={partner.userId}
               name={partnerName}
-              blockedByMe={false}
-              allowUnblock={false}
               onChanged={block.reload}
+              onClose={() => {
+                setConfirmingBlock(false);
+              }}
             />
+          </div>
+        )}
+        {choosingReport && (
+          <div
+            role="status"
+            className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-canvas px-3 py-2"
+          >
+            <p className="font-bold">通報するメッセージを選んでください。</p>
+            <Button
+              variant="text"
+              size="small"
+              onClick={() => {
+                setChoosingReport(false);
+              }}
+            >
+              やめる
+            </Button>
           </div>
         )}
       </header>
@@ -184,7 +233,11 @@ function Conversation({ detail, onRefresh, onRead, onSent }: ConversationProps) 
                   className="flex flex-col"
                 >
                   {newDay && <p className="my-2 text-center text-sm text-muted">{day}</p>}
-                  <MessageBubble message={message} partnerName={partnerName} />
+                  <MessageBubble
+                    message={message}
+                    partnerName={partnerName}
+                    reportable={choosingReport && !message.isMine}
+                  />
                 </li>
               );
             })}
@@ -221,7 +274,14 @@ function Conversation({ detail, onRefresh, onRead, onSent }: ConversationProps) 
 const FOOTER_NOTE_CLASS =
   'sticky bottom-(--member-nav-h) border-t border-line bg-surface px-4 py-3 text-muted lg:rounded-b-2xl';
 
-function MessageBubble({ message, partnerName }: { message: Message; partnerName: string }) {
+interface MessageBubbleProps {
+  message: Message;
+  partnerName: string;
+  /** 通報の入口を出すか（相手のメッセージを選んでいる間だけ） */
+  reportable: boolean;
+}
+
+function MessageBubble({ message, partnerName, reportable }: MessageBubbleProps) {
   return (
     <div
       className={`flex max-w-[85%] flex-col ${message.isMine ? 'items-end self-end' : 'items-start'}`}
@@ -237,6 +297,14 @@ function MessageBubble({ message, partnerName }: { message: Message; partnerName
       <span className="text-sm text-muted">
         <time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
       </span>
+      {reportable && (
+        <Link
+          to={`/report/message/${message.id}`}
+          className="flex min-h-11 items-center font-bold text-danger underline"
+        >
+          このメッセージを通報する
+        </Link>
+      )}
     </div>
   );
 }

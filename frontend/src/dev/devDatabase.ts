@@ -12,6 +12,12 @@ import {
   type DevConversationRecord,
   type DevMessageRecord,
 } from './devConversations';
+import {
+  createDevModerationActions,
+  createDevReports,
+  type DevModerationActionRecord,
+  type DevReportRecord,
+} from './devModeration';
 import { createDevNotifications, type DevNotificationRecord } from './devNotifications';
 import { createDevUsers, type DevUser } from './devUsers';
 import { markDevModule } from './marker';
@@ -42,6 +48,10 @@ export interface DevDatabase {
   notifications: DevNotificationRecord[];
   /** ブロック（docs/06の4-9）。最初は空。帯で利用者を切り替えて、画面から作る */
   blocks: DevBlockRecord[];
+  /** 通報（docs/06の4-10）。状態ごとのダミーがある */
+  reports: DevReportRecord[];
+  /** 措置の記録（docs/06の4-12）。追加だけで、変えない */
+  moderationActions: DevModerationActionRecord[];
 }
 
 /** 【開発専用】保存されているブロックの形（docs/06の4-9）。 */
@@ -68,6 +78,8 @@ export function createDevDatabase(now: Date): DevDatabase {
     messages,
     notifications: createDevNotifications({ users, events, applications }, now),
     blocks: [],
+    reports: createDevReports(now),
+    moderationActions: createDevModerationActions(now),
   };
 }
 

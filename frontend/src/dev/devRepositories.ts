@@ -6,6 +6,7 @@ import { createDevDatabase } from './devDatabase';
 import { createDevEventRepository } from './devEventRepository';
 import { createDevNotificationRepository } from './devNotificationRepository';
 import { createDevProfileRepository } from './devProfileRepository';
+import { createDevReportRepository } from './devReportRepository';
 import { createDevSession } from './devSession';
 import { DEV_DATA_MARKER, markDevModule } from './marker';
 
@@ -45,6 +46,10 @@ export const devNotificationRepository = createDevNotificationRepository({
   session: devSession,
 });
 export const devBlockRepository = createDevBlockRepository({
+  db: devDatabase,
+  session: devSession,
+});
+export const devReportRepository = createDevReportRepository({
   db: devDatabase,
   session: devSession,
 });

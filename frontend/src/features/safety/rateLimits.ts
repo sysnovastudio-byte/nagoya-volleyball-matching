@@ -21,7 +21,7 @@ export const RATE_LIMITS = {
   messagePerHour: { max: 60, windowMs: HOUR_MS },
   /** 新しい会話の開始（SAFE-09）。1日10件 */
   conversationStart: { max: 10, windowMs: DAY_MS },
-  /** 通報（SAFE-09）。1日10件。通報はサイクル4で作る */
+  /** 通報（SAFE-09）。1日10件 */
   report: { max: 10, windowMs: DAY_MS },
 } as const satisfies Record<string, RateLimit>;
 
