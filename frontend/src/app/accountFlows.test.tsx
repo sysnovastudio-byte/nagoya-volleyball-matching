@@ -72,10 +72,11 @@ describe('パスワード再設定（SCR-004）', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('ログイン中は、パスワードの変更として申し込む。宛先は入力しない', async () => {
+  it('ログイン中は、設定からパスワードを変更する。宛先は入力しない', async () => {
     const user = userEvent.setup();
-    const { session } = renderApp('/password-reset', { userId: B });
+    const { session } = renderApp('/settings', { userId: B });
 
+    await user.click(await screen.findByRole('link', { name: /パスワードの変更/ }));
     expect(
       await screen.findByRole('heading', { level: 1, name: 'パスワードの変更' }),
     ).toBeInTheDocument();
@@ -177,10 +178,11 @@ describe('認証メールの再送（AUTH-05、SCR-003）', () => {
 });
 
 describe('退会（SCR-017）', () => {
-  it('説明を読み、パスワードを再入力して退会する', async () => {
+  it('設定から開き、説明を読み、パスワードを再入力して退会する', async () => {
     const user = userEvent.setup();
-    const { db, session } = renderApp('/settings/withdraw', { userId: A });
+    const { db, session } = renderApp('/settings', { userId: A });
 
+    await user.click(await screen.findByRole('link', { name: /^退会/ }));
     expect(await screen.findByRole('heading', { level: 1, name: '退会' })).toBeInTheDocument();
     const effects = await screen.findByRole('region', { name: '退会すると' });
     expect(effects).toHaveTextContent('開催場所住所を、すべて削除します');
@@ -259,6 +261,13 @@ describe('退会（SCR-017）', () => {
       '/privacy',
     );
     expect(screen.queryByRole('button', { name: '退会する' })).not.toBeInTheDocument();
+  });
+
+  it('管理用のアカウントは退会できず、設定にも退会を出さない', async () => {
+    renderApp('/settings', { userId: 'dev-admin' });
+
+    expect(await screen.findByRole('link', { name: /パスワードの変更/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^退会/ })).not.toBeInTheDocument();
   });
 
   it('管理用のアカウントで退会の画面を開くと、退会できないと示す', async () => {
@@ -348,5 +357,16 @@ describe('利用規約（SCR-023）・プライバシーポリシー（SCR-024�
       await screen.findByRole('heading', { level: 1, name: 'プライバシーポリシー' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '利用規約' })).toHaveAttribute('href', '/terms');
+  });
+
+  it('設定から、規約等へ移れる', async () => {
+    renderApp('/settings', { userId: A });
+
+    const legal = await screen.findByRole('region', { name: '規約等' });
+    expect(within(legal).getByRole('link', { name: /利用規約/ })).toHaveAttribute('href', '/terms');
+    expect(within(legal).getByRole('link', { name: /プライバシーポリシー/ })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
   });
 });
