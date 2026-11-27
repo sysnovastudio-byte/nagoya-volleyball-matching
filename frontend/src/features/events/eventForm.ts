@@ -3,8 +3,10 @@ import type {
   CreateEventInput,
   EventArea,
   EventKind,
+  EventLocation,
   Municipality,
   NagoyaWard,
+  PublicEvent,
   TargetLevel,
 } from './types';
 
@@ -49,6 +51,38 @@ export const EMPTY_EVENT_FORM: EventFormValues = {
   note: '',
 };
 
+/** 日時の入力欄。複製では入れない。 */
+export type EventScheduleValues = Pick<EventFormValues, 'date' | 'startTime' | 'endTime'>;
+
+/** 複製のもとにする募集を渡す、募集作成のアドレスの項目（例：/events/new?from=募集のID）。 */
+export const COPY_FROM_PARAM = 'from';
+
+/**
+ * 過去の募集から複製するときの入力（2026-11-27 ユーザーの決定）。日時のほかの項目を入れる。
+ * 日時は、今の入力をそのまま残す。住所は、取得の窓口が主催者に返した場合だけ入れる。
+ */
+export function formFromEvent(
+  event: PublicEvent,
+  location: EventLocation | null,
+  schedule: EventScheduleValues,
+): EventFormValues {
+  return {
+    ...schedule,
+    title: event.title,
+    municipality: event.area.municipality,
+    ward: event.area.ward ?? '',
+    targetLevels: [...event.targetLevels],
+    kind: event.kind ?? '',
+    capacity: String(event.capacity),
+    fee: String(event.fee),
+    description: event.description ?? '',
+    belongings: event.belongings ?? '',
+    address: location?.address ?? '',
+    venueName: location?.venueName ?? '',
+    note: location?.note ?? '',
+  };
+}
+
 const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -76,7 +110,7 @@ export function parseJstDateTime(value: string): Date | null {
  * 開催日と開始・終了の時刻から、開始・終了の日時を作る。
  * 終了の時刻が開始より前なら、翌日として扱う（docs/11の2-1）。どれかが欠けていれば null。
  */
-export function scheduleFromForm(values: Pick<EventFormValues, 'date' | 'startTime' | 'endTime'>) {
+export function scheduleFromForm(values: EventScheduleValues) {
   if (!LOCAL_DATE.test(values.date)) return null;
   if (!TIME_OPTIONS.includes(values.startTime) || !TIME_OPTIONS.includes(values.endTime))
     return null;

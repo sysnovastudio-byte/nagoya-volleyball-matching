@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_EVENT_FORM,
+  formFromEvent,
   isEventFormDirty,
   parseInteger,
   parseJstDateTime,
@@ -9,6 +10,7 @@ import {
   validateEventForm,
   type EventFormValues,
 } from './eventForm';
+import type { PublicEvent } from './types';
 
 // 日本時間 2026-11-25 12:00
 const NOW = new Date('2026-11-25T03:00:00Z');
@@ -225,5 +227,55 @@ describe('そのほか', () => {
     expect(isEventFormDirty({ ...EMPTY_EVENT_FORM, note: 'a' })).toBe(true);
     expect(isEventFormDirty({ ...EMPTY_EVENT_FORM, targetLevels: ['beginner'] })).toBe(true);
     expect(isEventFormDirty({ ...EMPTY_EVENT_FORM, title: '  ' })).toBe(false);
+  });
+});
+
+describe('過去の募集からの複製', () => {
+  const EVENT: PublicEvent = {
+    id: 'event-1',
+    title: '土曜の午後バレー',
+    startsAt: '2026-11-07T04:00:00Z',
+    endsAt: '2026-11-07T07:00:00Z',
+    area: { municipality: 'nagoya', ward: 'nakamura' },
+    targetLevels: ['beginner', 'experienced'],
+    kind: 'mixed',
+    description: '説明',
+    belongings: null,
+    capacity: 12,
+    remaining: 0,
+    fee: 500,
+    hostNickname: 'そら',
+    state: 'ended',
+  };
+  const SCHEDULE = { date: '2026-12-05', startTime: '', endTime: '' };
+
+  it('日時のほかの項目を入れ、日時は今の入力を残す', () => {
+    expect(
+      formFromEvent(EVENT, { venueName: '体育館', address: 'ダミー住所', note: null }, SCHEDULE),
+    ).toEqual({
+      ...SCHEDULE,
+      title: '土曜の午後バレー',
+      municipality: 'nagoya',
+      ward: 'nakamura',
+      targetLevels: ['beginner', 'experienced'],
+      kind: 'mixed',
+      capacity: '12',
+      fee: '500',
+      description: '説明',
+      belongings: '',
+      address: 'ダミー住所',
+      venueName: '体育館',
+      note: '',
+    });
+  });
+
+  it('住所を受け取れなかった場合と、名古屋市以外・種別なしは空にする', () => {
+    const values = formFromEvent(
+      { ...EVENT, area: { municipality: 'toyota', ward: null }, kind: null },
+      null,
+      { date: '', startTime: '', endTime: '' },
+    );
+    expect(values).toMatchObject({ ward: '', kind: '', address: '', venueName: '', note: '' });
+    expect(values.date).toBe('');
   });
 });

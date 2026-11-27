@@ -913,6 +913,71 @@ describe('申請と募集', () => {
   });
 });
 
+describe('過去の募集からの複製', () => {
+  it('申請と募集の「複製して作る」から、日時のほかの項目を入れて募集作成を開く', async () => {
+    const user = userEvent.setup();
+    renderApp('/activity', { userId: HOST });
+
+    const section = await screen.findByRole('region', { name: '主催する側' });
+    const item = (
+      await within(section).findByRole('link', { name: '木曜夜のミニゲーム会' })
+    ).closest('li');
+    if (!item) throw new Error('募集がありません。');
+    await user.click(within(item).getByRole('link', { name: '複製して作る' }));
+
+    expect(
+      await screen.findByText('「木曜夜のミニゲーム会」の内容を入れました。日時を選んでください。'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/タイトル/)).toHaveValue('木曜夜のミニゲーム会');
+    expect(screen.getByLabelText(/開催地（市町村）/)).toHaveValue('nagoya');
+    expect(screen.getByLabelText(/^区/)).toHaveValue('showa');
+    expect(screen.getByLabelText(/募集人数/)).toHaveValue('6');
+    expect(screen.getByLabelText(/参加費/)).toHaveValue('400');
+    expect(screen.getByLabelText(/持ち物/)).toHaveValue('室内シューズ');
+    expect(screen.getByLabelText(/開催場所住所/)).toHaveValue('ダミー住所J（架空）');
+    expect(screen.getByLabelText(/施設名/)).toHaveValue('ダミー体育館J');
+    // 日時は入れない
+    expect(screen.getByLabelText('日付')).toHaveValue('');
+    expect(screen.getByLabelText('開始時刻')).toHaveValue('');
+    expect(screen.getByLabelText('日付')).toHaveFocus();
+  });
+
+  it('募集作成の画面で、主催した募集を選んで入れられる。非表示の募集は選べない', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/new', { userId: HOST });
+
+    const section = await screen.findByRole('region', { name: '過去の募集から作る' });
+    const select = within(section).getByLabelText('複製する募集');
+    const options = within(select)
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+    expect(options.some((text) => text?.includes('木曜夜のミニゲーム会'))).toBe(true);
+    expect(options.some((text) => text?.includes('非表示'))).toBe(false);
+
+    await user.type(screen.getByLabelText(/タイトル/), '入力中のタイトル');
+    expect(
+      within(section).getByText(/今の入力は、選んだ募集の内容に置き換わります/),
+    ).toBeInTheDocument();
+    await user.selectOptions(select, 'dev-b-full');
+    await user.click(within(section).getByRole('button', { name: '日時のほかの項目を入れる' }));
+
+    expect(
+      await screen.findByText('「木曜夜のミニゲーム会」の内容を入れました。日時を選んでください。'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/タイトル/)).toHaveValue('木曜夜のミニゲーム会');
+  });
+
+  it('ほかの人の募集は複製できず、何も入れない', async () => {
+    renderApp('/events/new?from=dev-beginner-afternoon', { userId: 'dev-user-a' });
+
+    expect(
+      await screen.findByText(/複製できるのは、自分が主催した募集だけです/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/タイトル/)).toHaveValue('');
+    expect(screen.getByLabelText(/開催場所住所/)).toHaveValue('');
+  });
+});
+
 describe('プロフィール', () => {
   it('自分のプロフィールを示す', async () => {
     renderApp('/profile', { userId: 'dev-user-a' });

@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource, type Resource } from '../../app/useResource';
 import { Button, ButtonLink } from '../../components/ui/Button';
+import { COPY_FROM_PARAM } from '../events/eventForm';
 import { EventStateBadge } from '../events/EventStateBadge';
 import { formatDateTimeRange } from '../events/format';
 import { useEventRepository } from '../events/repositoryContext';
@@ -269,9 +270,17 @@ function HostedItem({ item }: { item: MyEvent }) {
             {item.capacity}人・承認待ち{' '}
             <span className="font-bold text-ink">{item.pendingCount}</span>人
           </p>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <ButtonLink to={`/events/${item.id}/applicants`} variant="secondary" size="small">
               申請者を見る
+            </ButtonLink>
+            {/* 日時のほかの項目を入れて、募集作成を開く（2026-11-27 ユーザーの決定） */}
+            <ButtonLink
+              to={`/events/new?${new URLSearchParams({ [COPY_FROM_PARAM]: item.id }).toString()}`}
+              variant="secondary"
+              size="small"
+            >
+              複製して作る
             </ButtonLink>
           </div>
         </>

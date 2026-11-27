@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useBlocker, useLocation, useNavigate } from 'react-router';
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useBlocker, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
+import { useResource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
 import type { EventDetailLocationState } from './EventDetailPage';
 import {
+  COPY_FROM_PARAM,
   EMPTY_EVENT_FORM,
+  formFromEvent,
   isEventFormDirty,
   scheduleFromForm,
   TIME_OPTIONS,
@@ -25,9 +28,16 @@ import {
   NAGOYA_WARDS,
   TARGET_LEVELS,
 } from './eventRules';
-import { kindLabel, levelLabel, municipalityLabel, wardLabel } from './format';
+import { kindLabel, levelLabel, municipalityLabel, toDateParts, wardLabel } from './format';
 import { useEventRepository } from './repositoryContext';
-import type { CreateEventRejection, TargetLevel } from './types';
+import type {
+  CreateEventRejection,
+  EventDetail,
+  EventLocation,
+  EventRepository,
+  MyEvent,
+  TargetLevel,
+} from './types';
 
 /** 誤りがあるときに、最初に移る入力欄の順（画面の並び順）。 */
 const FIELD_ORDER: EventFormField[] = [
@@ -58,6 +68,33 @@ const REJECTION_MESSAGES: Record<CreateEventRejection, string> = {
   rateLimited: `募集の作成は、24時間に${EVENT_LIMITS.dailyCreateLimit}件までです。時間をおいてから、もう一度お試しください。`,
   invalid: '入力の内容を確認してください。時間がたって、開始の日時が過ぎた可能性があります。',
 };
+
+type CopyStatus =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'done'; title: string }
+  | { status: 'error'; message: string };
+
+const COPY_NOT_ALLOWED = 'この募集は複製できません。複製できるのは、自分が主催した募集だけです。';
+const COPY_FAILED = '募集を読み込めませんでした。通信の状態を確認して、もう一度お試しください。';
+
+interface CopySource {
+  event: EventDetail;
+  location: EventLocation | null;
+}
+
+/**
+ * 過去の募集から複製するもとを読み込む（2026-11-27 ユーザーの決定）。
+ * 自分が主催した募集でなければ null。住所を返すかは取得の窓口（本番はDB）が決める。
+ */
+async function fetchCopySource(
+  repository: EventRepository,
+  eventId: string,
+): Promise<CopySource | null> {
+  const event = await repository.getEvent(eventId);
+  if (!event?.isHost) return null;
+  return { event, location: await repository.getLocation(eventId) };
+}
 
 /** 二重送信の防止に使う値。安全な接続でない場合（randomUUID がない場合）も作れるようにする。 */
 function createRequestId() {
@@ -93,6 +130,58 @@ function CreateEventForm() {
   const submittingRef = useRef(false);
   const submitErrorRef = useRef<HTMLParagraphElement>(null);
   const dirty = isEventFormDirty(values);
+  const [searchParams] = useSearchParams();
+  const copyFromId = searchParams.get(COPY_FROM_PARAM);
+  // 申請と募集（SCR-009）の「複製して作る」から来た場合は、開いたときから読み込む
+  const [copy, setCopy] = useState<CopyStatus>(
+    copyFromId ? { status: 'loading' } : { status: 'idle' },
+  );
+
+  /** 読み込んだ複製のもとを入れる。日時は今の入力を残す。 */
+  const applyCopy = (source: CopySource | null) => {
+    if (!source) {
+      setCopy({ status: 'error', message: COPY_NOT_ALLOWED });
+      return;
+    }
+    setValues((current) =>
+      formFromEvent(source.event, source.location, {
+        date: current.date,
+        startTime: current.startTime,
+        endTime: current.endTime,
+      }),
+    );
+    setErrors({});
+    setValidated(false);
+    setCopy({ status: 'done', title: source.event.title });
+    // 次に選ぶ日時へ移る
+    document.getElementById('event-date')?.focus();
+  };
+  const failCopy = () => {
+    setCopy({ status: 'error', message: COPY_FAILED });
+  };
+
+  const copyFrom = (eventId: string) => {
+    setCopy({ status: 'loading' });
+    fetchCopySource(repository, eventId).then(applyCopy, failCopy);
+  };
+
+  const onOpenCopyLoaded = useEffectEvent(applyCopy);
+  const onOpenCopyFailed = useEffectEvent(failCopy);
+  useEffect(() => {
+    if (!copyFromId) return;
+    let active = true;
+    fetchCopySource(repository, copyFromId).then(
+      (source) => {
+        if (active) onOpenCopyLoaded(source);
+      },
+      () => {
+        if (active) onOpenCopyFailed();
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [repository, copyFromId]);
 
   // 入力中に、画面の中のリンク・下部の移動・戻る操作・「やめる」で移るときは確認する
   const blocker = useBlocker(
@@ -179,6 +268,29 @@ function CreateEventForm() {
       <p className="mb-4 text-muted">
         <RequiredMark required /> の項目は、入力が必要です。
       </p>
+
+      <CopyFromEvent
+        initialEventId={copyFromId}
+        loading={copy.status === 'loading'}
+        dirty={dirty}
+        onCopy={copyFrom}
+      />
+      {/* 主催した募集の一覧を出せない場合（読み込み中・ない）も、複製の結果は示す */}
+      {copy.status === 'loading' && (
+        <p role="status" className="mt-3 text-muted">
+          複製する募集を読み込んでいます
+        </p>
+      )}
+      {copy.status === 'done' && (
+        <p role="status" className="mt-3 font-bold text-success">
+          「{copy.title}」の内容を入れました。日時を選んでください。
+        </p>
+      )}
+      {copy.status === 'error' && (
+        <p role="alert" className="mt-3 font-bold text-danger">
+          {copy.message}
+        </p>
+      )}
 
       <form
         noValidate
@@ -492,6 +604,90 @@ function CreateEventForm() {
         </div>
       </form>
     </div>
+  );
+}
+
+interface CopyFromEventProps {
+  initialEventId: string | null;
+  loading: boolean;
+  dirty: boolean;
+  onCopy: (eventId: string) => void;
+}
+
+/** 複製のもとにできる、自分が主催した募集。非表示の募集は内容を見られないため除き、新しい順に並べる。 */
+function copySources(events: MyEvent[]) {
+  return events
+    .filter((event) => !event.hidden)
+    .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+}
+
+function sourceLabel(event: { title: string; startsAt: string }) {
+  const parts = toDateParts(event.startsAt);
+  return `${parts.month}月${parts.day}日（${parts.weekday}） ${event.title}`;
+}
+
+/** 過去の募集から作る。主催した募集がない場合は示さない。 */
+function CopyFromEvent({ initialEventId, loading, dirty, onCopy }: CopyFromEventProps) {
+  const repository = useEventRepository();
+  const { result, retry } = useResource('copy-sources', () => repository.getMyEvents());
+  const [selected, setSelected] = useState(initialEventId ?? '');
+
+  if (result.status === 'loading') return null;
+  if (result.status === 'error') {
+    return (
+      <div role="alert" className="mb-2 flex flex-wrap items-center gap-2 text-sub">
+        <p>過去の募集を読み込めませんでした。</p>
+        <Button variant="text" size="small" onClick={retry}>
+          もう一度読み込む
+        </Button>
+      </div>
+    );
+  }
+  const sources = copySources(result.value);
+  if (sources.length === 0) return null;
+
+  return (
+    <section
+      aria-labelledby="copy-from-heading"
+      className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4"
+    >
+      <h2 id="copy-from-heading" className="text-lg font-bold">
+        過去の募集から作る
+      </h2>
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">複製する募集</span>
+        <select
+          value={selected}
+          disabled={loading}
+          onChange={(event) => {
+            setSelected(event.target.value);
+          }}
+          className={INPUT_CLASS}
+        >
+          <option value="">選んでください</option>
+          {sources.map((event) => (
+            <option key={event.id} value={event.id}>
+              {sourceLabel(event)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {dirty && (
+        <p className="text-sub">今の入力は、選んだ募集の内容に置き換わります（日時はそのまま）。</p>
+      )}
+      <div>
+        <Button
+          variant="secondary"
+          size="small"
+          disabled={selected === '' || loading}
+          onClick={() => {
+            onCopy(selected);
+          }}
+        >
+          {loading ? '読み込んでいます' : '日時のほかの項目を入れる'}
+        </Button>
+      </div>
+    </section>
   );
 }
 
