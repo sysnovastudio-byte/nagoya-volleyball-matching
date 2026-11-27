@@ -1,9 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../components/ui/Button';
 import { INPUT_CLASS } from '../../components/ui/FormField';
-import { checkFilter, EMPTY_FILTER, type EventFilter } from './eventFilter';
+import {
+  AVAILABILITY_FILTERS,
+  checkFilter,
+  EMPTY_FILTER,
+  type AvailabilityFilter,
+  type EventFilter,
+} from './eventFilter';
 import { isMunicipality, isNagoyaWard, MUNICIPALITIES, NAGOYA_WARDS } from './eventRules';
-import { municipalityLabel, wardLabel } from './format';
+import { municipalityLabel, stateLabel, wardLabel } from './format';
 
 interface EventFilterPanelProps {
   filter: EventFilter;
@@ -11,7 +17,7 @@ interface EventFilterPanelProps {
 }
 
 /**
- * 募集の絞り込み（EVT-05）。日付の範囲と開催地（市町村、名古屋市は区も）。
+ * 募集の絞り込み（EVT-05）。日付の範囲・開催地（市町村、名古屋市は区も）・受付の状態（受付中／満員）。
  * 条件は「この条件で探す」で反映する。入力のたびに読み込み直さない。
  */
 export function EventFilterPanel({ filter, onApply }: EventFilterPanelProps) {
@@ -118,6 +124,25 @@ export function EventFilterPanel({ filter, onApply }: EventFilterPanelProps) {
           </select>
         </label>
       )}
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">受付の状態</span>
+        <select
+          value={draft.availability ?? ''}
+          onChange={(event) => {
+            const value = AVAILABILITY_FILTERS.find((item) => item === event.target.value);
+            setDraft({ ...draft, availability: value ?? null });
+          }}
+          className={INPUT_CLASS}
+        >
+          <option value="">すべて</option>
+          {AVAILABILITY_FILTERS.map((availability: AvailabilityFilter) => (
+            <option key={availability} value={availability}>
+              {stateLabel(availability)}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="flex flex-col gap-2">
         <Button type="submit">この条件で探す</Button>

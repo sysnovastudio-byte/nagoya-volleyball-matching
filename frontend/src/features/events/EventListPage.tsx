@@ -15,7 +15,7 @@ import {
   filterToParams,
   type EventFilter,
 } from './eventFilter';
-import { municipalityLabel, wardLabel } from './format';
+import { municipalityLabel, stateLabel, wardLabel } from './format';
 import { HeroBand } from './HeroBand';
 import { useEventList } from './useEventList';
 
@@ -146,6 +146,7 @@ function FilterSummary({ filter, onClear }: { filter: EventFilter; onClear: () =
       `${municipalityLabel(filter.municipality)}${filter.ward ? wardLabel(filter.ward) : ''}`,
     );
   }
+  if (filter.availability) parts.push(stateLabel(filter.availability));
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
       <p className="font-bold">
@@ -175,7 +176,7 @@ function EventList({ filter, onClear }: { filter: EventFilter; onClear: () => vo
   if (state.items.length === 0 && activeFilterCount(filter) > 0) {
     return (
       <StatusMessage title="条件に合う募集はありません">
-        <p>日付や開催地を変えて、もう一度お試しください。</p>
+        <p>日付・開催地・受付の状態を変えて、もう一度お試しください。</p>
         <Button variant="secondary" onClick={onClear}>
           条件をクリア
         </Button>

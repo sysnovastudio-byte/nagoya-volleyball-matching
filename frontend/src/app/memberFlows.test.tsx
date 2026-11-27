@@ -1462,6 +1462,30 @@ describe('募集の絞り込み（EVT-05）', () => {
     expect(list).toHaveLength(2);
   });
 
+  it('受付の状態（受付中／満員）で絞り込む', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+
+    await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' });
+    await user.click(screen.getByRole('button', { name: '条件' }));
+    const select = screen.getByLabelText('受付の状態');
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['すべて', '受付中', '満員']);
+    await user.selectOptions(select, '満員');
+    await user.click(screen.getByRole('button', { name: 'この条件で探す' }));
+
+    expect(await screen.findByText('条件：', { exact: false })).toHaveTextContent('条件：満員');
+    const cards = await screen.findAllByRole('article');
+    expect(cards.length).toBeGreaterThan(0);
+    for (const card of cards) expect(card).toHaveTextContent('満員');
+    expect(
+      screen.queryByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('条件に合う募集がなければ、そう示して条件をクリアできる', async () => {
     const user = userEvent.setup();
     renderApp('/?city=nagoya&ward=naka');

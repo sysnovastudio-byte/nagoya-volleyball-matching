@@ -113,7 +113,13 @@ describe('募集の一覧', () => {
 });
 
 describe('募集の絞り込み（EVT-05）', () => {
-  const NONE = { dateFrom: null, dateTo: null, municipality: null, ward: null };
+  const NONE = {
+    dateFrom: null,
+    dateTo: null,
+    municipality: null,
+    ward: null,
+    availability: null,
+  };
 
   it('名古屋市の区で絞り込む', async () => {
     const { items } = await setup().repository.listEvents(undefined, {
@@ -147,6 +153,19 @@ describe('募集の絞り込み（EVT-05）', () => {
     expect(items.map((event) => event.id)).not.toContain('dev-spike-practice');
     expect(items.map((event) => event.id)).toContain('dev-beginner-afternoon');
     expect(items.map((event) => event.id)).toContain('dev-easy-morning');
+  });
+
+  it('受付の状態（受付中／満員）で絞り込む。締切は、どちらにも含めない', async () => {
+    const { repository } = setup();
+    const all = (await repository.listEvents(undefined, NONE)).items;
+    const open = (await repository.listEvents(undefined, { ...NONE, availability: 'open' })).items;
+    const full = (await repository.listEvents(undefined, { ...NONE, availability: 'full' })).items;
+
+    expect(open.length).toBeGreaterThan(0);
+    expect(full.length).toBeGreaterThan(0);
+    expect(open.every((event) => event.state === 'open')).toBe(true);
+    expect(full.every((event) => event.state === 'full')).toBe(true);
+    expect(open.length + full.length).toBe(all.filter((event) => event.state !== 'closed').length);
   });
 
   it('開催日の範囲で絞り込む。両端の日を含む', async () => {

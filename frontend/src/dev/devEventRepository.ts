@@ -87,7 +87,7 @@ export function createDevEventRepository({
         .flatMap((record) => {
           const state = devEventState(db, record, current);
           return (state === 'open' || state === 'full' || state === 'closed') &&
-            matchesFilter(record, filter)
+            matchesFilter({ startsAt: record.startsAt, area: record.area, state }, filter)
             ? [toPublicEvent(record, state)]
             : [];
         })

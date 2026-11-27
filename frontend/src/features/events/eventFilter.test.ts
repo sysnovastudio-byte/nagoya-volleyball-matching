@@ -15,9 +15,10 @@ describe('絞り込みの条件', () => {
       dateTo: '2026-12-07',
       municipality: 'nagoya' as const,
       ward: 'naka' as const,
+      availability: 'full' as const,
     };
     expect(filterToParams(filter).toString()).toBe(
-      'from=2026-12-01&to=2026-12-07&city=nagoya&ward=naka',
+      'from=2026-12-01&to=2026-12-07&city=nagoya&ward=naka&status=full',
     );
     expect(filterFromParams(filterToParams(filter))).toEqual(filter);
     const outside = { ...EMPTY_FILTER, municipality: 'toyota' as const };
@@ -28,7 +29,9 @@ describe('絞り込みの条件', () => {
 
   it('形の正しくない値は、指定がないものとして扱う', () => {
     expect(
-      filterFromParams(new URLSearchParams('from=2026-02-30&to=abc&city=tokyo&ward=naka')),
+      filterFromParams(
+        new URLSearchParams('from=2026-02-30&to=abc&city=tokyo&ward=naka&status=closed'),
+      ),
     ).toEqual(EMPTY_FILTER);
   });
 
@@ -62,8 +65,10 @@ describe('絞り込みの条件', () => {
         dateTo: null,
         municipality: 'nagoya',
         ward: 'naka',
+        availability: null,
       }),
     ).toBe(2);
+    expect(activeFilterCount({ ...EMPTY_FILTER, availability: 'open' })).toBe(1);
   });
 
   it('開催日は日本時間の開始日で比べ、範囲の両端の日を含む', () => {
@@ -71,6 +76,7 @@ describe('絞り込みの条件', () => {
     const event = {
       startsAt: '2026-11-30T15:30:00Z',
       area: { municipality: 'nagoya' as const, ward: 'naka' as const },
+      state: 'open' as const,
     };
     expect(matchesFilter(event, { ...EMPTY_FILTER, dateFrom: '2026-12-01' })).toBe(true);
     expect(matchesFilter(event, { ...EMPTY_FILTER, dateTo: '2026-12-01' })).toBe(true);
@@ -81,10 +87,12 @@ describe('絞り込みの条件', () => {
     const nagoya = {
       startsAt: '2026-12-01T03:00:00Z',
       area: { municipality: 'nagoya' as const, ward: 'naka' as const },
+      state: 'open' as const,
     };
     const toyota = {
       startsAt: '2026-12-01T03:00:00Z',
       area: { municipality: 'toyota' as const, ward: null },
+      state: 'open' as const,
     };
     const inNagoya = { ...EMPTY_FILTER, municipality: 'nagoya' as const };
     expect(matchesFilter(nagoya, inNagoya)).toBe(true);
@@ -92,5 +100,19 @@ describe('絞り込みの条件', () => {
     expect(matchesFilter(nagoya, { ...inNagoya, ward: 'naka' })).toBe(true);
     expect(matchesFilter(nagoya, { ...inNagoya, ward: 'kita' })).toBe(false);
     expect(matchesFilter(toyota, { ...EMPTY_FILTER, municipality: 'toyota' })).toBe(true);
+  });
+
+  it('受付の状態は、受付中か満員と一致するものだけ', () => {
+    const event = {
+      startsAt: '2026-12-01T03:00:00Z',
+      area: { municipality: 'toyota' as const, ward: null },
+    };
+    const open = { ...EMPTY_FILTER, availability: 'open' as const };
+    const full = { ...EMPTY_FILTER, availability: 'full' as const };
+    expect(matchesFilter({ ...event, state: 'open' }, open)).toBe(true);
+    expect(matchesFilter({ ...event, state: 'full' }, open)).toBe(false);
+    expect(matchesFilter({ ...event, state: 'full' }, full)).toBe(true);
+    expect(matchesFilter({ ...event, state: 'closed' }, full)).toBe(false);
+    expect(matchesFilter({ ...event, state: 'closed' }, EMPTY_FILTER)).toBe(true);
   });
 });
