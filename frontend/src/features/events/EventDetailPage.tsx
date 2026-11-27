@@ -267,7 +267,7 @@ function EventActions({ event, apply }: EventActionsProps) {
   if (event.isHost) {
     // 編集（一般公開の前、M-02）と締切・再開（公開後、M-03）は、MVPでは置かない
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col items-center gap-2">
         {event.hostSummary && (
           <p className="text-center text-sub">
             承認待ち <span className="font-bold text-ink">{event.hostSummary.pendingCount}</span>
@@ -275,8 +275,14 @@ function EventActions({ event, apply }: EventActionsProps) {
             <span className="font-bold text-ink">{event.hostSummary.approvedCount}</span>人
           </p>
         )}
-        <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>
-        <CancelEventAction event={event} onChanged={apply.onChanged} />
+        {/* 「申請者を見る」は中央にそろえる（2026-11-27 ユーザーの決定） */}
+        <div className="flex w-full max-w-80 flex-col">
+          <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>
+        </div>
+        {/* 中止の確認は、影響の説明を読みやすいよう幅いっぱいに出す */}
+        <div className="w-full">
+          <CancelEventAction event={event} onChanged={apply.onChanged} />
+        </div>
       </div>
     );
   }
