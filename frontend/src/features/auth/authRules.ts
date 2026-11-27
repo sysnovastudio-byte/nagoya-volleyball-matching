@@ -1,5 +1,4 @@
 import type { ConsentKey } from './agreements';
-import type { AgeCategory } from './types';
 
 /** パスワードは10文字以上。文字の種類は強制しない（docs/11のQ-49）。 */
 export const PASSWORD_MIN_LENGTH = 10;
@@ -34,20 +33,19 @@ export function checkSignInForm(values: SignInFormValues): SignInFieldErrors {
 export interface SignUpFormValues {
   email: string;
   password: string;
-  ageCategory: AgeCategory | null;
-  guardianConsent: boolean;
+  /** 「20歳以上です」の申告 */
+  adultDeclared: boolean;
   agreements: Record<ConsentKey, boolean>;
 }
 
-export type SignUpField = 'email' | 'password' | 'ageCategory' | 'guardianConsent' | ConsentKey;
+export type SignUpField = 'email' | 'password' | 'adultDeclared' | ConsentKey;
 export type SignUpFieldErrors = Partial<Record<SignUpField, string>>;
 
 /** 同意の欄は、すべて未選択から始める（docs/11の7-2）。 */
 export const EMPTY_SIGN_UP_FORM: SignUpFormValues = {
   email: '',
   password: '',
-  ageCategory: null,
-  guardianConsent: false,
+  adultDeclared: false,
   agreements: { termsAndPrivacy: false, messageReview: false },
 };
 
@@ -64,10 +62,7 @@ export function checkSignUpForm(values: SignUpFormValues): SignUpFieldErrors {
   if (Array.from(values.password).length < PASSWORD_MIN_LENGTH) {
     errors.password = `パスワードは${PASSWORD_MIN_LENGTH}文字以上にしてください。`;
   }
-  if (values.ageCategory === null) errors.ageCategory = '年齢の区分を選んでください。';
-  if (values.ageCategory === 'minor' && !values.guardianConsent) {
-    errors.guardianConsent = '18歳未満の方は、保護者の同意が必要です。';
-  }
+  if (!values.adultDeclared) errors.adultDeclared = '20歳以上の方だけが登録できます。';
   for (const key of Object.keys(AGREEMENT_ERRORS) as ConsentKey[]) {
     if (!values.agreements[key]) errors[key] = AGREEMENT_ERRORS[key];
   }

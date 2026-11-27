@@ -15,14 +15,12 @@ import {
 import { AuthNotConnectedError } from './repository';
 import { useAuthRepository } from './repositoryContext';
 import { useSession } from './sessionContext';
-import type { AgeCategory } from './types';
 
 /** 誤りがあるときに、最初にフォーカスを移す順。 */
 const FIELD_ORDER: SignUpField[] = [
   'email',
   'password',
-  'ageCategory',
-  'guardianConsent',
+  'adultDeclared',
   'termsAndPrivacy',
   'messageReview',
 ];
@@ -30,11 +28,6 @@ const FIELD_ORDER: SignUpField[] = [
 function fieldId(field: SignUpField) {
   return `signup-${field}`;
 }
-
-const AGE_OPTIONS: { value: AgeCategory; label: string }[] = [
-  { value: 'adult', label: '18歳以上' },
-  { value: 'minor', label: '18歳未満（保護者の同意あり）' },
-];
 
 /**
  * SCR-002 新規登録（AUTH-01・CND-09）。送信すると SCR-003 へ移る。
@@ -73,16 +66,12 @@ function SignUpForm() {
       document.getElementById(fieldId(first))?.focus();
       return;
     }
-    // 上の検証で選ばれていることを確かめている。型を絞るための確認
-    if (values.ageCategory === null) return;
-
     setSubmitting(true);
     try {
       const result = await repository.signUp({
         email: values.email.trim(),
         password: values.password,
-        ageCategory: values.ageCategory,
-        guardianConsent: values.ageCategory === 'minor' && values.guardianConsent,
+        adultDeclared: values.adultDeclared,
         agreements: agreedDocuments(values.agreements),
       });
       if (result.status === 'confirmationSent') {
@@ -173,52 +162,23 @@ function SignUpForm() {
           )}
         </FormField>
 
-        <fieldset
-          aria-describedby={errors.ageCategory ? `${fieldId('ageCategory')}-error` : undefined}
-          className="flex flex-col gap-1"
-        >
+        {/* 登録は20歳以上に限る（docs/11の7-1）。申告だけで、書類による確認はしない */}
+        <fieldset className="flex flex-col gap-1">
           <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
-            年齢の区分
+            年齢
             <RequiredMark required />
           </legend>
-          {AGE_OPTIONS.map((option, index) => (
-            <label key={option.value} className="flex min-h-11 items-center gap-2">
-              <input
-                // 誤りのときにフォーカスを移す先は、最初の選択肢
-                id={index === 0 ? fieldId('ageCategory') : undefined}
-                type="radio"
-                name="ageCategory"
-                value={option.value}
-                checked={values.ageCategory === option.value}
-                aria-invalid={errors.ageCategory ? true : undefined}
-                onChange={() => {
-                  update({ ...values, ageCategory: option.value });
-                }}
-                className="size-5"
-              />
-              {option.label}
-            </label>
-          ))}
-          <FieldError id={`${fieldId('ageCategory')}-error`} message={errors.ageCategory} />
+          <CheckboxField
+            id={fieldId('adultDeclared')}
+            checked={values.adultDeclared}
+            error={errors.adultDeclared}
+            onChange={(checked) => {
+              update({ ...values, adultDeclared: checked });
+            }}
+          >
+            20歳以上です
+          </CheckboxField>
         </fieldset>
-
-        {values.ageCategory === 'minor' && (
-          <div className="rounded-xl border border-accent bg-accent-tint p-4">
-            <p className="mb-2">
-              18歳未満の方は、保護者の方に利用規約とプライバシーポリシーを確かめてもらい、同意を得てから登録してください。
-            </p>
-            <CheckboxField
-              id={fieldId('guardianConsent')}
-              checked={values.guardianConsent}
-              error={errors.guardianConsent}
-              onChange={(checked) => {
-                update({ ...values, guardianConsent: checked });
-              }}
-            >
-              保護者が規約等を確かめ、利用に同意しています
-            </CheckboxField>
-          </div>
-        )}
 
         <fieldset className="flex flex-col gap-4">
           <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">

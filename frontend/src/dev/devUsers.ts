@@ -1,4 +1,3 @@
-import type { AgeCategory } from '../features/auth/types';
 import type { AgeGroup, ExperienceLevel } from '../features/profiles/types';
 import { markDevModule } from './marker';
 
@@ -11,7 +10,6 @@ export interface DevUser {
   role: 'user' | 'admin';
   /** 利用停止中は、公開情報の閲覧・ログアウト・退会だけができる（docs/11の4-2） */
   status: 'active' | 'suspended';
-  ageCategory: AgeCategory;
   /** 必須プロフィールが未登録の場合は null */
   profile: {
     nickname: string;
@@ -30,7 +28,6 @@ export const DEV_PERSONAS: readonly { userId: string | null; label: string }[] =
   { userId: null, label: '未ログイン' },
   { userId: 'dev-user-a', label: '利用者A（主に参加）' },
   { userId: 'dev-user-b', label: '利用者B（主に主催）' },
-  { userId: 'dev-user-minor', label: '18歳未満の利用者' },
   { userId: 'dev-user-no-profile', label: 'プロフィール未登録の利用者' },
   { userId: 'dev-user-suspended', label: '利用停止中の利用者' },
   { userId: DEV_ADMIN_ID, label: '管理者（ダミー）' },
@@ -76,7 +73,6 @@ export function createDevUsers(): DevUser[] {
     {
       id: 'dev-user-a',
       ...MEMBER,
-      ageCategory: 'adult',
       profile: {
         nickname: 'あおい',
         experienceLevel: 'beginner',
@@ -87,7 +83,6 @@ export function createDevUsers(): DevUser[] {
     {
       id: 'dev-user-b',
       ...MEMBER,
-      ageCategory: 'adult',
       profile: {
         nickname: 'そら',
         experienceLevel: 'experienced',
@@ -95,24 +90,12 @@ export function createDevUsers(): DevUser[] {
         ageGroup: 'thirties',
       },
     },
-    {
-      id: 'dev-user-minor',
-      ...MEMBER,
-      ageCategory: 'minor',
-      profile: {
-        nickname: 'こはる',
-        experienceLevel: 'inexperienced',
-        bio: null,
-        ageGroup: 'teens',
-      },
-    },
-    { id: 'dev-user-no-profile', ...MEMBER, ageCategory: 'adult', profile: null },
+    { id: 'dev-user-no-profile', ...MEMBER, profile: null },
     // 利用停止中の利用者。停止の記録と、停止のきっかけの通報がある（devModeration.ts）
     {
       id: 'dev-user-suspended',
       role: 'user',
       status: 'suspended',
-      ageCategory: 'adult',
       profile: {
         nickname: 'かいと',
         experienceLevel: 'experienced',
@@ -121,7 +104,7 @@ export function createDevUsers(): DevUser[] {
       },
     },
     // 管理者。個人の利用とは分けたアカウントで、プロフィールを持たない
-    { id: DEV_ADMIN_ID, role: 'admin', status: 'active', ageCategory: 'adult', profile: null },
+    { id: DEV_ADMIN_ID, role: 'admin', status: 'active', profile: null },
     // ここから下は、ほかの募集の主催者（帯では選べない）
     ...(
       [
@@ -133,13 +116,11 @@ export function createDevUsers(): DevUser[] {
     ).map(([id, nickname]) => ({
       id,
       ...MEMBER,
-      ageCategory: 'adult' as const,
       profile: { nickname, experienceLevel: 'experienced' as const, bio: null, ageGroup: null },
     })),
     ...MEMBERS.map(([nickname, experienceLevel, bio], index) => ({
       id: DEV_MEMBER_IDS[index] ?? '',
       ...MEMBER,
-      ageCategory: 'adult' as const,
       // 年代は、未選択の人も含めて順にばらつかせる（架空）
       profile: {
         nickname,

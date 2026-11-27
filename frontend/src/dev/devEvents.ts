@@ -302,7 +302,7 @@ const NAMED_APPLICATIONS: [eventId: string, userId: string, status: ApplicationS
   ['dev-ongoing', 'dev-user-a', 'approved'],
   ['dev-ended', 'dev-user-a', 'approved'],
   ['dev-hidden', 'dev-user-a', 'approved'],
-  ['dev-beginner-afternoon', 'dev-user-minor', 'pending'],
+  ['dev-beginner-afternoon', 'dev-member-13', 'pending'],
 ];
 
 /** 人数を埋める架空の申請。名前のある申請に加えて、この数だけ作る。 */

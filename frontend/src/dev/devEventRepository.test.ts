@@ -255,7 +255,7 @@ describe('くわしい住所', () => {
     });
   });
 
-  it.each([null, 'dev-user-a', 'dev-user-minor', 'dev-user-no-profile'])(
+  it.each([null, 'dev-user-a', 'dev-member-13', 'dev-user-no-profile'])(
     '主催者でない人（%s）には null を返す',
     async (userId) => {
       expect(await setup({ userId }).repository.getLocation(HOSTED_EVENT)).toBeNull();
@@ -339,7 +339,6 @@ describe('募集の作成', () => {
 
   it.each([
     [null, 'notLoggedIn'],
-    ['dev-user-minor', 'minor'],
     ['dev-user-no-profile', 'profileRequired'],
   ] as const)('%s は作成できない（%s）', async (userId, reason) => {
     const { repository, db } = setup({ userId });

@@ -41,7 +41,7 @@ export function EventListPage() {
   };
   const panel = <EventFilterPanel key={filterKey(filter)} filter={filter} onApply={apply} />;
   // 表示の切り替えだけ。作成の可否は取得の窓口（本番はDB）が判定する
-  const canCreate = isMemberViewer(viewer) && viewer.ageCategory === 'adult';
+  const canCreate = isMemberViewer(viewer);
 
   return (
     <>
@@ -76,11 +76,6 @@ export function EventListPage() {
             )}
           </div>
         </div>
-        {viewer?.ageCategory === 'minor' && (
-          <p className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">
-            18歳未満の方は、募集を作成できません。参加の申請と、主催者への質問はできます。
-          </p>
-        )}
         {!isPc && panelOpen && (
           <div id="event-filter" className="mb-4">
             {panel}

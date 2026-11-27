@@ -3,8 +3,8 @@ import type { TargetLevel } from '../events/types';
 /** 経験レベル（docs/06の4-19）。値は対象レベルと同じ。 */
 export type ExperienceLevel = TargetLevel;
 
-/** 年代（docs/11の3-3、docs/06の4-13）。任意の項目で、未選択は null。 */
-export type AgeGroup = 'teens' | 'twenties' | 'thirties' | 'forties' | 'fifties' | 'sixtiesPlus';
+/** 年代（docs/11の3-3、docs/06の4-13）。20代〜60代以上（登録は20歳以上）。任意の項目で、未選択は null。 */
+export type AgeGroup = 'twenties' | 'thirties' | 'forties' | 'fifties' | 'sixtiesPlus';
 
 /**
  * ログイン済みの人に見せるプロフィール（docs/06の4-2）。
@@ -46,9 +46,6 @@ export interface ProfileInput {
 export type SaveProfileResult =
   { status: 'saved' } | { status: 'rejected'; reason: 'notLoggedIn' | 'invalid' };
 
-export type ChangeToAdultResult =
-  { status: 'changed' } | { status: 'rejected'; reason: 'notLoggedIn' | 'alreadyAdult' };
-
 /**
  * プロフィールの取得の窓口。将来は docs/06の6-5の get_profiles・get_my_profile【提案・未承認】・save_profile を呼ぶ実装に置き換える。
  * 自分のプロフィールは、窓口が内部でログイン状態から決める。画面から自分のIDを渡さない。
@@ -58,11 +55,6 @@ export interface ProfileRepository {
   getProfiles(userIds: string[]): Promise<PublicProfile[]>;
   /** 自分のプロフィール。未登録と未ログインは null を返す。 */
   getMyProfile(): Promise<MyProfile | null>;
-  /**
-   * 自分のプロフィールを登録・更新する（save_profile）。保存したら、ログイン状態の表示も変わる。
-   * 18歳未満の人の年代は「10代」か未選択だけを認める（DB-22）。
-   */
+  /** 自分のプロフィールを登録・更新する（save_profile）。保存したら、ログイン状態の表示も変わる。 */
   saveProfile(input: ProfileInput): Promise<SaveProfileResult>;
-  /** 年齢の区分を「18歳以上」に変える（docs/11の7-1）。戻すことはできない。 */
-  changeAgeCategoryToAdult(): Promise<ChangeToAdultResult>;
 }

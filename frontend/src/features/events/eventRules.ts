@@ -229,25 +229,3 @@ export function checkEventInput(input: CreateEventInput, now: Date): EventFieldE
   set('note', checkText(input.location.note, EVENT_LIMITS.noteMax, false));
   return errors;
 }
-
-const JST_OFFSET_MS = 9 * HOUR_MS;
-const DAY_MS = 24 * HOUR_MS;
-
-/**
- * 深夜（午後11時〜翌午前6時、日本時間）にかかるか（docs/11の7-1）。
- * 18歳未満が参加し得ることを主催者に知らせるための表示に使う。
- */
-export function overlapsLateNight(startsAt: Date, endsAt: Date) {
-  const start = startsAt.getTime();
-  const end = endsAt.getTime();
-  if (!(end > start)) return false;
-  // 開始の前日から、終了の日までの各日の 23:00〜翌6:00 と重なるかを見る
-  const firstDay = Math.floor((start + JST_OFFSET_MS) / DAY_MS) - 1;
-  const lastDay = Math.floor((end + JST_OFFSET_MS) / DAY_MS);
-  for (let day = firstDay; day <= lastDay; day += 1) {
-    const nightStart = day * DAY_MS - JST_OFFSET_MS + 23 * HOUR_MS;
-    const nightEnd = nightStart + 7 * HOUR_MS;
-    if (start < nightEnd && end > nightStart) return true;
-  }
-  return false;
-}

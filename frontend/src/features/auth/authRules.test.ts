@@ -6,7 +6,7 @@ const VALID = {
   ...EMPTY_SIGN_UP_FORM,
   email: 'test@example.com',
   password: 'abcdefghij',
-  ageCategory: 'adult' as const,
+  adultDeclared: true,
   agreements: { termsAndPrivacy: true, messageReview: true },
 };
 
@@ -59,7 +59,7 @@ describe('新規登録の入力', () => {
       '通報されたメッセージを、運営者が確認することに同意する',
     ]);
     expect(Object.values(EMPTY_SIGN_UP_FORM.agreements)).toEqual([false, false]);
-    expect(EMPTY_SIGN_UP_FORM.ageCategory).toBeNull();
+    expect(EMPTY_SIGN_UP_FORM.adultDeclared).toBe(false);
   });
 
   it('同意は欄ごとに確かめる', () => {
@@ -83,14 +83,9 @@ describe('新規登録の入力', () => {
     ]);
   });
 
-  it('年齢の区分は、選ばないと誤りになる', () => {
-    expect(checkSignUpForm({ ...VALID, ageCategory: null }).ageCategory).toBeDefined();
-  });
-
-  it('18歳未満は、保護者の同意が必要', () => {
-    expect(checkSignUpForm({ ...VALID, ageCategory: 'minor' }).guardianConsent).toBeDefined();
-    expect(checkSignUpForm({ ...VALID, ageCategory: 'minor', guardianConsent: true })).toEqual({});
-    // 18歳以上には求めない
-    expect(checkSignUpForm({ ...VALID, guardianConsent: false })).toEqual({});
+  it('「20歳以上です」の申告がないと登録できない', () => {
+    expect(checkSignUpForm({ ...VALID, adultDeclared: false })).toEqual({
+      adultDeclared: '20歳以上の方だけが登録できます。',
+    });
   });
 });

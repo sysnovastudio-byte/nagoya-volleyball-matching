@@ -36,7 +36,7 @@ const PUBLIC_STATES: readonly EventState[] = ['open', 'full', 'closed', 'ongoing
 
 /**
  * 【開発専用】画面の動作を確かめるための実装。
- * **ここでの判定（定員・18歳未満・回数・住所の公開範囲など）は画面の確認用であり、権限の確認にはならない。**
+ * **ここでの判定（定員・回数・住所の公開範囲など）は画面の確認用であり、権限の確認にはならない。**
  * 本番では、同じ条件をDB関数とRLSで強制する（docs/06の5章・6章）。
  */
 export function createDevEventRepository({
@@ -154,9 +154,6 @@ export function createDevEventRepository({
       const user = currentUser();
       if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
       if (!user.profile) return Promise.resolve({ status: 'rejected', reason: 'profileRequired' });
-      if (user.ageCategory !== 'adult') {
-        return Promise.resolve({ status: 'rejected', reason: 'minor' });
-      }
 
       // 同じ送信の繰り返しは、作成済みの募集を返す（docs/06の4-3）
       const duplicate = db.events.find(

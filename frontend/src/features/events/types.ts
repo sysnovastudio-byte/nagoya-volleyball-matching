@@ -183,8 +183,7 @@ export type CancelEventResult =
   { status: 'cancelled' } | { status: 'rejected'; reason: CancelEventRejection };
 
 /** 作成を断る理由。画面は理由に応じて案内する。 */
-export type CreateEventRejection =
-  'notLoggedIn' | 'profileRequired' | 'minor' | 'rateLimited' | 'invalid';
+export type CreateEventRejection = 'notLoggedIn' | 'profileRequired' | 'rateLimited' | 'invalid';
 
 export type CreateEventResult =
   { status: 'created'; eventId: string } | { status: 'rejected'; reason: CreateEventRejection };

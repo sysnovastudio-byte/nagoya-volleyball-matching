@@ -9,7 +9,6 @@ import {
   validateEventForm,
   type EventFormValues,
 } from './eventForm';
-import { overlapsLateNight } from './eventRules';
 
 // 日本時間 2026-11-25 12:00
 const NOW = new Date('2026-11-25T03:00:00Z');
@@ -203,21 +202,6 @@ describe('日時の検証', () => {
     expect(parseJstDateTime('2026-12-05T00:30')?.toISOString()).toBe('2026-12-04T15:30:00.000Z');
     expect(parseJstDateTime('2026-12-05')).toBeNull();
     expect(parseJstDateTime('')).toBeNull();
-  });
-});
-
-describe('深夜にかかるか', () => {
-  const at = (value: string) => parseJstDateTime(value) ?? new Date(Number.NaN);
-
-  it.each([
-    ['2026-12-05T13:00', '2026-12-05T16:00', false],
-    ['2026-12-05T20:00', '2026-12-05T23:00', false],
-    ['2026-12-05T20:00', '2026-12-05T23:01', true],
-    ['2026-12-06T05:00', '2026-12-06T07:00', true],
-    ['2026-12-06T06:00', '2026-12-06T09:00', false],
-    ['2026-12-05T23:30', '2026-12-06T01:00', true],
-  ])('%s〜%s は %s', (start, end, expected) => {
-    expect(overlapsLateNight(at(start), at(end))).toBe(expected);
   });
 });
 

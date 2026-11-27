@@ -2,10 +2,8 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { useBlocker, useLocation, useNavigate } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
-import { Button, ButtonLink } from '../../components/ui/Button';
+import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
-import { StatusMessage } from '../../components/ui/StatusMessage';
-import { useViewer } from '../auth/sessionContext';
 import type { EventDetailLocationState } from './EventDetailPage';
 import {
   EMPTY_EVENT_FORM,
@@ -23,7 +21,6 @@ import {
   isNagoyaWard,
   MUNICIPALITIES,
   NAGOYA_WARDS,
-  overlapsLateNight,
   TARGET_LEVELS,
 } from './eventRules';
 import { levelLabel, municipalityLabel, wardLabel } from './format';
@@ -55,7 +52,6 @@ const REJECTION_MESSAGES: Record<CreateEventRejection, string> = {
   notLoggedIn:
     'ログインの状態を確認できませんでした。ログインし直してから、もう一度お試しください。',
   profileRequired: '募集を作るには、プロフィールの登録が必要です。',
-  minor: '18歳未満の方は、募集を作成できません。',
   rateLimited: `募集の作成は、24時間に${EVENT_LIMITS.dailyCreateLimit}件までです。時間をおいてから、もう一度お試しください。`,
   invalid: '入力の内容を確認してください。時間がたって、開始の日時が過ぎた可能性があります。',
 };
@@ -73,18 +69,8 @@ function createRequestId() {
  */
 export function CreateEventPage() {
   useDocumentTitle('募集を作る');
-  const viewer = useViewer();
-
-  // 画面の切り替えは表示のためだけのもの。作成の可否は取得の窓口（本番はDB）が判定する。
+  // 作成の可否は取得の窓口（本番はDB）が判定する。
   // プロフィール未登録の人は、経路の RequireProfile が入力画面へ移す
-  if (viewer?.ageCategory === 'minor') {
-    return (
-      <StatusMessage title="18歳未満の方は、募集を作成できません" headingLevel="h1">
-        <p>参加の申請と、主催者への質問はできます。</p>
-        <ButtonLink to="/">募集一覧へ</ButtonLink>
-      </StatusMessage>
-    );
-  }
   return <CreateEventForm />;
 }
 
@@ -183,7 +169,6 @@ function CreateEventForm() {
   };
 
   const schedule = scheduleFromForm(values);
-  const lateNight = schedule ? overlapsLateNight(schedule.startsAt, schedule.endsAt) : false;
 
   return (
     <div className="mx-auto w-full max-w-160 px-4 pt-4">
@@ -235,16 +220,6 @@ function CreateEventForm() {
               update(field, value);
             }}
           />
-
-          {lateNight && (
-            <p
-              role="status"
-              className="rounded-xl border border-accent bg-accent-tint px-4 py-3 text-ink"
-            >
-              <strong>深夜（午後11時〜翌午前6時）にかかります。</strong>
-              18歳未満の人が申請する場合があります。18歳未満の人を深夜に参加させたり、連れ出したりしないでください。
-            </p>
-          )}
 
           <FormField
             id="event-municipality"
@@ -469,10 +444,6 @@ function CreateEventForm() {
               {submitError}
             </p>
           )}
-          {/* 主催者への案内（docs/11の7-1）。公開ボタンの近くに常に示す。文字は16pxのまま色を控えめにする */}
-          <p className="mb-2 text-muted">
-            18歳未満の人が参加することがあります。深夜（23時〜翌6時）にかかる参加はさせないでください。
-          </p>
           {blocker.state === 'blocked' ? (
             <LeaveConfirm
               onContinue={() => {

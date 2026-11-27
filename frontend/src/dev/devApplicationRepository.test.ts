@@ -44,12 +44,6 @@ describe('参加の申請', () => {
     expect(event?.remaining).toBe(3);
   });
 
-  it('18歳未満の人も申請できる（docs/11の7-1）', async () => {
-    const { applications } = setup('dev-user-minor');
-
-    expect(await applications.applyToEvent('dev-family-morning')).toEqual({ status: 'applied' });
-  });
-
   it('重複して申請できない', async () => {
     const { applications, db } = setup();
     await applications.applyToEvent(HOSTED_EVENT);
@@ -177,7 +171,7 @@ describe('承認・却下', () => {
       address: 'ダミー住所A（架空）',
     });
     // 主催者・承認済みでない人には返らない
-    session.setUserId('dev-user-minor');
+    session.setUserId('dev-member-13');
     expect(await events.getLocation(HOSTED_EVENT)).toBeNull();
   });
 
@@ -348,7 +342,7 @@ describe('申請者一覧', () => {
     }
   });
 
-  it.each(['dev-user-a', 'dev-user-minor'])(
+  it.each(['dev-user-a', 'dev-member-13'])(
     '他人の募集の申請者一覧は見られない（%s）',
     async (userId) => {
       expect(await setup(userId).applications.listApplicants(HOSTED_EVENT)).toEqual({
@@ -414,8 +408,8 @@ describe('申請者の年代', () => {
         expect(applicant.hostOnly).toBeNull();
       }
     }
-    const minor = list.applicants.find((a) => a.profile.userId === 'dev-user-minor');
-    expect(minor?.hostOnly).toEqual({ ageGroup: 'teens' });
+    const riku = list.applicants.find((a) => a.profile.userId === 'dev-member-13');
+    expect(riku?.hostOnly).toEqual({ ageGroup: 'fifties' });
   });
 
   it('終了した募集では、主催者にも年代を返さない', async () => {
@@ -430,7 +424,7 @@ describe('申請者の年代', () => {
     const { db, session } = setup(HOST_ID);
     const profiles = createDevProfileRepository({ db, session });
 
-    for (const profile of await profiles.getProfiles(['dev-user-a', 'dev-user-minor'])) {
+    for (const profile of await profiles.getProfiles(['dev-user-a', 'dev-member-13'])) {
       expect(Object.keys(profile)).not.toContain('ageGroup');
     }
   });

@@ -34,7 +34,7 @@ describe('当事者だけが見られる', () => {
     );
   });
 
-  it.each([null, 'dev-user-minor', 'dev-host-haru'])(
+  it.each([null, 'dev-member-13', 'dev-host-haru'])(
     '当事者でない人（%s）は、会話もメッセージも取得できない',
     async (userId) => {
       const { repository } = setup(userId);
@@ -47,7 +47,7 @@ describe('当事者だけが見られる', () => {
   );
 
   it('当事者でない人は、送信もできない', async () => {
-    const { repository, db } = setup('dev-user-minor');
+    const { repository, db } = setup('dev-member-13');
     const count = db.messages.length;
 
     expect(
@@ -250,7 +250,7 @@ describe('会話の開始', () => {
 
   it.each([
     ['中止の募集', 'dev-cancelled', 'dev-user-a'],
-    ['非表示の募集', 'dev-hidden', 'dev-user-minor'],
+    ['非表示の募集', 'dev-hidden', 'dev-member-13'],
     ['承認済みでも非表示の募集', 'dev-b-hidden', 'dev-member-1'],
   ])('%sでは始められない', async (_, eventId, userId) => {
     const { repository } = setup(userId);
@@ -301,7 +301,7 @@ describe('主催者からの会話の開始（MSG-06）', () => {
 
   it('承認待ちの申請者と始められ、メッセージがない間は主催者の一覧だけに出る', async () => {
     const { db, session, repository } = setup(HOST_ID);
-    const application = applicationOf(db, HOSTED_EVENT, 'pending', 'dev-user-minor');
+    const application = applicationOf(db, HOSTED_EVENT, 'pending', 'dev-member-13');
 
     const result = await repository.startConversationWithApplicant(application.id);
 
@@ -310,12 +310,12 @@ describe('主催者からの会話の開始（MSG-06）', () => {
     expect(conversation).toMatchObject({
       eventId: HOSTED_EVENT,
       hostId: HOST_ID,
-      inquirerId: 'dev-user-minor',
+      inquirerId: 'dev-member-13',
       startedBy: HOST_ID,
     });
     const hostList = await repository.listMine();
     expect(hostList.find((item) => item.id === conversation?.id)?.role).toBe('host');
-    session.setUserId('dev-user-minor');
+    session.setUserId('dev-member-13');
     expect((await repository.listMine()).map((item) => item.id)).not.toContain(conversation?.id);
   });
 
@@ -471,10 +471,10 @@ describe('ブロックの影響（MSG-04、docs/11の3-1）', () => {
   it('主催者からも、ブロックの間は申請者との会話を始められない', async () => {
     const { db, repository } = setup(B);
     const application = db.applications.find(
-      (item) => item.userId === 'dev-user-minor' && item.eventId === 'dev-beginner-afternoon',
+      (item) => item.userId === 'dev-member-13' && item.eventId === 'dev-beginner-afternoon',
     );
     if (!application) throw new Error('申請がありません。');
-    block(db, 'dev-user-minor', B);
+    block(db, 'dev-member-13', B);
 
     expect(await repository.startConversationWithApplicant(application.id)).toEqual({
       status: 'rejected',
@@ -628,7 +628,7 @@ describe('新しい会話の回数の上限（SAFE-09）', () => {
     const { db, repository } = setup(B);
     startedRecently(db, B, 10);
     const application = db.applications.find(
-      (item) => item.userId === 'dev-user-minor' && item.eventId === 'dev-beginner-afternoon',
+      (item) => item.userId === 'dev-member-13' && item.eventId === 'dev-beginner-afternoon',
     );
     if (!application) throw new Error('申請がありません。');
 
@@ -713,7 +713,7 @@ describe('「未読あり」（M-09）', () => {
   });
 
   it('当事者でない人は、読んだ位置を変えられない', async () => {
-    const { db, repository } = setup('dev-user-minor');
+    const { db, repository } = setup('dev-member-13');
     const before = structuredClone(db.conversations);
 
     await repository.markRead('dev-conv-approved', Number.MAX_SAFE_INTEGER);

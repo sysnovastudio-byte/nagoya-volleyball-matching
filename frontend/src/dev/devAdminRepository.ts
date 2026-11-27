@@ -176,7 +176,7 @@ export function createDevAdminRepository({
             status: statusOf(report.subjectUserId),
           },
           event: record ? toEventView(record) : null,
-          // 通報された人の、ログイン済みに公開する項目だけ（年代・年齢の区分は返さない）
+          // 通報された人の、ログイン済みに公開する項目だけ（年代は返さない）
           profile:
             report.targetKind === 'user' && subject?.profile
               ? {
