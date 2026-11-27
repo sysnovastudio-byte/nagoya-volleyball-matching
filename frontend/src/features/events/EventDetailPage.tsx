@@ -184,7 +184,7 @@ function EventFacts({ event }: { event: PublicEvent }) {
   return (
     <dl className="flex flex-col gap-3.5">
       <Fact term="開催日時">{formatDateTimeRange(event.startsAt, event.endsAt)}</Fact>
-      <Fact term="開催エリア">{areaLabel(event.area)}</Fact>
+      <Fact term="開催地">{areaLabel(event.area)}</Fact>
       <Fact term="残り枠">
         <span className="text-2xl text-main-strong">{event.remaining}枠</span>
         <span className="ml-2 font-normal text-sub">募集{event.capacity}人</span>

@@ -37,8 +37,9 @@ describe('そのほかの表示', () => {
     expect(formatFee(50000)).toBe('50,000円');
   });
 
-  it('区と対象レベルを、日本語で表示する', () => {
-    expect(areaLabel('tempaku')).toBe('天白区');
+  it('開催地と対象レベルを、日本語で表示する。名古屋市は区まで示す', () => {
+    expect(areaLabel({ municipality: 'nagoya', ward: 'tempaku' })).toBe('名古屋市天白区');
+    expect(areaLabel({ municipality: 'kitanagoya', ward: null })).toBe('北名古屋市');
     expect(levelsLabel(['inexperienced', 'beginner'])).toBe('未経験者・初心者');
   });
 });

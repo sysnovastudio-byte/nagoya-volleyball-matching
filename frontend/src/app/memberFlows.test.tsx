@@ -30,7 +30,8 @@ async function fillSchedule(
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/タイトル/), '日曜の練習会');
   await fillSchedule(user, 7, '13:00', '16:00');
-  await user.selectOptions(screen.getByLabelText(/開催エリア/), '中区');
+  await user.selectOptions(screen.getByLabelText(/開催地/), '名古屋市');
+  await user.selectOptions(screen.getByLabelText(/^区/), '中区');
   await user.click(screen.getByLabelText('初心者'));
   await user.type(screen.getByLabelText(/募集人数/), '8');
   await user.type(screen.getByLabelText(/参加費/), '300');
@@ -141,6 +142,25 @@ describe('募集作成', () => {
     expect(screen.getAllByRole('link', { name: '申請者を見る' })[0]).toHaveAttribute(
       'href',
       expect.stringMatching(/^\/events\/.+\/applicants$/) as string,
+    );
+  });
+
+  it('区は名古屋市を選んだときだけ選び、ほかの市町村では区を持たずに作る', async () => {
+    const user = userEvent.setup();
+    const createEvent = vi.fn<EventRepository['createEvent']>().mockResolvedValue({
+      status: 'rejected',
+      reason: 'rateLimited',
+    });
+    renderApp('/events/new', { userId: 'dev-user-a', events: { createEvent } });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+
+    await user.selectOptions(screen.getByLabelText(/開催地/), '豊田市');
+    expect(screen.queryByLabelText(/^区/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+
+    expect(createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ area: { municipality: 'toyota', ward: null } }),
     );
   });
 
@@ -301,7 +321,7 @@ describe('募集作成', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText('18歳未満の人も申請できます。')).not.toBeInTheDocument();
-    expect(screen.queryByText(/名古屋市の16区から選びます/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/市町村から選びます/)).not.toBeInTheDocument();
   });
 
   it('「やめる」は「公開する」の下に置く', async () => {
@@ -1416,7 +1436,7 @@ describe('年齢の区分を「18歳以上」に変える', () => {
 });
 
 describe('募集の絞り込み（EVT-05）', () => {
-  it('スマートフォンでは「条件」ボタンで開き、区で絞り込む', async () => {
+  it('スマートフォンでは「条件」ボタンで開き、名古屋市の区で絞り込む', async () => {
     const user = userEvent.setup();
     renderApp('/');
 
@@ -1424,10 +1444,15 @@ describe('募集の絞り込み（EVT-05）', () => {
     const toggle = screen.getByRole('button', { name: '条件' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await user.click(toggle);
+    // 区は、市町村で名古屋市を選んだときだけ出す
+    expect(screen.queryByLabelText('区')).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('市町村'), '名古屋市');
     await user.selectOptions(screen.getByLabelText('区'), '中村区');
     await user.click(screen.getByRole('button', { name: 'この条件で探す' }));
 
-    expect(await screen.findByText('条件：', { exact: false })).toHaveTextContent('条件：中村区');
+    expect(await screen.findByText('条件：', { exact: false })).toHaveTextContent(
+      '条件：名古屋市中村区',
+    );
     expect(screen.getByRole('button', { name: '条件（1）' })).toBeInTheDocument();
     const list = await screen.findAllByRole('article');
     expect(list).toHaveLength(2);
@@ -1435,7 +1460,7 @@ describe('募集の絞り込み（EVT-05）', () => {
 
   it('条件に合う募集がなければ、そう示して条件をクリアできる', async () => {
     const user = userEvent.setup();
-    renderApp('/?area=naka');
+    renderApp('/?city=nagoya&ward=naka');
 
     expect(
       await screen.findByRole('heading', { name: '条件に合う募集はありません' }),
@@ -1475,12 +1500,12 @@ describe('募集の絞り込み（EVT-05）', () => {
 
   it('絞り込んだ一覧から詳細を開くと、同じ条件の一覧に戻れる', async () => {
     const user = userEvent.setup();
-    renderApp('/?area=nakamura');
+    renderApp('/?city=nagoya&ward=nakamura');
 
     await user.click(await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }));
     await user.click(await screen.findByRole('button', { name: '募集一覧に戻る' }));
 
-    // 来た画面に戻るため、条件（中村区）は残る
+    // 来た画面に戻るため、条件（名古屋市中村区）は残る
     expect(
       await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }),
     ).toBeInTheDocument();

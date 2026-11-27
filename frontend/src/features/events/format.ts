@@ -1,8 +1,65 @@
-import type { Area, EventState, TargetLevel } from './types';
+import type { EventArea, EventState, Municipality, NagoyaWard, TargetLevel } from './types';
 
 const TIME_ZONE = 'Asia/Tokyo';
 
-const AREA_LABELS: Record<Area, string> = {
+const MUNICIPALITY_LABELS: Record<Municipality, string> = {
+  nagoya: '名古屋市',
+  toyohashi: '豊橋市',
+  okazaki: '岡崎市',
+  ichinomiya: '一宮市',
+  seto: '瀬戸市',
+  handa: '半田市',
+  kasugai: '春日井市',
+  toyokawa: '豊川市',
+  tsushima: '津島市',
+  hekinan: '碧南市',
+  kariya: '刈谷市',
+  toyota: '豊田市',
+  anjo: '安城市',
+  nishio: '西尾市',
+  gamagori: '蒲郡市',
+  inuyama: '犬山市',
+  tokoname: '常滑市',
+  konan: '江南市',
+  komaki: '小牧市',
+  inazawa: '稲沢市',
+  shinshiro: '新城市',
+  tokai: '東海市',
+  obu: '大府市',
+  chita: '知多市',
+  chiryu: '知立市',
+  owariasahi: '尾張旭市',
+  takahama: '高浜市',
+  iwakura: '岩倉市',
+  toyoake: '豊明市',
+  nisshin: '日進市',
+  tahara: '田原市',
+  aisai: '愛西市',
+  kiyosu: '清須市',
+  kitanagoya: '北名古屋市',
+  yatomi: '弥富市',
+  miyoshi: 'みよし市',
+  ama: 'あま市',
+  nagakute: '長久手市',
+  togo: '東郷町',
+  toyoyama: '豊山町',
+  oguchi: '大口町',
+  fuso: '扶桑町',
+  oharu: '大治町',
+  kanie: '蟹江町',
+  tobishima: '飛島村',
+  agui: '阿久比町',
+  higashiura: '東浦町',
+  minamichita: '南知多町',
+  mihama: '美浜町',
+  taketoyo: '武豊町',
+  kota: '幸田町',
+  shitara: '設楽町',
+  toei: '東栄町',
+  toyone: '豊根村',
+};
+
+const WARD_LABELS: Record<NagoyaWard, string> = {
   chikusa: '千種区',
   higashi: '東区',
   kita: '北区',
@@ -94,8 +151,19 @@ export function formatFee(fee: number) {
   return `${feeFormat.format(fee)}円`;
 }
 
-export function areaLabel(area: Area) {
-  return AREA_LABELS[area];
+export function municipalityLabel(municipality: Municipality) {
+  return MUNICIPALITY_LABELS[municipality];
+}
+
+export function wardLabel(ward: NagoyaWard) {
+  return WARD_LABELS[ward];
+}
+
+/** 開催地。名古屋市は「名古屋市中区」のように区まで示す。 */
+export function areaLabel(area: EventArea) {
+  return area.ward === null
+    ? municipalityLabel(area.municipality)
+    : `${municipalityLabel(area.municipality)}${wardLabel(area.ward)}`;
 }
 
 export function levelLabel(level: TargetLevel) {

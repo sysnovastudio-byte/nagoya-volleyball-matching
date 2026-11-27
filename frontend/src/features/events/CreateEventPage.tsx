@@ -17,8 +17,16 @@ import {
   type EventFormField,
   type EventFormValues,
 } from './eventForm';
-import { AREAS, EVENT_LIMITS, overlapsLateNight, TARGET_LEVELS } from './eventRules';
-import { areaLabel, levelLabel } from './format';
+import {
+  EVENT_LIMITS,
+  isMunicipality,
+  isNagoyaWard,
+  MUNICIPALITIES,
+  NAGOYA_WARDS,
+  overlapsLateNight,
+  TARGET_LEVELS,
+} from './eventRules';
+import { levelLabel, municipalityLabel, wardLabel } from './format';
 import { useEventRepository } from './repositoryContext';
 import type { CreateEventRejection, TargetLevel } from './types';
 
@@ -28,7 +36,8 @@ const FIELD_ORDER: EventFormField[] = [
   'date',
   'startTime',
   'endTime',
-  'area',
+  'municipality',
+  'ward',
   'targetLevels',
   'capacity',
   'fee',
@@ -118,14 +127,17 @@ function CreateEventForm() {
     if (submitError) submitErrorRef.current?.focus();
   }, [submitError]);
 
-  const update = <K extends keyof EventFormValues>(field: K, value: EventFormValues[K]) => {
-    const next = { ...values, [field]: value };
+  const updateMany = (changes: Partial<EventFormValues>) => {
+    const next = { ...values, ...changes };
     setValues(next);
     // 一度送ろうとした後は、入力に合わせて誤りの表示を直す
     if (validated) {
       const result = validateEventForm(next, new Date(), clientRequestId);
       setErrors(result.ok ? {} : result.errors);
     }
+  };
+  const update = <K extends keyof EventFormValues>(field: K, value: EventFormValues[K]) => {
+    updateMany({ [field]: value });
   };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -234,26 +246,59 @@ function CreateEventForm() {
             </p>
           )}
 
-          <FormField id="event-area" label="開催エリア" required error={errors.area}>
+          <FormField
+            id="event-municipality"
+            label="開催地（市町村）"
+            required
+            error={errors.municipality}
+          >
             {(control) => (
               <select
                 {...control}
-                value={values.area}
+                value={values.municipality}
                 onChange={(event) => {
-                  const area = AREAS.find((candidate) => candidate === event.target.value);
-                  update('area', area ?? '');
+                  const value = event.target.value;
+                  const municipality = isMunicipality(value) ? value : '';
+                  // 名古屋市以外に変えたら、区の選択を外す
+                  updateMany({
+                    municipality,
+                    ward: municipality === 'nagoya' ? values.ward : '',
+                  });
                 }}
                 className={INPUT_CLASS}
               >
                 <option value="">選んでください</option>
-                {AREAS.map((area) => (
-                  <option key={area} value={area}>
-                    {areaLabel(area)}
+                {MUNICIPALITIES.map((municipality) => (
+                  <option key={municipality} value={municipality}>
+                    {municipalityLabel(municipality)}
                   </option>
                 ))}
               </select>
             )}
           </FormField>
+
+          {values.municipality === 'nagoya' && (
+            <FormField id="event-ward" label="区" required error={errors.ward}>
+              {(control) => (
+                <select
+                  {...control}
+                  value={values.ward}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    update('ward', isNagoyaWard(value) ? value : '');
+                  }}
+                  className={INPUT_CLASS}
+                >
+                  <option value="">選んでください</option>
+                  {NAGOYA_WARDS.map((ward) => (
+                    <option key={ward} value={ward}>
+                      {wardLabel(ward)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+          )}
 
           <TargetLevelField
             value={values.targetLevels}

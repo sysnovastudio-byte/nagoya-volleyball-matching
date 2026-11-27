@@ -19,7 +19,8 @@ const VALID: EventFormValues = {
   date: '2026-12-05',
   startTime: '13:00',
   endTime: '16:00',
-  area: 'nakamura',
+  municipality: 'nagoya',
+  ward: 'nakamura',
   targetLevels: ['beginner'],
   capacity: '12',
   fee: '500',
@@ -50,7 +51,7 @@ describe('入力の検証', () => {
         title: '土曜の午後バレー',
         startsAt: '2026-12-05T04:00:00.000Z',
         endsAt: '2026-12-05T07:00:00.000Z',
-        area: 'nakamura',
+        area: { municipality: 'nagoya', ward: 'nakamura' },
         targetLevels: ['beginner'],
         description: null,
         belongings: null,
@@ -68,11 +69,11 @@ describe('入力の検証', () => {
     expect(Object.keys(result.ok ? {} : result.errors).sort()).toEqual(
       [
         'address',
-        'area',
         'capacity',
         'date',
         'endTime',
         'fee',
+        'municipality',
         'startTime',
         'targetLevels',
         'title',
@@ -126,8 +127,12 @@ describe('入力の検証', () => {
     expect(Boolean(errorsOf({ fee }).fee)).toBe(invalid);
   });
 
-  it('区は16区の中から選ぶ', () => {
-    expect(errorsOf({ area: '' }).area).toBe('区を選んでください。');
+  it('開催地は愛知県の市町村から選び、名古屋市のときだけ区も選ぶ', () => {
+    expect(errorsOf({ municipality: '', ward: '' }).municipality).toBe('市町村を選んでください。');
+    expect(errorsOf({ ward: '' }).ward).toBe('区を選んでください。');
+    // 名古屋市以外では区を持たない。欄に区が残っていても送らない
+    const outside = validateEventForm({ ...VALID, municipality: 'toyota' }, NOW, 'request-1');
+    expect(outside.ok && outside.input.area).toEqual({ municipality: 'toyota', ward: null });
   });
 
   it('対象レベルは1つ以上', () => {

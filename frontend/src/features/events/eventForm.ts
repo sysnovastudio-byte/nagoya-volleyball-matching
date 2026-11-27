@@ -1,5 +1,5 @@
 import { checkCapacity, checkEventInput, checkFee, type EventField } from './eventRules';
-import type { Area, CreateEventInput, TargetLevel } from './types';
+import type { CreateEventInput, EventArea, Municipality, NagoyaWard, TargetLevel } from './types';
 
 /** 募集作成の入力欄の値。入力の途中の値も持てるよう、すべて文字列で持つ。 */
 export interface EventFormValues {
@@ -9,7 +9,9 @@ export interface EventFormValues {
   /** 開始・終了の時刻。「13:00」の形で、15分刻み */
   startTime: string;
   endTime: string;
-  area: Area | '';
+  /** 開催地の市町村。名古屋市のときだけ区も選ぶ（docs/11の2-1） */
+  municipality: Municipality | '';
+  ward: NagoyaWard | '';
   targetLevels: TargetLevel[];
   capacity: string;
   fee: string;
@@ -25,7 +27,8 @@ export const EMPTY_EVENT_FORM: EventFormValues = {
   date: '',
   startTime: '',
   endTime: '',
-  area: '',
+  municipality: '',
+  ward: '',
   targetLevels: [],
   capacity: '',
   fee: '',
@@ -120,7 +123,10 @@ export function validateEventForm(
     startsAt: schedule?.startsAt.toISOString() ?? '',
     endsAt: schedule?.endsAt.toISOString() ?? '',
     // 未選択は、選択肢にない値として検証で誤りにする
-    area: values.area as Area,
+    area: {
+      municipality: values.municipality,
+      ward: values.municipality === 'nagoya' ? values.ward : null,
+    } as EventArea,
     targetLevels: values.targetLevels,
     description: optionalText(values.description),
     belongings: optionalText(values.belongings),

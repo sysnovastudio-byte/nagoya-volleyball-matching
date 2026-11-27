@@ -15,7 +15,7 @@ const EVENT: EventDetail = {
   title: 'テスト用の募集',
   startsAt: '2026-12-05T04:00:00Z',
   endsAt: '2026-12-05T07:00:00Z',
-  area: 'nakamura',
+  area: { municipality: 'nagoya', ward: 'nakamura' },
   targetLevels: ['beginner'],
   description: '説明の文章',
   belongings: null,
@@ -124,7 +124,7 @@ describe('募集詳細（未ログイン）', () => {
     expect(await screen.findByText('12月5日（土）13:00〜16:00')).toBeInTheDocument();
     expect(screen.getAllByRole('term').map((term) => term.textContent)).toEqual([
       '開催日時',
-      '開催エリア',
+      '開催地',
       '残り枠',
       '参加費',
       '対象レベル',

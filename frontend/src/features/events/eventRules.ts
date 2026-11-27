@@ -1,5 +1,5 @@
 import { textLength } from '../../lib/text';
-import type { Area, CreateEventInput, TargetLevel } from './types';
+import type { CreateEventInput, Municipality, NagoyaWard, TargetLevel } from './types';
 
 /** 募集の入力の上限（docs/11の2-1・3-3・4-5）。数値はここだけで管理する。 */
 export const EVENT_LIMITS = {
@@ -18,8 +18,69 @@ export const EVENT_LIMITS = {
   dailyCreateLimit: 5,
 } as const;
 
-/** 名古屋市の16区（docs/11の2-1、Q-46）。選択肢の並び順でもある。 */
-export const AREAS: readonly Area[] = [
+/**
+ * 愛知県の市町村（docs/11の2-1）。選択肢の並び順でもある（全国地方公共団体コードの順）。
+ * 一覧にない場所は選べないため、県外の募集は作成できない。
+ */
+export const MUNICIPALITIES: readonly Municipality[] = [
+  'nagoya',
+  'toyohashi',
+  'okazaki',
+  'ichinomiya',
+  'seto',
+  'handa',
+  'kasugai',
+  'toyokawa',
+  'tsushima',
+  'hekinan',
+  'kariya',
+  'toyota',
+  'anjo',
+  'nishio',
+  'gamagori',
+  'inuyama',
+  'tokoname',
+  'konan',
+  'komaki',
+  'inazawa',
+  'shinshiro',
+  'tokai',
+  'obu',
+  'chita',
+  'chiryu',
+  'owariasahi',
+  'takahama',
+  'iwakura',
+  'toyoake',
+  'nisshin',
+  'tahara',
+  'aisai',
+  'kiyosu',
+  'kitanagoya',
+  'yatomi',
+  'miyoshi',
+  'ama',
+  'nagakute',
+  'togo',
+  'toyoyama',
+  'oguchi',
+  'fuso',
+  'oharu',
+  'kanie',
+  'tobishima',
+  'agui',
+  'higashiura',
+  'minamichita',
+  'mihama',
+  'taketoyo',
+  'kota',
+  'shitara',
+  'toei',
+  'toyone',
+];
+
+/** 名古屋市の16区（docs/11の2-1）。選択肢の並び順でもある。 */
+export const NAGOYA_WARDS: readonly NagoyaWard[] = [
   'chikusa',
   'higashi',
   'kita',
@@ -38,13 +99,35 @@ export const AREAS: readonly Area[] = [
   'tempaku',
 ];
 
+export function isMunicipality(value: unknown): value is Municipality {
+  return (MUNICIPALITIES as readonly unknown[]).includes(value);
+}
+
+export function isNagoyaWard(value: unknown): value is NagoyaWard {
+  return (NAGOYA_WARDS as readonly unknown[]).includes(value);
+}
+
+/** 開催地の誤り。名古屋市は区が必要で、ほかの市町村は区を持たない（docs/11の2-1）。 */
+export function checkArea(area: { municipality: unknown; ward: unknown }) {
+  const errors: Partial<Record<'municipality' | 'ward', string>> = {};
+  if (!isMunicipality(area.municipality)) {
+    errors.municipality = '市町村を選んでください。';
+  } else if (area.municipality === 'nagoya') {
+    if (!isNagoyaWard(area.ward)) errors.ward = '区を選んでください。';
+  } else if (area.ward !== null) {
+    errors.ward = '区は、名古屋市の場合だけ選べます。';
+  }
+  return errors;
+}
+
 export const TARGET_LEVELS: readonly TargetLevel[] = ['inexperienced', 'beginner', 'experienced'];
 
 export type EventField =
   | 'title'
   | 'startsAt'
   | 'endsAt'
-  | 'area'
+  | 'municipality'
+  | 'ward'
   | 'targetLevels'
   | 'capacity'
   | 'fee'
@@ -128,7 +211,7 @@ export function checkEventInput(input: CreateEventInput, now: Date): EventFieldE
   };
 
   set('title', checkText(input.title, EVENT_LIMITS.titleMax, true));
-  set('area', AREAS.includes(input.area) ? undefined : '区を選んでください。');
+  Object.assign(errors, checkArea(input.area));
   set(
     'targetLevels',
     input.targetLevels.length > 0 &&
