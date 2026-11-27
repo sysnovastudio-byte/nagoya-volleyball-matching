@@ -1,6 +1,17 @@
 import { textLength } from '../../lib/text';
 import type { ReportReason, ReportStatus, ReportTargetKind } from './types';
 
+/** 状態の変え方（docs/06の4-10）。終わった通報を対応中に戻す操作は公開後（M-05）。 */
+export const REPORT_STATUS_TRANSITIONS: Record<
+  ReportStatus,
+  readonly Exclude<ReportStatus, 'open'>[]
+> = {
+  open: ['inProgress', 'dismissed'],
+  inProgress: ['resolved', 'dismissed'],
+  resolved: [],
+  dismissed: [],
+};
+
 /** 補足の上限（docs/06の4-10）。 */
 export const REPORT_DETAIL_MAX = 500;
 

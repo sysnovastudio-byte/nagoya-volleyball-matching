@@ -103,6 +103,40 @@ export function notifyEventCancelled(
   }
 }
 
+/**
+ * 【開発専用】募集の非表示を通知する（docs/06の5-13）。鍵は措置ごと。中止の通知は重ねない（docs/06の14-3）。
+ * 主催者には必ず送る。承認待ち・承認済みの人には、終了・中止した募集では送らない（DB-24）。
+ */
+export function notifyEventHidden(
+  store: NotificationStore,
+  record: DevEventRecord,
+  { actionId, includeParticipants }: { actionId: string; includeParticipants: boolean },
+  now: Date,
+): void {
+  const recipients = [
+    record.hostId,
+    ...(includeParticipants
+      ? store.applications
+          .filter(
+            (application) =>
+              application.eventId === record.id &&
+              (application.status === 'pending' || application.status === 'approved'),
+          )
+          .map((application) => application.userId)
+      : []),
+  ];
+  for (const userId of recipients) {
+    add(store, {
+      userId,
+      type: 'event_hidden',
+      eventId: record.id,
+      participantId: null,
+      dedupeKey: `event:${record.id}:hidden:${actionId}`,
+      createdAt: now,
+    });
+  }
+}
+
 const HOUR_MS = 60 * 60 * 1000;
 
 /** 帯で選べる利用者に、最初から届いている架空の通知。種類ごとの表示を確かめるためのもの。 */

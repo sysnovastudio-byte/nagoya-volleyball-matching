@@ -3,6 +3,7 @@ import type userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { expect } from 'vitest';
 import { appRoutes } from '../app/App';
+import { createDevAdminRepository } from '../dev/devAdminRepository';
 import { createDevApplicationRepository } from '../dev/devApplicationRepository';
 import { createDevAuthRepository } from '../dev/devAuthRepository';
 import { createDevBlockRepository } from '../dev/devBlockRepository';
@@ -13,6 +14,7 @@ import { createDevNotificationRepository } from '../dev/devNotificationRepositor
 import { createDevProfileRepository } from '../dev/devProfileRepository';
 import { createDevReportRepository } from '../dev/devReportRepository';
 import { createDevSession } from '../dev/devSession';
+import { AdminRepositoryContext } from '../features/admin/repositoryContext';
 import { ApplicationRepositoryContext } from '../features/applications/repositoryContext';
 import { AuthRepositoryContext } from '../features/auth/repositoryContext';
 import { ConversationRepositoryContext } from '../features/conversations/repositoryContext';
@@ -59,7 +61,9 @@ export function renderApp(
               >
                 <BlockRepositoryContext value={createDevBlockRepository({ db, session })}>
                   <ReportRepositoryContext value={createDevReportRepository({ db, session })}>
-                    <RouterProvider router={router} />
+                    <AdminRepositoryContext value={createDevAdminRepository({ db, session })}>
+                      <RouterProvider router={router} />
+                    </AdminRepositoryContext>
                   </ReportRepositoryContext>
                 </BlockRepositoryContext>
               </NotificationRepositoryContext>

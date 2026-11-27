@@ -39,24 +39,28 @@ describe('通報（SCR-019、SAFE-01〜03）', () => {
     ]);
   });
 
-  it('同じ対象への2回目は、受け付け済みと示す', async () => {
+  it('同じ対象への、対応が終わっていない通報があれば、受け付け済みと示す', async () => {
     const user = userEvent.setup();
-    renderApp(`/report/user/${B}`, { userId: A });
+    const { db } = renderApp(`/report/user/${B}`, { userId: A });
+    const [seed] = db.reports;
+    if (!seed) throw new Error('通報のダミーがありません');
+    db.reports.push({
+      ...seed,
+      id: 'earlier',
+      reporterId: A,
+      subjectUserId: B,
+      targetKind: 'user',
+      targetId: B,
+      status: 'open',
+    });
 
-    for (let i = 0; i < 2; i += 1) {
-      await user.click(await screen.findByRole('radio', { name: '迷惑行為・嫌がらせ' }));
-      await user.click(screen.getByRole('button', { name: '通報する' }));
-      if (i === 0) {
-        await findToast();
-        await screen.findByRole('heading', { level: 1, name: 'そら' });
-        await user.click(screen.getByRole('button', { name: 'そらさんへの操作' }));
-        await user.click(screen.getByRole('link', { name: '通報する' }));
-      }
-    }
+    await user.click(await screen.findByRole('radio', { name: '迷惑行為・嫌がらせ' }));
+    await user.click(screen.getByRole('button', { name: '通報する' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'この対象への通報は、すでに受け付けています。',
     );
+    expect(db.reports.filter((report) => report.reporterId === A)).toHaveLength(1);
   });
 
   it('補足は500文字まで', async () => {
