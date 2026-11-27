@@ -13,7 +13,7 @@ const notConnected = () => Promise.reject(new AuthNotConnectedError());
 
 /**
  * まだ接続していない場合の実装。本番用のビルドでは、今はこれを使う。
- * 誰もログインしていないものとして扱い、ログイン・登録・認証は「接続していません」の失敗にする。
+ * 誰もログインしていないものとして扱い、ログイン・登録・認証・再設定は「接続していません」の失敗にする。
  */
 export const notConnectedAuthRepository: AuthRepository = {
   getViewer: () => Promise.resolve(null),
@@ -21,6 +21,11 @@ export const notConnectedAuthRepository: AuthRepository = {
   signIn: notConnected,
   signUp: notConnected,
   verifyEmail: notConnected,
+  resendVerification: notConnected,
+  requestPasswordReset: notConnected,
+  requestPasswordChange: notConnected,
+  verifyPasswordReset: notConnected,
+  updatePassword: notConnected,
   signOut: notConnected,
 };
 
@@ -46,6 +51,11 @@ function createRepository(): AuthRepository {
       signIn: async (input) => (await repository()).signIn(input),
       signUp: async (input) => (await repository()).signUp(input),
       verifyEmail: async (token) => (await repository()).verifyEmail(token),
+      resendVerification: async (input) => (await repository()).resendVerification(input),
+      requestPasswordReset: async (input) => (await repository()).requestPasswordReset(input),
+      requestPasswordChange: async () => (await repository()).requestPasswordChange(),
+      verifyPasswordReset: async (token) => (await repository()).verifyPasswordReset(token),
+      updatePassword: async (input) => (await repository()).updatePassword(input),
       signOut: async () => (await repository()).signOut(),
     };
   }

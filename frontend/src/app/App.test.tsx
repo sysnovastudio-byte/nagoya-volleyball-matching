@@ -37,6 +37,11 @@ const guestAuth: AuthRepository = {
   signIn: () => Promise.reject(new Error('使わない')),
   signUp: () => Promise.reject(new Error('使わない')),
   verifyEmail: () => Promise.reject(new Error('使わない')),
+  resendVerification: () => Promise.reject(new Error('使わない')),
+  requestPasswordReset: () => Promise.reject(new Error('使わない')),
+  requestPasswordChange: () => Promise.reject(new Error('使わない')),
+  verifyPasswordReset: () => Promise.reject(new Error('使わない')),
+  updatePassword: () => Promise.reject(new Error('使わない')),
   signOut: () => Promise.resolve(),
 };
 

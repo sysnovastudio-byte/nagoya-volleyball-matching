@@ -172,9 +172,11 @@ describe('管理者・利用停止中の人（docs/11の4-1・4-2）', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: '利用停止中です' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: '利用規約・プライバシーポリシー' }),
-    ).toBeInTheDocument();
+    // 問い合わせ先は、プライバシーポリシー（SCR-024）に示す
+    expect(screen.getByRole('link', { name: 'プライバシーポリシー' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
     expect(screen.getByRole('link', { name: '設定（ログアウト）へ' })).toHaveAttribute(
       'href',
       '/settings',

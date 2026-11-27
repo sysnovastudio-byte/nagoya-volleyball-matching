@@ -173,3 +173,112 @@ describe('2回目の新規登録', () => {
     expect(new Set(db.users.map((user) => user.id)).size).toBe(db.users.length);
   });
 });
+
+describe('開発用の認証メールの再送とパスワード再設定', () => {
+  function setupWithDb(userId: string | null = null) {
+    const db = createDevDatabase(new Date());
+    const session = createDevSession(userId);
+    return { db, session, repository: createDevAuthRepository({ db, session }) };
+  }
+
+  it('再送は形式だけを確かめ、アドレスを残さない', async () => {
+    const { db, repository } = setupWithDb();
+
+    expect(await repository.resendVerification({ email: 'test@example.com' })).toEqual({
+      status: 'sent',
+    });
+    expect(await repository.resendVerification({ email: 'test' })).toEqual({
+      status: 'rejected',
+      reason: 'invalid',
+    });
+    expect(JSON.stringify(db)).not.toContain('test@example.com');
+  });
+
+  it('未ログインで申し込むと、リンクで利用者Aになり、新しいパスワードを設定できる', async () => {
+    const { db, session, repository } = setupWithDb();
+
+    expect(await repository.requestPasswordReset({ email: 'unknown@example.com' })).toEqual({
+      status: 'sent',
+    });
+    expect(JSON.stringify(db)).not.toContain('unknown@example.com');
+    expect(await repository.verifyPasswordReset('dev-reset-success')).toEqual({
+      status: 'verified',
+    });
+    expect(session.getUserId()).toBe('dev-user-a');
+    expect(await repository.updatePassword({ password: 'short' })).toEqual({
+      status: 'rejected',
+      reason: 'invalid',
+    });
+    expect(await repository.updatePassword({ password: 'abcdefghij' })).toEqual({
+      status: 'updated',
+    });
+    expect(JSON.stringify(db)).not.toContain('abcdefghij');
+    // 1回の再設定で、1回だけ変えられる。リンクも1回だけ使える
+    expect(await repository.updatePassword({ password: 'abcdefghij' })).toEqual({
+      status: 'rejected',
+      reason: 'expired',
+    });
+    expect(await repository.verifyPasswordReset('dev-reset-success')).toEqual({
+      status: 'rejected',
+      reason: 'invalid',
+    });
+  });
+
+  it('ログイン中の変更は、ログイン中の人のリンクになる', async () => {
+    const { session, repository } = setupWithDb('dev-user-b');
+
+    expect(await repository.requestPasswordChange()).toEqual({ status: 'sent' });
+    expect(await repository.verifyPasswordReset('dev-reset-success')).toEqual({
+      status: 'verified',
+    });
+    expect(session.getUserId()).toBe('dev-user-b');
+    expect(await repository.updatePassword({ password: 'abcdefghij' })).toEqual({
+      status: 'updated',
+    });
+  });
+
+  it('未ログインではパスワードの変更を申し込めない', async () => {
+    const { repository } = setupWithDb();
+
+    expect(await repository.requestPasswordChange()).toEqual({
+      status: 'rejected',
+      reason: 'notLoggedIn',
+    });
+  });
+
+  it('リンクを開いていない人・切り替えた人は、パスワードを設定できない', async () => {
+    const { session, repository } = setupWithDb('dev-user-b');
+
+    expect(await repository.updatePassword({ password: 'abcdefghij' })).toEqual({
+      status: 'rejected',
+      reason: 'expired',
+    });
+    await repository.requestPasswordChange();
+    await repository.verifyPasswordReset('dev-reset-success');
+    session.setUserId('dev-user-a');
+    expect(await repository.updatePassword({ password: 'abcdefghij' })).toEqual({
+      status: 'rejected',
+      reason: 'expired',
+    });
+  });
+
+  it.each([
+    ['dev-reset-expired', 'expired'],
+    ['dev-reset-invalid', 'invalid'],
+    ['dev-verify-success', 'invalid'],
+  ])('再設定のリンク %s は %s を返す', async (token, reason) => {
+    const { repository } = setupWithDb();
+    await repository.requestPasswordReset({ email: 'test@example.com' });
+
+    expect(await repository.verifyPasswordReset(token)).toEqual({ status: 'rejected', reason });
+  });
+
+  it('申し込みがなければ、成功するリンクも使えない', async () => {
+    const { repository } = setupWithDb();
+
+    expect(await repository.verifyPasswordReset('dev-reset-success')).toEqual({
+      status: 'rejected',
+      reason: 'invalid',
+    });
+  });
+});

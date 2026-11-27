@@ -1,12 +1,20 @@
 import { createRoutesFromElements, Route } from 'react-router';
+import { WithdrawalPage } from '../features/account/WithdrawalPage';
 import { RequireAdmin } from '../features/admin/AdminParts';
 import { ReportDetailPage, ReportListPage } from '../features/admin/ReportAdminPages';
 import { UserDetailPage, UserSearchPage } from '../features/admin/UserAdminPages';
 import { ActivityPage } from '../features/applications/ActivityPage';
 import { ApplicantsPage } from '../features/applications/ApplicantsPage';
-import { AgreementsPage } from '../features/auth/AgreementsPage';
-import { ConfirmEmailPage, VerificationSentPage } from '../features/auth/EmailVerificationPages';
+import {
+  ConfirmEmailPage,
+  ResendVerificationPage,
+  VerificationSentPage,
+} from '../features/auth/EmailVerificationPages';
 import { LoginPage } from '../features/auth/LoginPage';
+import {
+  PasswordResetConfirmPage,
+  PasswordResetRequestPage,
+} from '../features/auth/PasswordResetPages';
 import { RequireLogin } from '../features/auth/RequireLogin';
 import { RequireProfile } from '../features/auth/RequireProfile';
 import { SessionProvider } from '../features/auth/SessionProvider';
@@ -14,6 +22,7 @@ import { SignUpPage } from '../features/auth/SignUpPage';
 import { CreateEventPage } from '../features/events/CreateEventPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventListPage } from '../features/events/EventListPage';
+import { PrivacyPolicyPage, TermsPage } from '../features/legal/LegalPages';
 import { ProfileEditPage } from '../features/profiles/ProfileEditPage';
 import { ReportPage } from '../features/reports/ReportPage';
 import { MyProfilePage, UserProfilePage } from '../features/profiles/ProfilePages';
@@ -44,7 +53,12 @@ export const appRoutes = createRoutesFromElements(
     <Route path="signup" element={<SignUpPage />} />
     <Route path="signup/sent" element={<VerificationSentPage />} />
     <Route path="auth/confirm" element={<ConfirmEmailPage />} />
-    <Route path="terms" element={<AgreementsPage />} />
+    <Route path="auth/resend" element={<ResendVerificationPage />} />
+    {/* パスワード再設定（SCR-004）。ログイン中はパスワードの変更として使う（Q-50） */}
+    <Route path="password-reset" element={<PasswordResetRequestPage />} />
+    <Route path="password-reset/confirm" element={<PasswordResetConfirmPage />} />
+    <Route path="terms" element={<TermsPage />} />
+    <Route path="privacy" element={<PrivacyPolicyPage />} />
 
     {/* 要ログインの画面。仮の画面は、作るときに置き換える */}
     <Route element={<RequireLogin />}>
@@ -63,8 +77,9 @@ export const appRoutes = createRoutesFromElements(
       {/* 通報（SCR-019）。管理者・利用停止中の人は RequireLogin が案内を示す */}
       <Route path="report/:kind/:targetId" element={<ReportPage />} />
     </Route>
-    {/* 要ログイン。ログアウトの後の移動先が違うため、画面の中で確認する */}
+    {/* 要ログイン。ログアウト・退会の後の表示が違うため、画面の中で確認する */}
     <Route path="settings" element={<SettingsPage />} />
+    <Route path="settings/withdraw" element={<WithdrawalPage />} />
     {/* 管理の画面（SCR-021・022）。入口は設定だけ（docs/11の4-1）。権限は窓口が確かめる */}
     <Route path="admin" element={<RequireAdmin />}>
       <Route path="reports" element={<ReportListPage />} />

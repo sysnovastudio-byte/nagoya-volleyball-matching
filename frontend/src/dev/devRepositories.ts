@@ -1,3 +1,4 @@
+import { createDevAccountRepository } from './devAccountRepository';
 import { createDevAdminRepository } from './devAdminRepository';
 import { createDevConversationRepository } from './devConversationRepository';
 import { createDevApplicationRepository } from './devApplicationRepository';
@@ -51,6 +52,10 @@ export const devBlockRepository = createDevBlockRepository({
   session: devSession,
 });
 export const devReportRepository = createDevReportRepository({
+  db: devDatabase,
+  session: devSession,
+});
+export const devAccountRepository = createDevAccountRepository({
   db: devDatabase,
   session: devSession,
 });

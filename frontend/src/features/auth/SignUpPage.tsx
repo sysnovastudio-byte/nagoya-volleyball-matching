@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router';
 import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
 import { AGREEMENT_VERSION, agreedDocuments, CONSENTS, type ConsentKey } from './agreements';
-import { AuthLayout, DevNotice, FormError } from './AuthLayout';
+import { AuthLayout, BotCheckSlot, DevNotice, FormError } from './AuthLayout';
 import {
   checkSignUpForm,
   EMPTY_SIGN_UP_FORM,
@@ -31,7 +31,7 @@ function fieldId(field: SignUpField) {
 
 /**
  * SCR-002 新規登録（AUTH-01・CND-09）。送信すると SCR-003 へ移る。
- * Bot対策（SAFE-10）は作らない。規約等は仮の文章で、版は「仮-0」。
+ * Bot対策（SAFE-10）は、置き場所と「未接続」の表示だけ。規約等は仮の文章で、版は「仮-0」。
  */
 export function SignUpPage() {
   const session = useSession();
@@ -218,6 +218,7 @@ function SignUpForm() {
           ))}
         </fieldset>
 
+        <BotCheckSlot />
         <Button type="submit" disabled={submitting}>
           {submitting ? '登録しています' : '登録する'}
         </Button>
