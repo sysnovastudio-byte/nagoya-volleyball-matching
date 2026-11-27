@@ -908,7 +908,16 @@ describe('申請者一覧（PC）', () => {
         within(table)
           .getAllByRole('columnheader')
           .map((header) => header.textContent),
-      ).toEqual(['ニックネーム', '経験レベル', '年代', '自己紹介', '申請日時', '状態', '操作']);
+      ).toEqual([
+        'ニックネーム',
+        '経験レベル',
+        '年代',
+        '性別',
+        '自己紹介',
+        '申請日時',
+        '状態',
+        '操作',
+      ]);
       const row = within(table).getByRole('row', { name: /りく/ });
       expect(row).toHaveTextContent('経験者');
       expect(row).toHaveTextContent('50代');
@@ -1229,7 +1238,9 @@ describe('プロフィール登録・編集（SCR-014）', () => {
     renderApp('/profile/edit', { userId: 'dev-user-a' });
 
     await screen.findByRole('heading', { level: 1, name: 'プロフィールを編集' });
-    expect(screen.getAllByText('ログインした人に公開')).toHaveLength(3);
+    // ニックネーム・経験レベル・年代・性別・自己紹介。年代と性別もログインした人に公開する
+    expect(screen.getAllByText('ログインした人に公開')).toHaveLength(5);
+    expect(screen.queryByText('本人と申請先の主催者だけ')).not.toBeInTheDocument();
   });
 
   it('SCR-013 の「編集」から移り、今の内容を入れて始め、保存するとプロフィールに戻る', async () => {
@@ -1359,27 +1370,48 @@ describe('指摘の不具合', () => {
   });
 });
 
-describe('年代（M-01 のうち年代だけ）', () => {
-  it('主催者は、申請者一覧で承認待ち・承認済みの人の年代を見られる', async () => {
+describe('年代・性別（ログインした人全員に公開）', () => {
+  it('主催者は、申請者一覧で申請者の年代と性別を見られる。未選択はそう示す', async () => {
     renderApp(`/events/${HOSTED_EVENT}/applicants`, { userId: HOST });
 
     const card = (await screen.findByRole('link', { name: 'りく' })).closest('li');
     expect(card).toHaveTextContent('年代50代');
+    expect(card).toHaveTextContent('性別未選択');
   });
 
-  it('ほかの人のプロフィールには、年代を出さない', async () => {
+  it('ほかの人のプロフィールにも、年代と性別を出す', async () => {
     renderApp('/users/dev-user-a', { userId: HOST });
 
     expect(await screen.findByRole('heading', { level: 1, name: 'あおい' })).toBeInTheDocument();
-    expect(screen.queryByText('年代')).not.toBeInTheDocument();
-    expect(screen.queryByText('20代')).not.toBeInTheDocument();
+    expect(screen.getByText('20代')).toBeInTheDocument();
+    expect(screen.getByText('女性')).toBeInTheDocument();
   });
 
-  it('本人のプロフィールには、公開範囲を示して年代を出す', async () => {
-    renderApp('/profile', { userId: 'dev-user-a' });
+  it('本人のプロフィールにも、年代と性別を出す。未選択はそう示す', async () => {
+    renderApp('/profile', { userId: 'dev-member-13' });
 
-    expect(await screen.findByText('20代')).toBeInTheDocument();
-    expect(screen.getByText('本人と申請先の主催者だけ')).toBeInTheDocument();
+    expect(await screen.findByText('50代')).toBeInTheDocument();
+    expect(screen.getByText('性別').nextElementSibling).toHaveTextContent('選んでいません。');
+  });
+
+  it('性別は任意で、選んで保存できる', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/profile/edit', { userId: 'dev-member-13' });
+
+    const group = await screen.findByRole('group', { name: /性別/ });
+    const options = within(group).getAllByRole('radio');
+    expect(options.map((option) => option.closest('label')?.textContent)).toEqual([
+      '男性',
+      '女性',
+      'その他',
+      '回答しない',
+    ]);
+    for (const option of options) expect(option).not.toBeChecked();
+    await user.click(within(group).getByLabelText('回答しない'));
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(await screen.findByText('回答しない')).toBeInTheDocument();
+    expect(db.users.find((u) => u.id === 'dev-member-13')?.profile?.gender).toBe('noAnswer');
   });
 
   it('年代を選んで保存できる。選ばないこともできる', async () => {

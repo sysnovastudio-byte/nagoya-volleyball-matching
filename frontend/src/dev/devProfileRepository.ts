@@ -18,13 +18,15 @@ export function toPublicProfile(user: DevUser): PublicProfile | null {
     nickname: user.profile.nickname,
     experienceLevel: user.profile.experienceLevel,
     bio: user.profile.bio,
+    ageGroup: user.profile.ageGroup,
+    gender: user.profile.gender,
   };
 }
 
 function toMyProfile(user: DevUser): MyProfile | null {
   if (!user.profile) return null;
-  const { nickname, experienceLevel, bio, ageGroup } = user.profile;
-  return { userId: user.id, nickname, experienceLevel, bio, ageGroup };
+  const { nickname, experienceLevel, bio, ageGroup, gender } = user.profile;
+  return { userId: user.id, nickname, experienceLevel, bio, ageGroup, gender };
 }
 
 interface DevProfileRepositoryOptions {

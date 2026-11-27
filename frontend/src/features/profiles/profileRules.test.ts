@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AGE_GROUPS,
   ageGroupLabel,
+  GENDERS,
+  genderLabel,
   isConfusingNickname,
   validateProfileForm,
 } from './profileRules';
@@ -11,14 +13,31 @@ const VALID = {
   experienceLevel: 'beginner' as const,
   bio: '',
   ageGroup: null,
+  gender: null,
 };
 
 describe('プロフィールの入力', () => {
-  it('4項目だけを送る。空の自己紹介は null にする', () => {
+  it('5項目だけを送る。空の自己紹介は null にする', () => {
     expect(validateProfileForm(VALID)).toEqual({
       ok: true,
-      input: { nickname: 'ななみ', experienceLevel: 'beginner', bio: null, ageGroup: null },
+      input: {
+        nickname: 'ななみ',
+        experienceLevel: 'beginner',
+        bio: null,
+        ageGroup: null,
+        gender: null,
+      },
     });
+  });
+
+  it('性別は任意。男性・女性・その他・回答しないから選べる', () => {
+    for (const gender of GENDERS) {
+      expect(validateProfileForm({ ...VALID, gender })).toMatchObject({
+        ok: true,
+        input: { gender },
+      });
+    }
+    expect(GENDERS.map(genderLabel)).toEqual(['男性', '女性', 'その他', '回答しない']);
   });
 
   it('年代は任意。20代〜60代以上から選べる', () => {

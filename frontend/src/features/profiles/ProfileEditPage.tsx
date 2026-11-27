@@ -14,6 +14,8 @@ import {
   ageGroupLabel,
   EMPTY_PROFILE_FORM,
   EXPERIENCE_LEVELS,
+  GENDERS,
+  genderLabel,
   PROFILE_LIMITS,
   validateProfileForm,
   type ProfileField,
@@ -28,15 +30,15 @@ export interface ProfileLocationState {
   profileSaved?: boolean;
 }
 
-const FIELD_ORDER: ProfileField[] = ['nickname', 'experienceLevel', 'ageGroup', 'bio'];
+const FIELD_ORDER: ProfileField[] = ['nickname', 'experienceLevel', 'ageGroup', 'gender', 'bio'];
 
 function fieldId(field: ProfileField) {
   return `profile-${field}`;
 }
 
 /**
- * SCR-014 プロフィール登録・編集（PROF-01）。ニックネーム・経験レベル・年代・自己紹介。
- * M-01 のうち年代だけを加える。画像・性別・活動地域は作らない。
+ * SCR-014 プロフィール登録・編集（PROF-01）。ニックネーム・経験レベル・年代・性別・自己紹介。
+ * M-01 のうち年代と性別を加える（性別は2026-11-27の決定）。画像・活動地域は作らない。
  * 保存した後は、戻り先（next）があればそこへ、なければ登録はホーム、編集はプロフィールへ戻る（追加-10）。
  */
 export function ProfileEditPage() {
@@ -108,6 +110,7 @@ function toFormValues(profile: MyProfile | null): ProfileFormValues {
     experienceLevel: profile.experienceLevel,
     bio: profile.bio ?? '',
     ageGroup: profile.ageGroup,
+    gender: profile.gender,
   };
 }
 
@@ -275,7 +278,7 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
         <FormField
           id={fieldId('ageGroup')}
           label="年代"
-          hint={<Badge>本人と申請先の主催者だけ</Badge>}
+          hint={<ScopeHint />}
           error={errors.ageGroup}
         >
           {(control) => (
@@ -299,6 +302,35 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
             </select>
           )}
         </FormField>
+
+        <fieldset aria-describedby="profile-gender-hint" className="flex flex-col gap-1">
+          <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
+            性別
+            <RequiredMark />
+          </legend>
+          <p id="profile-gender-hint" className="text-muted">
+            <ScopeHint />
+          </p>
+          <div className="flex flex-wrap gap-x-4">
+            {GENDERS.map((gender, index) => (
+              <label key={gender} className="flex min-h-11 items-center gap-2">
+                <input
+                  id={index === 0 ? fieldId('gender') : undefined}
+                  type="radio"
+                  name="gender"
+                  value={gender}
+                  checked={values.gender === gender}
+                  onChange={() => {
+                    update({ ...values, gender });
+                  }}
+                  className="size-5"
+                />
+                {genderLabel(gender)}
+              </label>
+            ))}
+          </div>
+          {errors.gender && <p className="font-bold text-danger">{errors.gender}</p>}
+        </fieldset>
 
         <FormField
           id={fieldId('bio')}

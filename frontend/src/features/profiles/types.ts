@@ -6,10 +6,13 @@ export type ExperienceLevel = TargetLevel;
 /** 年代（docs/11の3-3、docs/06の4-13）。20代〜60代以上（登録は20歳以上）。任意の項目で、未選択は null。 */
 export type AgeGroup = 'twenties' | 'thirties' | 'forties' | 'fifties' | 'sixtiesPlus';
 
+/** 性別（docs/11の3-3、docs/06の4-19）。任意の項目で、未選択は null。「回答しない」も選べる。 */
+export type Gender = 'male' | 'female' | 'other' | 'noAnswer';
+
 /**
  * ログイン済みの人に見せるプロフィール（docs/06の4-2）。
- * ニックネーム・経験レベル・自己紹介だけを扱う。年代は見られる人が限られるため、この型に加えない。
- * 性別・活動地域・画像（M-01）は加えない。
+ * ニックネーム・経験レベル・自己紹介・年代・性別。年代と性別もログインした人全員に公開する（2026-11-27の決定）。
+ * 活動地域・画像（M-01）は加えない。
  * メールアドレス・電話番号は、この型に加えない（docs/10の5-7）。
  */
 export type PublicProfile =
@@ -19,28 +22,32 @@ export type PublicProfile =
       nickname: string;
       experienceLevel: ExperienceLevel;
       bio: string | null;
+      ageGroup: AgeGroup | null;
+      gender: Gender | null;
     }
   /** 退会した人。名前の代わりに「退会したユーザー」と表示する（docs/06の4-2） */
   | { userId: string; isWithdrawn: true };
 
-/** 自分のプロフィール。ログイン済みに公開する項目と、本人と申請先の主催者だけが見られる年代。 */
+/** 自分のプロフィール。項目はすべてログイン済みに公開する。 */
 export interface MyProfile {
   userId: string;
   nickname: string;
   experienceLevel: ExperienceLevel;
   bio: string | null;
   ageGroup: AgeGroup | null;
+  gender: Gender | null;
 }
 
 /**
  * プロフィールの保存で送る内容（docs/06の6-5の save_profile）。
- * M-01 のうち年代だけを加える。性別・活動地域・画像は加えない。
+ * M-01 のうち年代と性別を加える。活動地域・画像は加えない。
  */
 export interface ProfileInput {
   nickname: string;
   experienceLevel: ExperienceLevel;
   bio: string | null;
   ageGroup: AgeGroup | null;
+  gender: Gender | null;
 }
 
 export type SaveProfileResult =
