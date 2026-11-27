@@ -43,13 +43,13 @@ export function selectableAgeGroups(ageCategory: AgeCategory): readonly AgeGroup
 }
 
 /**
- * 運営・管理者になりすませる語（DB-21、docs/11の3-3）。本番では save_profile も同じ一覧で拒否する。
+ * 運営・管理者になりすませる語（DB-21、docs/11の3-3、2026-11-27の決定）。本番では save_profile も同じ一覧で拒否する。
  * - 日本語の語：含むものを拒否する
  * - 英字の語：名前全体が一致するものだけ拒否する（「badminton」が「admin」を含むため）
  * 保存済みの名前は変えない。完全には防げないため、通報で補う。
  */
 export const CONFUSING_NICKNAME_WORDS = {
-  contains: ['運営', '管理者', '事務局', '公式', '退会したユーザー'],
+  contains: ['運営', '管理者', '管理人', '事務局', '公式', '退会したユーザー'],
   exact: ['admin', 'administrator', 'official', 'staff', 'support', 'moderator'],
 } as const;
 
