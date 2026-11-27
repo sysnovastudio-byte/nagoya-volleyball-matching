@@ -1,5 +1,5 @@
 import type { BlockRepository } from '../features/safety/types';
-import { findDevUser, type DevDatabase } from './devDatabase';
+import { findDevMember, findDevUser, type DevDatabase } from './devDatabase';
 import type { DevSession } from './devSession';
 import { markDevModule } from './marker';
 
@@ -23,7 +23,7 @@ export function createDevBlockRepository({
 }: DevBlockRepositoryOptions): BlockRepository {
   /** ログイン中の人と、操作できる相手。相手が退会した（見つからない）・自分自身の場合は断る */
   const resolve = (userId: string) => {
-    const user = findDevUser(db, session.getUserId());
+    const user = findDevMember(db, session.getUserId());
     if (!user) return { error: 'notLoggedIn' as const };
     if (userId === user.id) return { error: 'self' as const };
     if (!findDevUser(db, userId)) return { error: 'notFound' as const };

@@ -1,6 +1,6 @@
 import { validateProfileForm } from '../features/profiles/profileRules';
 import type { MyProfile, ProfileRepository, PublicProfile } from '../features/profiles/types';
-import { findDevUser, type DevDatabase } from './devDatabase';
+import { findDevMember, findDevUser, type DevDatabase } from './devDatabase';
 import type { DevSession } from './devSession';
 import type { DevUser } from './devUsers';
 import { markDevModule } from './marker';
@@ -42,7 +42,7 @@ export function createDevProfileRepository({
 }: DevProfileRepositoryOptions): ProfileRepository {
   return {
     getProfiles: (userIds) => {
-      if (!findDevUser(db, session.getUserId())) return Promise.resolve([]);
+      if (!findDevMember(db, session.getUserId())) return Promise.resolve([]);
       const profiles = [...new Set(userIds)].slice(0, MAX_PROFILES).flatMap((userId) => {
         const user = findDevUser(db, userId);
         const profile = user && toPublicProfile(user);
@@ -51,11 +51,11 @@ export function createDevProfileRepository({
       return Promise.resolve(profiles);
     },
     getMyProfile: () => {
-      const user = findDevUser(db, session.getUserId());
+      const user = findDevMember(db, session.getUserId());
       return Promise.resolve((user && toMyProfile(user)) ?? null);
     },
     saveProfile: (input) => {
-      const user = findDevUser(db, session.getUserId());
+      const user = findDevMember(db, session.getUserId());
       if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
       // 画面と同じ検証。本番では save_profile が確かめる
       const checked = validateProfileForm({ ...input, bio: input.bio ?? '' }, user.ageCategory);
@@ -66,7 +66,7 @@ export function createDevProfileRepository({
       return Promise.resolve({ status: 'saved' });
     },
     changeAgeCategoryToAdult: () => {
-      const user = findDevUser(db, session.getUserId());
+      const user = findDevMember(db, session.getUserId());
       if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
       // 「18歳以上」から戻す操作は作らない（docs/11の7-1）
       if (user.ageCategory === 'adult') {

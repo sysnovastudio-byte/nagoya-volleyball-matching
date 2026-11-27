@@ -12,9 +12,23 @@ function setup(userId: string | null) {
 describe('開発用のログイン状態', () => {
   it.each([
     [null, null],
-    ['dev-user-a', { ageCategory: 'adult', profile: { nickname: 'あおい' } }],
-    ['dev-user-minor', { ageCategory: 'minor', profile: { nickname: 'こはる' } }],
-    ['dev-user-no-profile', { ageCategory: 'adult', profile: null }],
+    [
+      'dev-user-a',
+      { role: 'user', status: 'active', ageCategory: 'adult', profile: { nickname: 'あおい' } },
+    ],
+    [
+      'dev-user-minor',
+      { role: 'user', status: 'active', ageCategory: 'minor', profile: { nickname: 'こはる' } },
+    ],
+    [
+      'dev-user-no-profile',
+      { role: 'user', status: 'active', ageCategory: 'adult', profile: null },
+    ],
+    [
+      'dev-user-suspended',
+      { role: 'user', status: 'suspended', ageCategory: 'adult', profile: { nickname: 'かいと' } },
+    ],
+    ['dev-admin', { role: 'admin', status: 'active', ageCategory: 'adult', profile: null }],
   ])('%s', async (userId, expected) => {
     expect(await setup(userId).repository.getViewer()).toEqual(expected);
   });
@@ -72,7 +86,13 @@ describe('開発用のログイン・登録・認証', () => {
     expect(await repository.signUp(SIGN_UP)).toEqual({ status: 'confirmationSent' });
 
     const user = db.users.at(-1);
-    expect(user).toEqual({ id: 'dev-registered-1', ageCategory: 'minor', profile: null });
+    expect(user).toEqual({
+      id: 'dev-registered-1',
+      role: 'user',
+      status: 'active',
+      ageCategory: 'minor',
+      profile: null,
+    });
     expect(db.agreements.map(({ document, version }) => [document, version])).toEqual([
       ['terms', '仮-0'],
       ['privacy', '仮-0'],
@@ -115,7 +135,12 @@ describe('開発用のログイン・登録・認証', () => {
 
     expect(await repository.verifyEmail('dev-verify-success')).toEqual({ status: 'verified' });
     expect(session.getUserId()).toBe('dev-registered-1');
-    expect(await repository.getViewer()).toEqual({ ageCategory: 'minor', profile: null });
+    expect(await repository.getViewer()).toEqual({
+      role: 'user',
+      status: 'active',
+      ageCategory: 'minor',
+      profile: null,
+    });
     expect(await repository.verifyEmail('dev-verify-success')).toEqual({
       status: 'rejected',
       reason: 'invalid',
@@ -156,7 +181,12 @@ describe('2回目の新規登録', () => {
     await repository.verifyEmail('dev-verify-success');
 
     expect(session.getUserId()).toBe('dev-registered-2');
-    expect(await repository.getViewer()).toEqual({ ageCategory: 'adult', profile: null });
+    expect(await repository.getViewer()).toEqual({
+      role: 'user',
+      status: 'active',
+      ageCategory: 'adult',
+      profile: null,
+    });
     expect(new Set(db.users.map((user) => user.id)).size).toBe(db.users.length);
   });
 });

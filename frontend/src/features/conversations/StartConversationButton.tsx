@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { loginPath, profileEditPath } from '../auth/loginRedirect';
-import { useViewer } from '../auth/sessionContext';
+import { isMemberViewer, useViewer } from '../auth/sessionContext';
 import type { EventDetail } from '../events/types';
 import { REJECTED_MESSAGES, sendableUntil } from './messageRules';
 import { useConversationRepository } from './repositoryContext';
@@ -32,6 +32,8 @@ export function StartConversationButton({ event }: { event: EventDetail }) {
   const label = approved ? '主催者に連絡する' : '主催者に質問する';
 
   if (!canOpenHostConversation(event, new Date())) return null;
+  // 管理者・利用停止中の人には出さない。理由は申請の場所に示す
+  if (viewer && !isMemberViewer(viewer)) return null;
   if (!viewer) {
     return (
       <ButtonLink to={loginPath(here)} variant="secondary" size="small">

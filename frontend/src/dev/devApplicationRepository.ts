@@ -13,6 +13,7 @@ import { APPLICATION_LIMITS, MAX_ATTEMPTS, REVOKE_REASONS } from '../features/ap
 import {
   countApplications,
   devEventState,
+  findDevMember,
   findDevUser,
   isBlockedBetween,
   type DevDatabase,
@@ -57,7 +58,8 @@ export function createDevApplicationRepository({
   session,
   now = () => new Date(),
 }: DevApplicationRepositoryOptions): ApplicationRepository {
-  const currentUser = () => findDevUser(db, session.getUserId());
+  // 一般の操作ができる人だけ。管理者・利用停止中の人は、未ログインと同じに扱う
+  const currentUser = () => findDevMember(db, session.getUserId());
 
   const summarize = (record: DevEventRecord, current: Date): EventSummary => {
     const state = devEventState(db, record, current);

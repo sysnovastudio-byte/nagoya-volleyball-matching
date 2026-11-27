@@ -1337,7 +1337,13 @@ describe('指摘の不具合', () => {
     const user = userEvent.setup();
     const { db, session } = renderApp('/signup');
     // 先に18歳未満の利用者が登録・認証を済ませている
-    db.users.push({ id: 'dev-registered-1', ageCategory: 'minor', profile: null });
+    db.users.push({
+      id: 'dev-registered-1',
+      role: 'user',
+      status: 'active',
+      ageCategory: 'minor',
+      profile: null,
+    });
 
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');

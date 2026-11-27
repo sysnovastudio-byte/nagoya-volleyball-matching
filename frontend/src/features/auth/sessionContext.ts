@@ -15,3 +15,11 @@ export function useViewer() {
   const session = useSession();
   return session.status === 'ready' ? session.viewer : null;
 }
+
+/**
+ * 一般の操作（申請・作成・送信・通報・ブロックなど）ができる人か。表示の切り替えだけに使う。
+ * 管理者と利用停止中の人は含めない。できるかどうかは、取得の窓口（本番はDB）が決める。
+ */
+export function isMemberViewer(viewer: Viewer | null): viewer is Viewer {
+  return viewer !== null && viewer.role === 'user' && viewer.status === 'active';
+}

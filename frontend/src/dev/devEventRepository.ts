@@ -8,7 +8,13 @@ import type {
   MyEvent,
   PublicEvent,
 } from '../features/events/types';
-import { countApplications, devEventState, findDevUser, type DevDatabase } from './devDatabase';
+import {
+  findDevMember,
+  countApplications,
+  devEventState,
+  findDevUser,
+  type DevDatabase,
+} from './devDatabase';
 import type { DevEventRecord } from './devEvents';
 import { notifyEventCancelled } from './devNotifications';
 import type { DevSession } from './devSession';
@@ -60,7 +66,8 @@ export function createDevEventRepository({
   });
 
   /** ログインしている人。判定は表示の確認用に簡略化している（docs/06の6-3）。 */
-  const currentUser = () => findDevUser(db, session.getUserId());
+  // 一般の操作ができる人だけ。管理者・利用停止中の人は、未ログインと同じに扱う
+  const currentUser = () => findDevMember(db, session.getUserId());
 
   /** 見ている人の申請。古い順。 */
   const myApplications = (eventId: string, userId: string | undefined) =>

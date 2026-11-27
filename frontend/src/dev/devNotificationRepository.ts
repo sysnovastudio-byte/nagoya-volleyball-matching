@@ -3,7 +3,7 @@ import type {
   NotificationRepository,
   NotificationType,
 } from '../features/notifications/types';
-import { findDevUser, type DevDatabase } from './devDatabase';
+import { findDevMember, findDevUser, type DevDatabase } from './devDatabase';
 import type { DevNotificationRecord } from './devNotifications';
 import { toPublicProfile } from './devProfileRepository';
 import type { DevSession } from './devSession';
@@ -37,7 +37,7 @@ export function createDevNotificationRepository({
   now = () => new Date(),
 }: DevNotificationRepositoryOptions): NotificationRepository {
   const mine = () => {
-    const user = findDevUser(db, session.getUserId());
+    const user = findDevMember(db, session.getUserId());
     if (!user) return [];
     const since = now().getTime() - RETENTION_MS;
     return db.notifications.filter(

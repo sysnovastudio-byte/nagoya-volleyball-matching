@@ -76,6 +76,16 @@ export function findDevUser(db: DevDatabase, userId: string | null) {
 }
 
 /**
+ * 一般の操作ができる人（docs/06の6-3の require_member のうち、役割と状態）。
+ * 管理者と利用停止中の人は、未ログインと同じに扱う（docs/11の4-1・4-2）。
+ * 本番では、DB関数が users をロックしてから確かめる。
+ */
+export function findDevMember(db: DevDatabase, userId: string | null) {
+  const user = findDevUser(db, userId);
+  return user?.role === 'user' && user.status === 'active' ? user : undefined;
+}
+
+/**
  * どちらか一方でも相手をブロックしているか（docs/06の5-3）。送信・会話の開始・申請は双方向に断る。
  * 本番ではブロックの判定関数を利用者から直接呼べない。結果を画面に返さず、断る理由にも示さない。
  */

@@ -4,7 +4,8 @@ import { loginPath } from '../features/auth/loginRedirect';
 import { useViewer } from '../features/auth/sessionContext';
 import { MemberNav } from './MemberNav';
 
-type HeaderMode = 'loading' | 'guest' | 'member';
+/** restricted：管理者・利用停止中の人。一般の利用者の移動を出さず、設定だけに移れる */
+type HeaderMode = 'loading' | 'guest' | 'member' | 'restricted';
 
 interface PublicHeaderProps {
   mode: HeaderMode;
@@ -41,6 +42,7 @@ export function PublicHeader({ mode }: PublicHeaderProps) {
             </ButtonLink>
           </nav>
         )}
+        {mode === 'restricted' && <RestrictedAccount />}
         {/* PCでは上部の移動にニックネームを示すため、スマートフォンだけに出す */}
         {mode === 'member' && <ViewerName />}
         {mode === 'member' && (
@@ -50,6 +52,22 @@ export function PublicHeader({ mode }: PublicHeaderProps) {
         )}
       </div>
     </header>
+  );
+}
+
+/** 管理者・利用停止中の人の、アカウントの種類と設定への移動（ログアウト・管理の画面の入口）。 */
+function RestrictedAccount() {
+  const viewer = useViewer();
+  if (!viewer) return null;
+  return (
+    <nav aria-label="アカウント" className="flex shrink-0 items-center gap-2">
+      <span className="text-sub">
+        {viewer.role === 'admin' ? '管理用のアカウント' : '利用停止中'}
+      </span>
+      <ButtonLink to="/settings" variant="text" size="small">
+        設定
+      </ButtonLink>
+    </nav>
   );
 }
 

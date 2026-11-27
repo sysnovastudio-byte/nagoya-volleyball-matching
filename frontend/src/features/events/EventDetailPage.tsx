@@ -16,7 +16,8 @@ import {
 import { useApplicationRepository } from '../applications/repositoryContext';
 import { MAX_ATTEMPTS, type ApplyRejection } from '../applications/types';
 import { loginPath } from '../auth/loginRedirect';
-import { useViewer } from '../auth/sessionContext';
+import { restrictedReason } from '../auth/RestrictedNotice';
+import { isMemberViewer, useViewer } from '../auth/sessionContext';
 import { CancelEventAction } from './CancelEventAction';
 import { EventStateBadge } from './EventStateBadge';
 import { areaLabel, formatDateTimeRange, formatFee, levelsLabel } from './format';
@@ -276,6 +277,9 @@ interface ApplyActionsProps extends EventActionsProps {
 function ApplyActions({ event, apply, label = '参加を申請する' }: ApplyActionsProps) {
   const viewer = useViewer();
   if (!viewer) return <GuestActions eventId={event.id} />;
+  // 管理者・利用停止中の人は申請できない（docs/11の4-1・4-2）。断るのは窓口（本番はDB）
+  if (!isMemberViewer(viewer))
+    return <p className="text-center text-sub">{restrictedReason(viewer)}</p>;
   if (!viewer.profile) {
     return (
       <div className="flex flex-col gap-2">

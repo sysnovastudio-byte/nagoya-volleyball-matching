@@ -4,7 +4,7 @@ import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { PC_QUERY, useMediaQuery } from '../../app/useMediaQuery';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
-import { useViewer } from '../auth/sessionContext';
+import { isMemberViewer, useViewer } from '../auth/sessionContext';
 import { EventCard } from './EventCard';
 import { EventFilterPanel } from './EventFilterPanel';
 import {
@@ -41,7 +41,7 @@ export function EventListPage() {
   };
   const panel = <EventFilterPanel key={filterKey(filter)} filter={filter} onApply={apply} />;
   // 表示の切り替えだけ。作成の可否は取得の窓口（本番はDB）が判定する
-  const canCreate = viewer !== null && viewer.ageCategory === 'adult';
+  const canCreate = isMemberViewer(viewer) && viewer.ageCategory === 'adult';
 
   return (
     <>

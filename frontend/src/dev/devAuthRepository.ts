@@ -39,6 +39,8 @@ export function createDevAuthRepository({
       const user = findDevUser(db, session.getUserId());
       const viewer: Viewer | null = user
         ? {
+            role: user.role,
+            status: user.status,
             ageCategory: user.ageCategory,
             profile: user.profile ? { nickname: user.profile.nickname } : null,
           }
@@ -78,7 +80,13 @@ export function createDevAuthRepository({
       // IDは登録した人数から決める。認証待ちの人数から決めると、認証の後に同じIDが付いてしまう
       const registered = db.users.filter((user) => user.id.startsWith('dev-registered-')).length;
       const id = `dev-registered-${registered + 1}`;
-      db.users.push({ id, ageCategory: input.ageCategory, profile: null });
+      db.users.push({
+        id,
+        role: 'user',
+        status: 'active',
+        ageCategory: input.ageCategory,
+        profile: null,
+      });
       // 文書ごとに、版と日時（ダミー）を別々に記録する（docs/06の4-17）
       for (const document of DOCUMENTS) {
         db.agreements.push({ userId: id, document, version: AGREEMENT_VERSION, agreedAt: now() });
