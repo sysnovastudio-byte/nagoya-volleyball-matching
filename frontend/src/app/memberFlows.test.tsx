@@ -1219,16 +1219,6 @@ describe('新規登録（SCR-002）とメール認証（SCR-003）', () => {
     expect(screen.getByText('同意する')).toBeInTheDocument();
   });
 
-  it('規約等の仮の画面を示す', async () => {
-    renderApp('/terms');
-
-    expect(
-      await screen.findByRole('heading', { level: 1, name: '利用規約・プライバシーポリシー' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '利用規約' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'プライバシーポリシー' })).toBeInTheDocument();
-  });
-
   it('「20歳以上です」を選ばないと登録しない', async () => {
     const user = userEvent.setup();
     renderApp('/signup');

@@ -24,8 +24,8 @@ export function RestrictedNotice({ viewer }: { viewer: Viewer }) {
       <StatusMessage title="利用停止中です" headingLevel="h1">
         <p>
           この間は、公開されている募集の閲覧と、ログアウトだけができます。停止や退会についてのお問い合わせは、
-          <Link to="/terms" className="font-bold text-main-strong underline">
-            利用規約・プライバシーポリシー
+          <Link to="/privacy" className="font-bold text-main-strong underline">
+            プライバシーポリシー
           </Link>
           に示す問い合わせ先へお願いします。
         </p>

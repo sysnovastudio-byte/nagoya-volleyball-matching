@@ -64,10 +64,12 @@ export const SCREENS: readonly Screen[] = [
   },
   // メールのリンクから開くため、前の画面がない
   { path: '/password-reset/confirm', name: 'パスワード再設定', parent: HOME },
+  // 新規登録の「読む」のリンクから、新しいタブで開く
+  { path: '/terms', name: '利用規約', parent: { to: () => '/signup', name: '新規登録' } },
   {
-    path: '/terms',
-    name: '利用規約・プライバシーポリシー',
-    parent: { to: () => '/signup', name: '新規登録' },
+    path: '/privacy',
+    name: 'プライバシーポリシー',
+    parent: { to: () => '/terms', name: '利用規約' },
   },
 ];
 

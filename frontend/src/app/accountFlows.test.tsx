@@ -174,3 +174,78 @@ describe('認証メールの再送（AUTH-05、SCR-003）', () => {
     expect(await screen.findByRole('group', { name: 'Bot対策の確認' })).toHaveTextContent('未接続');
   });
 });
+
+describe('利用規約（SCR-023）・プライバシーポリシー（SCR-024）', () => {
+  it.each([
+    [
+      '/terms',
+      '利用規約',
+      '開発中の仮の文章です。実際の規約ではありません。',
+      [
+        '同意',
+        '改定',
+        'サービスの位置付け',
+        '禁止事項',
+        'けが・事故',
+        '金銭',
+        '利用停止',
+        '免責',
+        '準拠法・裁判所',
+      ],
+    ],
+    [
+      '/privacy',
+      'プライバシーポリシー',
+      '開発中の仮の文章です。実際のプライバシーポリシーではありません。',
+      [
+        '取得する情報',
+        '目的',
+        '第三者への提供',
+        '外部サービス',
+        '保存期間',
+        '本人の請求',
+        '問い合わせ先',
+        '運営者の表示',
+        'Cookieなど',
+      ],
+    ],
+  ])(
+    '%s：仮の文章と分かるように示し、項目を見出しだけ並べる',
+    async (path, title, warning, items) => {
+      renderApp(path);
+
+      expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
+      expect(screen.getByRole('note')).toHaveTextContent(warning);
+      expect(screen.getByText('版').nextElementSibling).toHaveTextContent('仮-0');
+      expect(screen.getByText('施行日').nextElementSibling).toHaveTextContent('未定');
+      expect(
+        screen.getByRole('heading', { level: 2, name: '予定している内容（未確認）' }),
+      ).toBeInTheDocument();
+      const toc = screen.getByRole('navigation', { name: '目次' });
+      expect(
+        within(toc)
+          .getAllByRole('link')
+          .map((link) => link.textContent),
+      ).toEqual(items);
+      expect(
+        screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
+      ).toEqual(items.map((item, index) => `${index + 1}. ${item}`));
+      // 問い合わせ先は仮で、実在のメールアドレスを載せない
+      expect(
+        screen.getByRole('heading', { level: 2, name: '問い合わせ先（仮）' }),
+      ).toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/@/);
+    },
+  );
+
+  it('利用規約とプライバシーポリシーは、互いに移れる', async () => {
+    const user = userEvent.setup();
+    renderApp('/terms');
+
+    await user.click(await screen.findByRole('link', { name: 'プライバシーポリシー' }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'プライバシーポリシー' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '利用規約' })).toHaveAttribute('href', '/terms');
+  });
+});

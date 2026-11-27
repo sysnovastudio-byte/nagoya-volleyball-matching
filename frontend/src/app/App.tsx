@@ -4,7 +4,6 @@ import { ReportDetailPage, ReportListPage } from '../features/admin/ReportAdminP
 import { UserDetailPage, UserSearchPage } from '../features/admin/UserAdminPages';
 import { ActivityPage } from '../features/applications/ActivityPage';
 import { ApplicantsPage } from '../features/applications/ApplicantsPage';
-import { AgreementsPage } from '../features/auth/AgreementsPage';
 import { ConfirmEmailPage, VerificationSentPage } from '../features/auth/EmailVerificationPages';
 import { LoginPage } from '../features/auth/LoginPage';
 import {
@@ -18,6 +17,7 @@ import { SignUpPage } from '../features/auth/SignUpPage';
 import { CreateEventPage } from '../features/events/CreateEventPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventListPage } from '../features/events/EventListPage';
+import { PrivacyPolicyPage, TermsPage } from '../features/legal/LegalPages';
 import { ProfileEditPage } from '../features/profiles/ProfileEditPage';
 import { ReportPage } from '../features/reports/ReportPage';
 import { MyProfilePage, UserProfilePage } from '../features/profiles/ProfilePages';
@@ -51,7 +51,8 @@ export const appRoutes = createRoutesFromElements(
     {/* パスワード再設定（SCR-004）。ログイン中はパスワードの変更として使う（Q-50） */}
     <Route path="password-reset" element={<PasswordResetRequestPage />} />
     <Route path="password-reset/confirm" element={<PasswordResetConfirmPage />} />
-    <Route path="terms" element={<AgreementsPage />} />
+    <Route path="terms" element={<TermsPage />} />
+    <Route path="privacy" element={<PrivacyPolicyPage />} />
 
     {/* 要ログインの画面。仮の画面は、作るときに置き換える */}
     <Route element={<RequireLogin />}>
