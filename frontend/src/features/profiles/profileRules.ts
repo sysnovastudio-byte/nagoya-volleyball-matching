@@ -1,6 +1,5 @@
 import { textLength } from '../../lib/text';
-import type { AgeCategory } from '../auth/types';
-import type { AgeGroup, ExperienceLevel, ProfileInput } from './types';
+import type { AgeGroup, ExperienceLevel, Gender, ProfileInput } from './types';
 
 /** 上限（docs/11の3-3）。 */
 export const PROFILE_LIMITS = {
@@ -14,9 +13,8 @@ export const EXPERIENCE_LEVELS: readonly ExperienceLevel[] = [
   'experienced',
 ];
 
-/** 年代の選択肢（docs/11の3-3）。 */
+/** 年代の選択肢（docs/11の3-3）。登録は20歳以上のため、20代から。 */
 export const AGE_GROUPS: readonly AgeGroup[] = [
-  'teens',
   'twenties',
   'thirties',
   'forties',
@@ -25,7 +23,6 @@ export const AGE_GROUPS: readonly AgeGroup[] = [
 ];
 
 const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
-  teens: '10代',
   twenties: '20代',
   thirties: '30代',
   forties: '40代',
@@ -37,9 +34,18 @@ export function ageGroupLabel(ageGroup: AgeGroup) {
   return AGE_GROUP_LABELS[ageGroup];
 }
 
-/** 選べる年代。18歳未満の人は「10代」だけ（DB-22）。 */
-export function selectableAgeGroups(ageCategory: AgeCategory): readonly AgeGroup[] {
-  return ageCategory === 'minor' ? ['teens'] : AGE_GROUPS;
+/** 性別の選択肢（docs/11の3-3）。任意で、選ばないこともできる。 */
+export const GENDERS: readonly Gender[] = ['male', 'female', 'other', 'noAnswer'];
+
+const GENDER_LABELS: Record<Gender, string> = {
+  male: '男性',
+  female: '女性',
+  other: 'その他',
+  noAnswer: '回答しない',
+};
+
+export function genderLabel(gender: Gender) {
+  return GENDER_LABELS[gender];
 }
 
 /**
@@ -73,6 +79,7 @@ export interface ProfileFormValues {
   experienceLevel: ExperienceLevel | null;
   bio: string;
   ageGroup: AgeGroup | null;
+  gender: Gender | null;
 }
 
 export type ProfileField = keyof ProfileFormValues;
@@ -83,6 +90,7 @@ export const EMPTY_PROFILE_FORM: ProfileFormValues = {
   experienceLevel: null,
   bio: '',
   ageGroup: null,
+  gender: null,
 };
 
 export type ProfileFormResult =
@@ -91,12 +99,9 @@ export type ProfileFormResult =
 /**
  * ニックネームは前後の空白を除いて1〜20文字。空白だけは認めない（docs/06の4-2）。
  * 運営・管理者などと紛らわしい語は使えない（DB-21）。
- * 年代は任意。18歳未満の人は「10代」か未選択だけ（DB-22）。
+ * 年代と性別は任意。選ぶ場合は選択肢の中から。
  */
-export function validateProfileForm(
-  values: ProfileFormValues,
-  ageCategory: AgeCategory,
-): ProfileFormResult {
+export function validateProfileForm(values: ProfileFormValues): ProfileFormResult {
   const errors: ProfileFieldErrors = {};
   const nickname = values.nickname.trim();
   const bio = values.bio.trim();
@@ -112,8 +117,11 @@ export function validateProfileForm(
     errors.bio = `自己紹介は${PROFILE_LIMITS.bioMax}文字以内にしてください。`;
   }
 
-  if (values.ageGroup !== null && !selectableAgeGroups(ageCategory).includes(values.ageGroup)) {
-    errors.ageGroup = '18歳未満の場合、年代は「10代」か「選ばない」にしてください。';
+  if (values.ageGroup !== null && !AGE_GROUPS.includes(values.ageGroup)) {
+    errors.ageGroup = '年代を選び直してください。';
+  }
+  if (values.gender !== null && !GENDERS.includes(values.gender)) {
+    errors.gender = '性別を選び直してください。';
   }
 
   if (Object.keys(errors).length > 0 || values.experienceLevel === null)
@@ -125,6 +133,7 @@ export function validateProfileForm(
       experienceLevel: values.experienceLevel,
       bio: bio === '' ? null : bio,
       ageGroup: values.ageGroup,
+      gender: values.gender,
     },
   };
 }

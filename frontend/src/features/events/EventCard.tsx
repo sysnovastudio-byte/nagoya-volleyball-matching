@@ -1,6 +1,13 @@
 import { Link } from 'react-router';
 import { EventStateBadge } from './EventStateBadge';
-import { areaLabel, formatFee, formatTimeRange, levelsLabel, toDateParts } from './format';
+import {
+  areaLabel,
+  formatFee,
+  formatTimeRange,
+  kindLabel,
+  levelsLabel,
+  toDateParts,
+} from './format';
 import type { PublicEvent } from './types';
 
 interface EventCardProps {
@@ -43,7 +50,10 @@ export function EventCard({ event }: EventCardProps) {
           <span>{formatTimeRange(event.startsAt, event.endsAt)}</span>
           <span>{areaLabel(event.area)}</span>
         </p>
-        <p className="text-muted">{levelsLabel(event.targetLevels)}</p>
+        <p className="flex flex-wrap gap-x-3 text-muted">
+          {event.kind && <span>{kindLabel(event.kind)}</span>}
+          <span>{levelsLabel(event.targetLevels)}</span>
+        </p>
         <p className="flex w-full flex-wrap justify-between gap-x-3 font-bold">
           <span>{formatFee(event.fee)}</span>
           <span className={isOpen ? 'text-main-strong' : 'text-muted'}>

@@ -14,6 +14,7 @@ const PUBLIC_KEYS = [
   'fee',
   'hostNickname',
   'id',
+  'kind',
   'remaining',
   'startsAt',
   'state',
@@ -48,8 +49,9 @@ function input(overrides: Partial<CreateEventInput> = {}): CreateEventInput {
     title: '作成した募集',
     startsAt: '2026-12-10T04:00:00Z',
     endsAt: '2026-12-10T07:00:00Z',
-    area: 'naka',
+    area: { municipality: 'nagoya', ward: 'naka' },
     targetLevels: ['beginner'],
+    kind: null,
     description: null,
     belongings: null,
     capacity: 10,
@@ -111,15 +113,59 @@ describe('募集の一覧', () => {
 });
 
 describe('募集の絞り込み（EVT-05）', () => {
-  const NONE = { dateFrom: null, dateTo: null, area: null };
+  const NONE = {
+    dateFrom: null,
+    dateTo: null,
+    municipality: null,
+    ward: null,
+    availability: null,
+  };
 
-  it('区で絞り込む', async () => {
-    const { items } = await setup().repository.listEvents(undefined, { ...NONE, area: 'nakamura' });
+  it('名古屋市の区で絞り込む', async () => {
+    const { items } = await setup().repository.listEvents(undefined, {
+      ...NONE,
+      municipality: 'nagoya',
+      ward: 'nakamura',
+    });
 
     expect(items.map((event) => event.id)).toEqual([
       'dev-beginner-afternoon',
       'dev-family-morning',
     ]);
+  });
+
+  it('名古屋市以外の市町村で絞り込む', async () => {
+    const { items } = await setup().repository.listEvents(undefined, {
+      ...NONE,
+      municipality: 'ichinomiya',
+    });
+
+    expect(items.map((event) => event.id)).toEqual(['dev-weekday-night']);
+  });
+
+  it('名古屋市で区を指定しなければ、名古屋市のすべての区の募集を返す', async () => {
+    const { items } = await setup().repository.listEvents(undefined, {
+      ...NONE,
+      municipality: 'nagoya',
+    });
+
+    expect(items.map((event) => event.id)).not.toContain('dev-weekday-night');
+    expect(items.map((event) => event.id)).not.toContain('dev-spike-practice');
+    expect(items.map((event) => event.id)).toContain('dev-beginner-afternoon');
+    expect(items.map((event) => event.id)).toContain('dev-easy-morning');
+  });
+
+  it('受付の状態（受付中／満員）で絞り込む。締切は、どちらにも含めない', async () => {
+    const { repository } = setup();
+    const all = (await repository.listEvents(undefined, NONE)).items;
+    const open = (await repository.listEvents(undefined, { ...NONE, availability: 'open' })).items;
+    const full = (await repository.listEvents(undefined, { ...NONE, availability: 'full' })).items;
+
+    expect(open.length).toBeGreaterThan(0);
+    expect(full.length).toBeGreaterThan(0);
+    expect(open.every((event) => event.state === 'open')).toBe(true);
+    expect(full.every((event) => event.state === 'full')).toBe(true);
+    expect(open.length + full.length).toBe(all.filter((event) => event.state !== 'closed').length);
   });
 
   it('開催日の範囲で絞り込む。両端の日を含む', async () => {
@@ -137,14 +183,18 @@ describe('募集の絞り込み（EVT-05）', () => {
   });
 
   it('条件に合っても、開催前でない募集・中止・非表示は返さない', async () => {
-    const { items } = await setup().repository.listEvents(undefined, { ...NONE, area: 'naka' });
+    const { items } = await setup().repository.listEvents(undefined, {
+      ...NONE,
+      municipality: 'nagoya',
+      ward: 'naka',
+    });
 
     expect(items).toEqual([]);
   });
 
   it('続きも、同じ条件で返す', async () => {
     const { repository } = setup({ pageSize: 1 });
-    const filter = { ...NONE, area: 'nakamura' as const };
+    const filter = { ...NONE, municipality: 'nagoya' as const, ward: 'nakamura' as const };
     const first = await repository.listEvents(undefined, filter);
     const second = await repository.listEvents(first.nextCursor ?? undefined, filter);
 
@@ -226,7 +276,7 @@ describe('くわしい住所', () => {
     });
   });
 
-  it.each([null, 'dev-user-a', 'dev-user-minor', 'dev-user-no-profile'])(
+  it.each([null, 'dev-user-a', 'dev-member-13', 'dev-user-no-profile'])(
     '主催者でない人（%s）には null を返す',
     async (userId) => {
       expect(await setup({ userId }).repository.getLocation(HOSTED_EVENT)).toBeNull();
@@ -310,7 +360,6 @@ describe('募集の作成', () => {
 
   it.each([
     [null, 'notLoggedIn'],
-    ['dev-user-minor', 'minor'],
     ['dev-user-no-profile', 'profileRequired'],
   ] as const)('%s は作成できない（%s）', async (userId, reason) => {
     const { repository, db } = setup({ userId });

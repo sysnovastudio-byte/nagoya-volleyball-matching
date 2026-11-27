@@ -12,23 +12,10 @@ function setup(userId: string | null) {
 describe('開発用のログイン状態', () => {
   it.each([
     [null, null],
-    [
-      'dev-user-a',
-      { role: 'user', status: 'active', ageCategory: 'adult', profile: { nickname: 'あおい' } },
-    ],
-    [
-      'dev-user-minor',
-      { role: 'user', status: 'active', ageCategory: 'minor', profile: { nickname: 'こはる' } },
-    ],
-    [
-      'dev-user-no-profile',
-      { role: 'user', status: 'active', ageCategory: 'adult', profile: null },
-    ],
-    [
-      'dev-user-suspended',
-      { role: 'user', status: 'suspended', ageCategory: 'adult', profile: { nickname: 'かいと' } },
-    ],
-    ['dev-admin', { role: 'admin', status: 'active', ageCategory: 'adult', profile: null }],
+    ['dev-user-a', { role: 'user', status: 'active', profile: { nickname: 'あおい' } }],
+    ['dev-user-no-profile', { role: 'user', status: 'active', profile: null }],
+    ['dev-user-suspended', { role: 'user', status: 'suspended', profile: { nickname: 'かいと' } }],
+    ['dev-admin', { role: 'admin', status: 'active', profile: null }],
   ])('%s', async (userId, expected) => {
     expect(await setup(userId).repository.getViewer()).toEqual(expected);
   });
@@ -57,8 +44,7 @@ describe('開発用のログイン・登録・認証', () => {
   const SIGN_UP = {
     email: 'test@example.com',
     password: 'abcdefghij',
-    ageCategory: 'minor' as const,
-    guardianConsent: true,
+    adultDeclared: true,
     agreements: (['terms', 'privacy', 'message_review'] as const).map((document) => ({
       document,
       version: '仮-0',
@@ -80,7 +66,7 @@ describe('開発用のログイン・登録・認証', () => {
     expect(session.getUserId()).toBe('dev-user-a');
   });
 
-  it('登録すると、年齢の区分と、文書ごとの同意（仮-0）だけを記録し、メールアドレスとパスワードは残さない', async () => {
+  it('登録すると、文書ごとの同意（仮-0）だけを記録し、メールアドレスとパスワードは残さない', async () => {
     const { db, session, repository } = setupWithDb();
 
     expect(await repository.signUp(SIGN_UP)).toEqual({ status: 'confirmationSent' });
@@ -90,7 +76,6 @@ describe('開発用のログイン・登録・認証', () => {
       id: 'dev-registered-1',
       role: 'user',
       status: 'active',
-      ageCategory: 'minor',
       profile: null,
     });
     expect(db.agreements.map(({ document, version }) => [document, version])).toEqual([
@@ -107,7 +92,7 @@ describe('開発用のログイン・登録・認証', () => {
   it.each([
     ['通報時のメッセージ確認への同意がない', { agreements: SIGN_UP.agreements.slice(0, 2) }],
     ['プライバシーポリシーへの同意がない', { agreements: SIGN_UP.agreements.slice(0, 1) }],
-    ['18歳未満で保護者の同意がない', { guardianConsent: false }],
+    ['「20歳以上です」の申告がない', { adultDeclared: false }],
     ['パスワードが短い', { password: 'short' }],
   ])('%s登録は断る', async (_, override) => {
     const { db, repository } = setupWithDb();
@@ -138,7 +123,6 @@ describe('開発用のログイン・登録・認証', () => {
     expect(await repository.getViewer()).toEqual({
       role: 'user',
       status: 'active',
-      ageCategory: 'minor',
       profile: null,
     });
     expect(await repository.verifyEmail('dev-verify-success')).toEqual({
@@ -160,31 +144,30 @@ describe('開発用のログイン・登録・認証', () => {
 });
 
 describe('2回目の新規登録', () => {
-  it('認証した後に登録し直しても、別の利用者になり、年齢の区分を取り違えない', async () => {
+  it('認証した後に登録し直しても、別の利用者になる', async () => {
     const db = createDevDatabase(new Date());
     const session = createDevSession(null);
     const repository = createDevAuthRepository({ db, session });
     const input = {
       email: 'test@example.com',
       password: 'abcdefghij',
-      guardianConsent: true,
+      adultDeclared: true,
       agreements: (['terms', 'privacy', 'message_review'] as const).map((document) => ({
         document,
         version: '仮-0',
       })),
     };
 
-    await repository.signUp({ ...input, ageCategory: 'minor' });
+    await repository.signUp(input);
     await repository.verifyEmail('dev-verify-success');
     await repository.signOut();
-    await repository.signUp({ ...input, ageCategory: 'adult' });
+    await repository.signUp(input);
     await repository.verifyEmail('dev-verify-success');
 
     expect(session.getUserId()).toBe('dev-registered-2');
     expect(await repository.getViewer()).toEqual({
       role: 'user',
       status: 'active',
-      ageCategory: 'adult',
       profile: null,
     });
     expect(new Set(db.users.map((user) => user.id)).size).toBe(db.users.length);

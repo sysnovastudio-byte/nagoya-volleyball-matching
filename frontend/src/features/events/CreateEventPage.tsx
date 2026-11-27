@@ -2,10 +2,8 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { useBlocker, useLocation, useNavigate } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
-import { Button, ButtonLink } from '../../components/ui/Button';
+import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
-import { StatusMessage } from '../../components/ui/StatusMessage';
-import { useViewer } from '../auth/sessionContext';
 import type { EventDetailLocationState } from './EventDetailPage';
 import {
   EMPTY_EVENT_FORM,
@@ -17,8 +15,17 @@ import {
   type EventFormField,
   type EventFormValues,
 } from './eventForm';
-import { AREAS, EVENT_LIMITS, overlapsLateNight, TARGET_LEVELS } from './eventRules';
-import { areaLabel, levelLabel } from './format';
+import {
+  EVENT_KINDS,
+  EVENT_LIMITS,
+  isEventKind,
+  isMunicipality,
+  isNagoyaWard,
+  MUNICIPALITIES,
+  NAGOYA_WARDS,
+  TARGET_LEVELS,
+} from './eventRules';
+import { kindLabel, levelLabel, municipalityLabel, wardLabel } from './format';
 import { useEventRepository } from './repositoryContext';
 import type { CreateEventRejection, TargetLevel } from './types';
 
@@ -28,8 +35,10 @@ const FIELD_ORDER: EventFormField[] = [
   'date',
   'startTime',
   'endTime',
-  'area',
+  'municipality',
+  'ward',
   'targetLevels',
+  'kind',
   'capacity',
   'fee',
   'description',
@@ -46,7 +55,6 @@ const REJECTION_MESSAGES: Record<CreateEventRejection, string> = {
   notLoggedIn:
     'ログインの状態を確認できませんでした。ログインし直してから、もう一度お試しください。',
   profileRequired: '募集を作るには、プロフィールの登録が必要です。',
-  minor: '18歳未満の方は、募集を作成できません。',
   rateLimited: `募集の作成は、24時間に${EVENT_LIMITS.dailyCreateLimit}件までです。時間をおいてから、もう一度お試しください。`,
   invalid: '入力の内容を確認してください。時間がたって、開始の日時が過ぎた可能性があります。',
 };
@@ -64,18 +72,8 @@ function createRequestId() {
  */
 export function CreateEventPage() {
   useDocumentTitle('募集を作る');
-  const viewer = useViewer();
-
-  // 画面の切り替えは表示のためだけのもの。作成の可否は取得の窓口（本番はDB）が判定する。
+  // 作成の可否は取得の窓口（本番はDB）が判定する。
   // プロフィール未登録の人は、経路の RequireProfile が入力画面へ移す
-  if (viewer?.ageCategory === 'minor') {
-    return (
-      <StatusMessage title="18歳未満の方は、募集を作成できません" headingLevel="h1">
-        <p>参加の申請と、主催者への質問はできます。</p>
-        <ButtonLink to="/">募集一覧へ</ButtonLink>
-      </StatusMessage>
-    );
-  }
   return <CreateEventForm />;
 }
 
@@ -118,14 +116,17 @@ function CreateEventForm() {
     if (submitError) submitErrorRef.current?.focus();
   }, [submitError]);
 
-  const update = <K extends keyof EventFormValues>(field: K, value: EventFormValues[K]) => {
-    const next = { ...values, [field]: value };
+  const updateMany = (changes: Partial<EventFormValues>) => {
+    const next = { ...values, ...changes };
     setValues(next);
     // 一度送ろうとした後は、入力に合わせて誤りの表示を直す
     if (validated) {
       const result = validateEventForm(next, new Date(), clientRequestId);
       setErrors(result.ok ? {} : result.errors);
     }
+  };
+  const update = <K extends keyof EventFormValues>(field: K, value: EventFormValues[K]) => {
+    updateMany({ [field]: value });
   };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -171,7 +172,6 @@ function CreateEventForm() {
   };
 
   const schedule = scheduleFromForm(values);
-  const lateNight = schedule ? overlapsLateNight(schedule.startsAt, schedule.endsAt) : false;
 
   return (
     <div className="mx-auto w-full max-w-160 px-4 pt-4">
@@ -224,36 +224,59 @@ function CreateEventForm() {
             }}
           />
 
-          {lateNight && (
-            <p
-              role="status"
-              className="rounded-xl border border-accent bg-accent-tint px-4 py-3 text-ink"
-            >
-              <strong>深夜（午後11時〜翌午前6時）にかかります。</strong>
-              18歳未満の人が申請する場合があります。18歳未満の人を深夜に参加させたり、連れ出したりしないでください。
-            </p>
-          )}
-
-          <FormField id="event-area" label="開催エリア" required error={errors.area}>
+          <FormField
+            id="event-municipality"
+            label="開催地（市町村）"
+            required
+            error={errors.municipality}
+          >
             {(control) => (
               <select
                 {...control}
-                value={values.area}
+                value={values.municipality}
                 onChange={(event) => {
-                  const area = AREAS.find((candidate) => candidate === event.target.value);
-                  update('area', area ?? '');
+                  const value = event.target.value;
+                  const municipality = isMunicipality(value) ? value : '';
+                  // 名古屋市以外に変えたら、区の選択を外す
+                  updateMany({
+                    municipality,
+                    ward: municipality === 'nagoya' ? values.ward : '',
+                  });
                 }}
                 className={INPUT_CLASS}
               >
                 <option value="">選んでください</option>
-                {AREAS.map((area) => (
-                  <option key={area} value={area}>
-                    {areaLabel(area)}
+                {MUNICIPALITIES.map((municipality) => (
+                  <option key={municipality} value={municipality}>
+                    {municipalityLabel(municipality)}
                   </option>
                 ))}
               </select>
             )}
           </FormField>
+
+          {values.municipality === 'nagoya' && (
+            <FormField id="event-ward" label="区" required error={errors.ward}>
+              {(control) => (
+                <select
+                  {...control}
+                  value={values.ward}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    update('ward', isNagoyaWard(value) ? value : '');
+                  }}
+                  className={INPUT_CLASS}
+                >
+                  <option value="">選んでください</option>
+                  {NAGOYA_WARDS.map((ward) => (
+                    <option key={ward} value={ward}>
+                      {wardLabel(ward)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+          )}
 
           <TargetLevelField
             value={values.targetLevels}
@@ -262,6 +285,27 @@ function CreateEventForm() {
               update('targetLevels', levels);
             }}
           />
+
+          <FormField id="event-kind" label="種別" error={errors.kind}>
+            {(control) => (
+              <select
+                {...control}
+                value={values.kind}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  update('kind', isEventKind(value) ? value : '');
+                }}
+                className={`${INPUT_CLASS} max-w-48`}
+              >
+                <option value="">選ばない</option>
+                {EVENT_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kindLabel(kind)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
 
           <FormField id="event-capacity" label="募集人数" required error={errors.capacity}>
             {(control) => (
@@ -424,10 +468,6 @@ function CreateEventForm() {
               {submitError}
             </p>
           )}
-          {/* 主催者への案内（docs/11の7-1）。公開ボタンの近くに常に示す。文字は16pxのまま色を控えめにする */}
-          <p className="mb-2 text-muted">
-            18歳未満の人が参加することがあります。深夜（23時〜翌6時）にかかる参加はさせないでください。
-          </p>
           {blocker.state === 'blocked' ? (
             <LeaveConfirm
               onContinue={() => {

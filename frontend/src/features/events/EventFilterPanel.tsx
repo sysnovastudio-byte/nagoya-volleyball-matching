@@ -1,10 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../components/ui/Button';
 import { INPUT_CLASS } from '../../components/ui/FormField';
-import { checkFilter, EMPTY_FILTER, type EventFilter } from './eventFilter';
-import { AREAS } from './eventRules';
-import { areaLabel } from './format';
-import type { Area } from './types';
+import {
+  AVAILABILITY_FILTERS,
+  checkFilter,
+  EMPTY_FILTER,
+  type AvailabilityFilter,
+  type EventFilter,
+} from './eventFilter';
+import { isMunicipality, isNagoyaWard, MUNICIPALITIES, NAGOYA_WARDS } from './eventRules';
+import { municipalityLabel, stateLabel, wardLabel } from './format';
 
 interface EventFilterPanelProps {
   filter: EventFilter;
@@ -12,7 +17,7 @@ interface EventFilterPanelProps {
 }
 
 /**
- * 募集の絞り込み（EVT-05）。日付の範囲と区だけ（M-04）。
+ * 募集の絞り込み（EVT-05）。日付の範囲・開催地（市町村、名古屋市は区も）・受付の状態（受付中／満員）。
  * 条件は「この条件で探す」で反映する。入力のたびに読み込み直さない。
  */
 export function EventFilterPanel({ filter, onApply }: EventFilterPanelProps) {
@@ -76,21 +81,64 @@ export function EventFilterPanel({ filter, onApply }: EventFilterPanelProps) {
       </fieldset>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">区</span>
+        <span className="font-bold">市町村</span>
         <select
-          value={draft.area ?? ''}
+          value={draft.municipality ?? ''}
           onChange={(event) => {
+            const value = event.target.value;
+            // 名古屋市以外に変えたら、区の指定を外す
             setDraft({
               ...draft,
-              area: event.target.value === '' ? null : (event.target.value as Area),
+              municipality: isMunicipality(value) ? value : null,
+              ward: value === 'nagoya' ? draft.ward : null,
             });
           }}
           className={INPUT_CLASS}
         >
-          <option value="">すべての区</option>
-          {AREAS.map((area) => (
-            <option key={area} value={area}>
-              {areaLabel(area)}
+          <option value="">愛知県のすべて</option>
+          {MUNICIPALITIES.map((municipality) => (
+            <option key={municipality} value={municipality}>
+              {municipalityLabel(municipality)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {draft.municipality === 'nagoya' && (
+        <label className="flex flex-col gap-1">
+          <span className="font-bold">区</span>
+          <select
+            value={draft.ward ?? ''}
+            onChange={(event) => {
+              const value = event.target.value;
+              setDraft({ ...draft, ward: isNagoyaWard(value) ? value : null });
+            }}
+            className={INPUT_CLASS}
+          >
+            <option value="">名古屋市のすべての区</option>
+            {NAGOYA_WARDS.map((ward) => (
+              <option key={ward} value={ward}>
+                {wardLabel(ward)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">受付の状態</span>
+        <select
+          value={draft.availability ?? ''}
+          onChange={(event) => {
+            const value = AVAILABILITY_FILTERS.find((item) => item === event.target.value);
+            setDraft({ ...draft, availability: value ?? null });
+          }}
+          className={INPUT_CLASS}
+        >
+          <option value="">すべて</option>
+          {AVAILABILITY_FILTERS.map((availability: AvailabilityFilter) => (
+            <option key={availability} value={availability}>
+              {stateLabel(availability)}
             </option>
           ))}
         </select>

@@ -9,7 +9,6 @@ import {
   validateEventForm,
   type EventFormValues,
 } from './eventForm';
-import { overlapsLateNight } from './eventRules';
 
 // 日本時間 2026-11-25 12:00
 const NOW = new Date('2026-11-25T03:00:00Z');
@@ -19,8 +18,10 @@ const VALID: EventFormValues = {
   date: '2026-12-05',
   startTime: '13:00',
   endTime: '16:00',
-  area: 'nakamura',
+  municipality: 'nagoya',
+  ward: 'nakamura',
   targetLevels: ['beginner'],
+  kind: '',
   capacity: '12',
   fee: '500',
   description: '',
@@ -50,8 +51,9 @@ describe('入力の検証', () => {
         title: '土曜の午後バレー',
         startsAt: '2026-12-05T04:00:00.000Z',
         endsAt: '2026-12-05T07:00:00.000Z',
-        area: 'nakamura',
+        area: { municipality: 'nagoya', ward: 'nakamura' },
         targetLevels: ['beginner'],
+        kind: null,
         description: null,
         belongings: null,
         capacity: 12,
@@ -68,11 +70,11 @@ describe('入力の検証', () => {
     expect(Object.keys(result.ok ? {} : result.errors).sort()).toEqual(
       [
         'address',
-        'area',
         'capacity',
         'date',
         'endTime',
         'fee',
+        'municipality',
         'startTime',
         'targetLevels',
         'title',
@@ -126,8 +128,18 @@ describe('入力の検証', () => {
     expect(Boolean(errorsOf({ fee }).fee)).toBe(invalid);
   });
 
-  it('区は16区の中から選ぶ', () => {
-    expect(errorsOf({ area: '' }).area).toBe('区を選んでください。');
+  it('開催地は愛知県の市町村から選び、名古屋市のときだけ区も選ぶ', () => {
+    expect(errorsOf({ municipality: '', ward: '' }).municipality).toBe('市町村を選んでください。');
+    expect(errorsOf({ ward: '' }).ward).toBe('区を選んでください。');
+    // 名古屋市以外では区を持たない。欄に区が残っていても送らない
+    const outside = validateEventForm({ ...VALID, municipality: 'toyota' }, NOW, 'request-1');
+    expect(outside.ok && outside.input.area).toEqual({ municipality: 'toyota', ward: null });
+  });
+
+  it('種別は任意。選んだ種別をそのまま送る', () => {
+    const result = validateEventForm({ ...VALID, kind: 'women' }, NOW, 'request-1');
+    expect(result.ok && result.input.kind).toBe('women');
+    expect(errorsOf({ kind: '' }).kind).toBeUndefined();
   });
 
   it('対象レベルは1つ以上', () => {
@@ -198,21 +210,6 @@ describe('日時の検証', () => {
     expect(parseJstDateTime('2026-12-05T00:30')?.toISOString()).toBe('2026-12-04T15:30:00.000Z');
     expect(parseJstDateTime('2026-12-05')).toBeNull();
     expect(parseJstDateTime('')).toBeNull();
-  });
-});
-
-describe('深夜にかかるか', () => {
-  const at = (value: string) => parseJstDateTime(value) ?? new Date(Number.NaN);
-
-  it.each([
-    ['2026-12-05T13:00', '2026-12-05T16:00', false],
-    ['2026-12-05T20:00', '2026-12-05T23:00', false],
-    ['2026-12-05T20:00', '2026-12-05T23:01', true],
-    ['2026-12-06T05:00', '2026-12-06T07:00', true],
-    ['2026-12-06T06:00', '2026-12-06T09:00', false],
-    ['2026-12-05T23:30', '2026-12-06T01:00', true],
-  ])('%s〜%s は %s', (start, end, expected) => {
-    expect(overlapsLateNight(at(start), at(end))).toBe(expected);
   });
 });
 

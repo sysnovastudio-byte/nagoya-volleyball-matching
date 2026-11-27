@@ -41,7 +41,6 @@ export function createDevAuthRepository({
         ? {
             role: user.role,
             status: user.status,
-            ageCategory: user.ageCategory,
             profile: user.profile ? { nickname: user.profile.nickname } : null,
           }
         : null;
@@ -62,8 +61,7 @@ export function createDevAuthRepository({
       const errors = checkSignUpForm({
         email: input.email,
         password: input.password,
-        ageCategory: input.ageCategory,
-        guardianConsent: input.guardianConsent,
+        adultDeclared: input.adultDeclared,
         agreements: {
           termsAndPrivacy: has('terms') && has('privacy'),
           messageReview: has('message_review'),
@@ -76,7 +74,7 @@ export function createDevAuthRepository({
         return Promise.resolve({ status: 'rejected', reason: 'outdatedAgreement' });
       }
 
-      // メールアドレスとパスワードは保存しない。年齢の区分と同意だけを、ダミーの利用者に記録する
+      // メールアドレスとパスワードは保存しない。同意だけを、ダミーの利用者に記録する
       // IDは登録した人数から決める。認証待ちの人数から決めると、認証の後に同じIDが付いてしまう
       const registered = db.users.filter((user) => user.id.startsWith('dev-registered-')).length;
       const id = `dev-registered-${registered + 1}`;
@@ -84,7 +82,6 @@ export function createDevAuthRepository({
         id,
         role: 'user',
         status: 'active',
-        ageCategory: input.ageCategory,
         profile: null,
       });
       // 文書ごとに、版と日時（ダミー）を別々に記録する（docs/06の4-17）

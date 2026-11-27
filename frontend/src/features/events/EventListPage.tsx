@@ -15,7 +15,7 @@ import {
   filterToParams,
   type EventFilter,
 } from './eventFilter';
-import { areaLabel } from './format';
+import { municipalityLabel, stateLabel, wardLabel } from './format';
 import { HeroBand } from './HeroBand';
 import { useEventList } from './useEventList';
 
@@ -41,7 +41,7 @@ export function EventListPage() {
   };
   const panel = <EventFilterPanel key={filterKey(filter)} filter={filter} onApply={apply} />;
   // 表示の切り替えだけ。作成の可否は取得の窓口（本番はDB）が判定する
-  const canCreate = isMemberViewer(viewer) && viewer.ageCategory === 'adult';
+  const canCreate = isMemberViewer(viewer);
 
   return (
     <>
@@ -76,11 +76,6 @@ export function EventListPage() {
             )}
           </div>
         </div>
-        {viewer?.ageCategory === 'minor' && (
-          <p className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">
-            18歳未満の方は、募集を作成できません。参加の申請と、主催者への質問はできます。
-          </p>
-        )}
         {!isPc && panelOpen && (
           <div id="event-filter" className="mb-4">
             {panel}
@@ -146,7 +141,12 @@ function FilterSummary({ filter, onClear }: { filter: EventFilter; onClear: () =
       `${filter.dateFrom ? dateLabel(filter.dateFrom) : ''}〜${filter.dateTo ? dateLabel(filter.dateTo) : ''}`,
     );
   }
-  if (filter.area) parts.push(areaLabel(filter.area));
+  if (filter.municipality) {
+    parts.push(
+      `${municipalityLabel(filter.municipality)}${filter.ward ? wardLabel(filter.ward) : ''}`,
+    );
+  }
+  if (filter.availability) parts.push(stateLabel(filter.availability));
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
       <p className="font-bold">
@@ -176,7 +176,7 @@ function EventList({ filter, onClear }: { filter: EventFilter; onClear: () => vo
   if (state.items.length === 0 && activeFilterCount(filter) > 0) {
     return (
       <StatusMessage title="条件に合う募集はありません">
-        <p>日付や区を変えて、もう一度お試しください。</p>
+        <p>日付・開催地・受付の状態を変えて、もう一度お試しください。</p>
         <Button variant="secondary" onClick={onClear}>
           条件をクリア
         </Button>

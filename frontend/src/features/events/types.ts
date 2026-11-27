@@ -9,7 +9,71 @@ export type EventState = 'open' | 'full' | 'closed' | 'ongoing' | 'ended' | 'can
 
 export type TargetLevel = 'inexperienced' | 'beginner' | 'experienced';
 
-export type Area =
+/** 募集の種別（docs/11の2-1、docs/06の4-19）。任意で、未選択は null。種別での絞り込みは作らない。 */
+export type EventKind = 'men' | 'women' | 'mixed';
+
+/**
+ * 愛知県の市町村（docs/11の2-1、docs/06の4-19）。並びは全国地方公共団体コードの順。
+ * 名古屋市は区まで選ぶ（NagoyaWard）。
+ */
+export type Municipality =
+  | 'nagoya'
+  | 'toyohashi'
+  | 'okazaki'
+  | 'ichinomiya'
+  | 'seto'
+  | 'handa'
+  | 'kasugai'
+  | 'toyokawa'
+  | 'tsushima'
+  | 'hekinan'
+  | 'kariya'
+  | 'toyota'
+  | 'anjo'
+  | 'nishio'
+  | 'gamagori'
+  | 'inuyama'
+  | 'tokoname'
+  | 'konan'
+  | 'komaki'
+  | 'inazawa'
+  | 'shinshiro'
+  | 'tokai'
+  | 'obu'
+  | 'chita'
+  | 'chiryu'
+  | 'owariasahi'
+  | 'takahama'
+  | 'iwakura'
+  | 'toyoake'
+  | 'nisshin'
+  | 'tahara'
+  | 'aisai'
+  | 'kiyosu'
+  | 'kitanagoya'
+  | 'yatomi'
+  | 'miyoshi'
+  | 'ama'
+  | 'nagakute'
+  | 'togo'
+  | 'toyoyama'
+  | 'oguchi'
+  | 'fuso'
+  | 'oharu'
+  | 'kanie'
+  | 'tobishima'
+  | 'agui'
+  | 'higashiura'
+  | 'minamichita'
+  | 'mihama'
+  | 'taketoyo'
+  | 'kota'
+  | 'shitara'
+  | 'toei'
+  | 'toyone';
+
+/** 名古屋市の16区。 */
+export type NagoyaWard =
   | 'chikusa'
   | 'higashi'
   | 'kita'
@@ -27,6 +91,11 @@ export type Area =
   | 'meito'
   | 'tempaku';
 
+/** 開催地。名古屋市の場合だけ区を持ち、ほかの市町村では区を持たない（docs/11の2-1）。 */
+export type EventArea =
+  | { municipality: 'nagoya'; ward: NagoyaWard }
+  | { municipality: Exclude<Municipality, 'nagoya'>; ward: null };
+
 /**
  * 未ログインにも公開する募集の情報（docs/03のFR-05、docs/11の2-1）。
  * くわしい住所・主催者のID・連絡先は、この型に加えない。住所は getLocation で別に取得する。
@@ -36,8 +105,9 @@ export interface PublicEvent {
   title: string;
   startsAt: string;
   endsAt: string;
-  area: Area;
+  area: EventArea;
   targetLevels: TargetLevel[];
+  kind: EventKind | null;
   description: string | null;
   belongings: string | null;
   capacity: number;
@@ -97,8 +167,9 @@ export interface CreateEventInput {
   title: string;
   startsAt: string;
   endsAt: string;
-  area: Area;
+  area: EventArea;
   targetLevels: TargetLevel[];
+  kind: EventKind | null;
   description: string | null;
   belongings: string | null;
   capacity: number;
@@ -117,8 +188,7 @@ export type CancelEventResult =
   { status: 'cancelled' } | { status: 'rejected'; reason: CancelEventRejection };
 
 /** 作成を断る理由。画面は理由に応じて案内する。 */
-export type CreateEventRejection =
-  'notLoggedIn' | 'profileRequired' | 'minor' | 'rateLimited' | 'invalid';
+export type CreateEventRejection = 'notLoggedIn' | 'profileRequired' | 'rateLimited' | 'invalid';
 
 export type CreateEventResult =
   { status: 'created'; eventId: string } | { status: 'rejected'; reason: CreateEventRejection };

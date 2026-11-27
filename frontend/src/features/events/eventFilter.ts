@@ -1,17 +1,36 @@
-import { AREAS } from './eventRules';
-import type { Area } from './types';
+import { isMunicipality, isNagoyaWard } from './eventRules';
+import type { EventArea, EventState, Municipality, NagoyaWard } from './types';
+
+/** 受付の状態での絞り込み（受付中／満員）。締切（受付終了）は選べない。 */
+export type AvailabilityFilter = Extract<EventState, 'open' | 'full'>;
+
+export const AVAILABILITY_FILTERS: readonly AvailabilityFilter[] = ['open', 'full'];
+
+function isAvailabilityFilter(value: unknown): value is AvailabilityFilter {
+  return (AVAILABILITY_FILTERS as readonly unknown[]).includes(value);
+}
 
 /**
- * 募集の絞り込みの条件（EVT-05）。日付の範囲と区だけ（M-04）。対象レベル・空きの有無は作らない。
+ * 募集の絞り込みの条件（EVT-05）。日付の範囲・開催地・受付の状態（docs/11の2-1）。対象レベル・種別は作らない。
  * 日付は日本時間の「YYYY-MM-DD」。開始日・終了日を含む。未指定は null。
+ * 区は、市町村が名古屋市のときだけ指定できる。名古屋市で区が null なら、名古屋市のすべての区。
+ * 受付の状態は、受付中か満員のどちらか。null ならすべて（締切も含む）。
  */
 export interface EventFilter {
   dateFrom: string | null;
   dateTo: string | null;
-  area: Area | null;
+  municipality: Municipality | null;
+  ward: NagoyaWard | null;
+  availability: AvailabilityFilter | null;
 }
 
-export const EMPTY_FILTER: EventFilter = { dateFrom: null, dateTo: null, area: null };
+export const EMPTY_FILTER: EventFilter = {
+  dateFrom: null,
+  dateTo: null,
+  municipality: null,
+  ward: null,
+  availability: null,
+};
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -22,7 +41,13 @@ function isDate(value: string) {
 }
 
 /** アドレスに入れる名前。戻ったときにも条件が残るよう、条件はアドレスに持つ。 */
-const PARAMS = { dateFrom: 'from', dateTo: 'to', area: 'area' } as const;
+const PARAMS = {
+  dateFrom: 'from',
+  dateTo: 'to',
+  municipality: 'city',
+  ward: 'ward',
+  availability: 'status',
+} as const;
 
 /** アドレスから条件を読む。形の正しくない値は、指定がないものとして扱う。 */
 export function filterFromParams(params: URLSearchParams): EventFilter {
@@ -30,11 +55,17 @@ export function filterFromParams(params: URLSearchParams): EventFilter {
     const value = params.get(name);
     return value !== null && isDate(value) ? value : null;
   };
-  const area = params.get(PARAMS.area);
+  const municipality = params.get(PARAMS.municipality);
+  const ward = params.get(PARAMS.ward);
+  const validMunicipality = isMunicipality(municipality) ? municipality : null;
+  const availability = params.get(PARAMS.availability);
   return {
     dateFrom: date(PARAMS.dateFrom),
     dateTo: date(PARAMS.dateTo),
-    area: area !== null && (AREAS as readonly string[]).includes(area) ? (area as Area) : null,
+    municipality: validMunicipality,
+    // 区は名古屋市のときだけ読む
+    ward: validMunicipality === 'nagoya' && isNagoyaWard(ward) ? ward : null,
+    availability: isAvailabilityFilter(availability) ? availability : null,
   };
 }
 
@@ -42,13 +73,18 @@ export function filterToParams(filter: EventFilter): URLSearchParams {
   const params = new URLSearchParams();
   if (filter.dateFrom) params.set(PARAMS.dateFrom, filter.dateFrom);
   if (filter.dateTo) params.set(PARAMS.dateTo, filter.dateTo);
-  if (filter.area) params.set(PARAMS.area, filter.area);
+  if (filter.municipality) params.set(PARAMS.municipality, filter.municipality);
+  if (filter.municipality === 'nagoya' && filter.ward) params.set(PARAMS.ward, filter.ward);
+  if (filter.availability) params.set(PARAMS.availability, filter.availability);
   return params;
 }
 
 export function activeFilterCount(filter: EventFilter) {
-  return [filter.dateFrom !== null || filter.dateTo !== null, filter.area !== null].filter(Boolean)
-    .length;
+  return [
+    filter.dateFrom !== null || filter.dateTo !== null,
+    filter.municipality !== null,
+    filter.availability !== null,
+  ].filter(Boolean).length;
 }
 
 export function filterKey(filter: EventFilter) {
@@ -70,9 +106,16 @@ const jstDate = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 });
 
-/** 開催日（日本時間の開始日）が条件に合うか。 */
-export function matchesFilter(event: { startsAt: string; area: Area }, filter: EventFilter) {
-  if (filter.area && event.area !== filter.area) return false;
+/** 開催日（日本時間の開始日）・開催地・受付の状態が条件に合うか。 */
+export function matchesFilter(
+  event: { startsAt: string; area: EventArea; state: EventState },
+  filter: EventFilter,
+) {
+  if (filter.availability && event.state !== filter.availability) return false;
+  if (filter.municipality && event.area.municipality !== filter.municipality) return false;
+  if (filter.municipality === 'nagoya' && filter.ward && event.area.ward !== filter.ward) {
+    return false;
+  }
   const day = jstDate.format(new Date(event.startsAt));
   if (filter.dateFrom && day < filter.dateFrom) return false;
   if (filter.dateTo && day > filter.dateTo) return false;

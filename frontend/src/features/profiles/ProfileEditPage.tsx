@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router';
-import { useToast } from '../../app/toastContext';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
@@ -8,15 +7,16 @@ import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { NEXT_PARAM, safeNextPath } from '../auth/loginRedirect';
-import type { AgeCategory } from '../auth/types';
 import { useViewer } from '../auth/sessionContext';
 import { levelLabel } from '../events/format';
 import {
+  AGE_GROUPS,
   ageGroupLabel,
   EMPTY_PROFILE_FORM,
   EXPERIENCE_LEVELS,
+  GENDERS,
+  genderLabel,
   PROFILE_LIMITS,
-  selectableAgeGroups,
   validateProfileForm,
   type ProfileField,
   type ProfileFieldErrors,
@@ -30,16 +30,15 @@ export interface ProfileLocationState {
   profileSaved?: boolean;
 }
 
-const FIELD_ORDER: ProfileField[] = ['nickname', 'experienceLevel', 'ageGroup', 'bio'];
+const FIELD_ORDER: ProfileField[] = ['nickname', 'experienceLevel', 'ageGroup', 'gender', 'bio'];
 
 function fieldId(field: ProfileField) {
   return `profile-${field}`;
 }
 
 /**
- * SCR-014 プロフィール登録・編集（PROF-01）。ニックネーム・経験レベル・年代・自己紹介。
- * M-01 のうち年代だけを加える。画像・性別・活動地域は作らない。
- * 18歳未満の人は、ここで年齢の区分を「18歳以上」に変えられる（docs/11の7-1。戻せない）。
+ * SCR-014 プロフィール登録・編集（PROF-01）。ニックネーム・経験レベル・年代・性別・自己紹介。
+ * M-01 のうち年代と性別を加える（性別は2026-11-27の決定）。画像・活動地域は作らない。
  * 保存した後は、戻り先（next）があればそこへ、なければ登録はホーム、編集はプロフィールへ戻る（追加-10）。
  */
 export function ProfileEditPage() {
@@ -57,7 +56,7 @@ export function ProfileEditPage() {
     const state: ProfileLocationState = { profileSaved: true };
     return <Navigate replace to={savedTo} state={state} />;
   }
-  // ログイン状態の表示が変わると読み込み直す。年齢の区分を変えたときに入力中の内容を消さないよう、
+  // ログイン状態の表示が変わると読み込み直す。入力中の内容を消さないよう、
   // 読み込み直している間も、前に読み込んだ内容でフォームを出し続ける
   if (result.status === 'ready' && result.value !== lastReady) setLastReady(result.value);
   const current = result.status === 'ready' ? result.value : lastReady;
@@ -76,7 +75,6 @@ export function ProfileEditPage() {
       // 別の人のプロフィールに変わった場合は、入力を初めからにする
       key={current?.userId ?? 'new'}
       initial={current}
-      ageCategory={viewer.ageCategory}
       isFirstTime={isFirstTime}
       laterPath={destination}
       onSaved={() => {
@@ -112,19 +110,19 @@ function toFormValues(profile: MyProfile | null): ProfileFormValues {
     experienceLevel: profile.experienceLevel,
     bio: profile.bio ?? '',
     ageGroup: profile.ageGroup,
+    gender: profile.gender,
   };
 }
 
 interface ProfileFormProps {
   initial: MyProfile | null;
-  ageCategory: AgeCategory;
   isFirstTime: boolean;
   /** 「あとで入力する」「やめる」で戻る先 */
   laterPath: string;
   onSaved: () => void;
 }
 
-function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: ProfileFormProps) {
+function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormProps) {
   const title = isFirstTime ? 'プロフィールを登録' : 'プロフィールを編集';
   useDocumentTitle(title);
   const repository = useProfileRepository();
@@ -133,12 +131,11 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
   const [validated, setValidated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const toast = useToast();
 
   const update = (next: ProfileFormValues) => {
     setValues(next);
     if (validated) {
-      const checked = validateProfileForm(next, ageCategory);
+      const checked = validateProfileForm(next);
       setErrors(checked.ok ? {} : checked.errors);
     }
   };
@@ -147,7 +144,7 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
     event.preventDefault();
     if (submitting) return;
     setSubmitError(null);
-    const checked = validateProfileForm(values, ageCategory);
+    const checked = validateProfileForm(values);
     setValidated(true);
     if (!checked.ok) {
       setErrors(checked.errors);
@@ -281,12 +278,7 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
         <FormField
           id={fieldId('ageGroup')}
           label="年代"
-          hint={
-            <span className="flex flex-wrap items-center gap-x-2">
-              <Badge>本人と申請先の主催者だけ</Badge>
-              {ageCategory === 'minor' && <span>18歳未満の場合は「10代」だけを選べます。</span>}
-            </span>
-          }
+          hint={<ScopeHint />}
           error={errors.ageGroup}
         >
           {(control) => (
@@ -302,7 +294,7 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
               className={INPUT_CLASS}
             >
               <option value="">選ばない</option>
-              {selectableAgeGroups(ageCategory).map((group) => (
+              {AGE_GROUPS.map((group) => (
                 <option key={group} value={group}>
                   {ageGroupLabel(group)}
                 </option>
@@ -310,6 +302,35 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
             </select>
           )}
         </FormField>
+
+        <fieldset aria-describedby="profile-gender-hint" className="flex flex-col gap-1">
+          <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
+            性別
+            <RequiredMark />
+          </legend>
+          <p id="profile-gender-hint" className="text-muted">
+            <ScopeHint />
+          </p>
+          <div className="flex flex-wrap gap-x-4">
+            {GENDERS.map((gender, index) => (
+              <label key={gender} className="flex min-h-11 items-center gap-2">
+                <input
+                  id={index === 0 ? fieldId('gender') : undefined}
+                  type="radio"
+                  name="gender"
+                  value={gender}
+                  checked={values.gender === gender}
+                  onChange={() => {
+                    update({ ...values, gender });
+                  }}
+                  className="size-5"
+                />
+                {genderLabel(gender)}
+              </label>
+            ))}
+          </div>
+          {errors.gender && <p className="font-bold text-danger">{errors.gender}</p>}
+        </fieldset>
 
         <FormField
           id={fieldId('bio')}
@@ -343,102 +364,7 @@ function ProfileForm({ initial, ageCategory, isFirstTime, laterPath, onSaved }: 
           </Link>
         </div>
       </form>
-
-      {ageCategory === 'minor' && (
-        <ChangeToAdult
-          onChanged={() => {
-            toast('年齢の区分を「18歳以上」に変えました。');
-          }}
-        />
-      )}
     </div>
-  );
-}
-
-/** 18歳になった人が、年齢の区分を「18歳以上」に変える（docs/11の7-1）。戻せないため、確認を挟む。 */
-function ChangeToAdult({ onChanged }: { onChanged: () => void }) {
-  const repository = useProfileRepository();
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const change = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await repository.changeAgeCategoryToAdult();
-      // 変えると、ログイン状態の表示が変わり、この欄は消える
-      if (result.status === 'changed' || result.reason === 'alreadyAdult') onChanged();
-      else {
-        setError('ログインの状態が変わりました。ログインし直してください。');
-      }
-    } catch {
-      setError('変更できませんでした。通信の状態を確認して、もう一度お試しください。');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section
-      aria-labelledby="change-to-adult-heading"
-      className="mt-8 rounded-2xl border border-line bg-surface p-4"
-    >
-      <h2 id="change-to-adult-heading" className="mb-1 font-bold">
-        年齢の区分
-      </h2>
-      <p className="mb-3">
-        今は「18歳未満」です。18歳になったら、「18歳以上」に変えられます。年齢の区分は、ほかの利用者に公開されません。
-      </p>
-      {error && (
-        <p role="alert" className="mb-3 font-bold text-danger">
-          {error}
-        </p>
-      )}
-      {confirming ? (
-        <div
-          role="group"
-          aria-label="年齢の区分の変更の確認"
-          className="rounded-xl border border-danger p-3"
-        >
-          <p className="mb-2 font-bold">
-            「18歳以上」に変えると、「18歳未満」に戻すことはできません。変えますか？
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="small"
-              disabled={busy}
-              onClick={() => {
-                void change();
-              }}
-            >
-              {busy ? '変えています' : '18歳以上に変える'}
-            </Button>
-            <Button
-              variant="secondary"
-              size="small"
-              disabled={busy}
-              onClick={() => {
-                setConfirming(false);
-              }}
-            >
-              やめる
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          variant="secondary"
-          size="small"
-          onClick={() => {
-            setConfirming(true);
-          }}
-        >
-          「18歳以上」に変更する
-        </Button>
-      )}
-    </section>
   );
 }
 

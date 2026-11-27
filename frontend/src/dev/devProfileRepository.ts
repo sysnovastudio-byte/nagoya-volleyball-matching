@@ -18,13 +18,15 @@ export function toPublicProfile(user: DevUser): PublicProfile | null {
     nickname: user.profile.nickname,
     experienceLevel: user.profile.experienceLevel,
     bio: user.profile.bio,
+    ageGroup: user.profile.ageGroup,
+    gender: user.profile.gender,
   };
 }
 
 function toMyProfile(user: DevUser): MyProfile | null {
   if (!user.profile) return null;
-  const { nickname, experienceLevel, bio, ageGroup } = user.profile;
-  return { userId: user.id, nickname, experienceLevel, bio, ageGroup };
+  const { nickname, experienceLevel, bio, ageGroup, gender } = user.profile;
+  return { userId: user.id, nickname, experienceLevel, bio, ageGroup, gender };
 }
 
 interface DevProfileRepositoryOptions {
@@ -58,23 +60,12 @@ export function createDevProfileRepository({
       const user = findDevMember(db, session.getUserId());
       if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
       // 画面と同じ検証。本番では save_profile が確かめる
-      const checked = validateProfileForm({ ...input, bio: input.bio ?? '' }, user.ageCategory);
+      const checked = validateProfileForm({ ...input, bio: input.bio ?? '' });
       if (!checked.ok) return Promise.resolve({ status: 'rejected', reason: 'invalid' });
       user.profile = { ...checked.input };
       // ログイン状態の表示（ニックネーム・プロフィールの有無）を更新する
       session.notify();
       return Promise.resolve({ status: 'saved' });
-    },
-    changeAgeCategoryToAdult: () => {
-      const user = findDevMember(db, session.getUserId());
-      if (!user) return Promise.resolve({ status: 'rejected', reason: 'notLoggedIn' });
-      // 「18歳以上」から戻す操作は作らない（docs/11の7-1）
-      if (user.ageCategory === 'adult') {
-        return Promise.resolve({ status: 'rejected', reason: 'alreadyAdult' });
-      }
-      user.ageCategory = 'adult';
-      session.notify();
-      return Promise.resolve({ status: 'changed' });
     },
   };
 }

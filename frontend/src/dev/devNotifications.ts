@@ -151,7 +151,7 @@ const SEEDS: {
   // 利用者B（主催者）へ
   {
     eventId: 'dev-beginner-afternoon',
-    userId: 'dev-user-minor',
+    userId: 'dev-member-13',
     type: 'application_received',
     hoursAgo: 2,
     read: false,

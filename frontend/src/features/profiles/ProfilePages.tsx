@@ -4,7 +4,6 @@ import { useFlashToast } from '../../app/useFlashToast';
 import { NotFoundPage } from '../../app/NotFoundPage';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
-import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { OverflowMenu } from '../../components/ui/OverflowMenu';
@@ -12,12 +11,12 @@ import { BlockConfirm, BlockedNotice, useBlockState } from '../safety/BlockActio
 import { Avatar } from './Avatar';
 import { displayName, experienceLabel } from './format';
 import { useProfileRepository } from './repositoryContext';
-import { ageGroupLabel } from './profileRules';
-import type { AgeGroup, MyProfile, PublicProfile } from './types';
+import { ageGroupLabel, genderLabel } from './profileRules';
+import type { MyProfile, PublicProfile } from './types';
 
 /**
  * SCR-013 プロフィール（PROF-03）。ニックネーム・経験レベル・自己紹介と、画像の代わりの絵柄。
- * 年代は本人にだけ示す（主催者は申請者一覧で見る）。性別・活動地域（M-01）は加えない。
+ * 年代と性別も、ログインした人全員に示す（2026-11-27の決定）。活動地域（M-01）は加えない。
  * ほかの人のプロフィールでは、「…」のメニューから通報（SAFE-01）とブロック（SAFE-04）ができ、解除（CND-06）もここで行う。
  */
 export function MyProfilePage() {
@@ -30,7 +29,7 @@ export function MyProfilePage() {
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   if (!result.value) return <NoProfile />;
   return (
-    <ProfileView profile={toPublic(result.value)} ageGroup={result.value.ageGroup}>
+    <ProfileView profile={toPublic(result.value)}>
       <ButtonLink to="/profile/edit">プロフィールを編集</ButtonLink>
       <SettingsEntry />
     </ProfileView>
@@ -38,8 +37,8 @@ export function MyProfilePage() {
 }
 
 function toPublic(profile: MyProfile): PublicProfile {
-  const { userId, nickname, experienceLevel, bio } = profile;
-  return { userId, isWithdrawn: false, nickname, experienceLevel, bio };
+  const { userId, nickname, experienceLevel, bio, ageGroup, gender } = profile;
+  return { userId, isWithdrawn: false, nickname, experienceLevel, bio, ageGroup, gender };
 }
 
 /** ほかの人のプロフィール。申請者一覧などから移る。 */
@@ -167,8 +166,6 @@ function SettingsEntry() {
 
 interface ProfileViewProps {
   profile: PublicProfile;
-  /** 本人のプロフィールの場合だけ渡す。ほかの人の画面には出さない */
-  ageGroup?: AgeGroup | null;
   /** 本人の操作。ほかの人の場合は、ブロックの確認・解除 */
   children?: ReactNode;
   /** 名前の横の「…」のメニュー（ほかの人のプロフィールだけ） */
@@ -176,7 +173,7 @@ interface ProfileViewProps {
 }
 
 /** 画像（の代わりの絵柄）と名前、公開項目の順（docs/11の5-1）。 */
-function ProfileView({ profile, ageGroup, children, menu }: ProfileViewProps) {
+function ProfileView({ profile, children, menu }: ProfileViewProps) {
   const name = displayName(profile);
   useDocumentTitle(`${name}のプロフィール`);
   const experience = experienceLabel(profile);
@@ -195,32 +192,32 @@ function ProfileView({ profile, ageGroup, children, menu }: ProfileViewProps) {
             <dd className="font-bold">{experience}</dd>
           </div>
           <div>
+            <dt className="text-muted">年代</dt>
+            <dd className="font-bold">
+              {profile.ageGroup ? (
+                ageGroupLabel(profile.ageGroup)
+              ) : (
+                <span className="font-normal text-muted">選んでいません。</span>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted">性別</dt>
+            <dd className="font-bold">
+              {profile.gender ? (
+                genderLabel(profile.gender)
+              ) : (
+                <span className="font-normal text-muted">選んでいません。</span>
+              )}
+            </dd>
+          </div>
+          <div>
             <dt className="text-muted">自己紹介</dt>
             <dd className="break-words whitespace-pre-line">
               {profile.bio ?? <span className="text-muted">まだ書かれていません。</span>}
             </dd>
           </div>
         </dl>
-      )}
-      {ageGroup !== undefined && (
-        <section
-          aria-labelledby="limited-profile-heading"
-          className="mt-4 rounded-2xl border border-line bg-surface p-4"
-        >
-          <h2 id="limited-profile-heading" className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge>本人と申請先の主催者だけ</Badge>
-          </h2>
-          <dl>
-            <dt className="text-muted">年代</dt>
-            <dd className="font-bold">
-              {ageGroup ? (
-                ageGroupLabel(ageGroup)
-              ) : (
-                <span className="font-normal text-muted">選んでいません。</span>
-              )}
-            </dd>
-          </dl>
-        </section>
       )}
       {children && <div className="mt-5 flex flex-col gap-2">{children}</div>}
     </div>
