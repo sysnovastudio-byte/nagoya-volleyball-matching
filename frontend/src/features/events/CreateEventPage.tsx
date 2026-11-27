@@ -16,14 +16,16 @@ import {
   type EventFormValues,
 } from './eventForm';
 import {
+  EVENT_KINDS,
   EVENT_LIMITS,
+  isEventKind,
   isMunicipality,
   isNagoyaWard,
   MUNICIPALITIES,
   NAGOYA_WARDS,
   TARGET_LEVELS,
 } from './eventRules';
-import { levelLabel, municipalityLabel, wardLabel } from './format';
+import { kindLabel, levelLabel, municipalityLabel, wardLabel } from './format';
 import { useEventRepository } from './repositoryContext';
 import type { CreateEventRejection, TargetLevel } from './types';
 
@@ -36,6 +38,7 @@ const FIELD_ORDER: EventFormField[] = [
   'municipality',
   'ward',
   'targetLevels',
+  'kind',
   'capacity',
   'fee',
   'description',
@@ -282,6 +285,27 @@ function CreateEventForm() {
               update('targetLevels', levels);
             }}
           />
+
+          <FormField id="event-kind" label="種別" error={errors.kind}>
+            {(control) => (
+              <select
+                {...control}
+                value={values.kind}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  update('kind', isEventKind(value) ? value : '');
+                }}
+                className={`${INPUT_CLASS} max-w-48`}
+              >
+                <option value="">選ばない</option>
+                {EVENT_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kindLabel(kind)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
 
           <FormField id="event-capacity" label="募集人数" required error={errors.capacity}>
             {(control) => (

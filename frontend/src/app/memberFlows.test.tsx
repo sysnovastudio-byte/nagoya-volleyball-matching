@@ -157,6 +157,41 @@ describe('募集作成', () => {
     );
   });
 
+  it('種別は任意で、選ぶと詳細に示す', async () => {
+    const user = userEvent.setup();
+    renderApp('/events/new', { userId: 'dev-user-a' });
+    await screen.findByRole('heading', { level: 1, name: '募集を作る' });
+    await fillValidForm(user);
+
+    const kind = screen.getByLabelText(/種別/);
+    expect(kind).toHaveValue('');
+    expect(
+      within(kind)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['選ばない', '男子', '女子', '混合']);
+    await user.selectOptions(kind, '女子');
+    await user.click(screen.getByRole('button', { name: '公開する' }));
+
+    await screen.findByRole('heading', { level: 1, name: '日曜の練習会' });
+    expect(screen.getAllByRole('term').map((term) => term.textContent)).toContain('種別');
+    expect(screen.getAllByText('女子').length).toBeGreaterThan(0);
+  });
+
+  it('種別を選ばなかった募集の詳細には、種別の項目を出さない', async () => {
+    renderApp('/events/dev-easy-morning');
+
+    await screen.findByRole('heading', { level: 1, name: '日曜朝のゆるバレー' });
+    expect(screen.getAllByRole('term').map((term) => term.textContent)).not.toContain('種別');
+  });
+
+  it('一覧のカードに種別を示す', async () => {
+    renderApp('/');
+
+    const link = await screen.findByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' });
+    expect(link.closest('article')).toHaveTextContent('混合');
+  });
+
   it('誤りがあれば送らず、最初の誤りの項目へ移る', async () => {
     const user = userEvent.setup();
     const createEvent = vi.fn<EventRepository['createEvent']>();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   areaLabel,
+  kindLabel,
   formatDateTimeRange,
   formatFee,
   formatTimeRange,
@@ -41,5 +42,10 @@ describe('そのほかの表示', () => {
     expect(areaLabel({ municipality: 'nagoya', ward: 'tempaku' })).toBe('名古屋市天白区');
     expect(areaLabel({ municipality: 'kitanagoya', ward: null })).toBe('北名古屋市');
     expect(levelsLabel(['inexperienced', 'beginner'])).toBe('未経験者・初心者');
+    expect([kindLabel('men'), kindLabel('women'), kindLabel('mixed')]).toEqual([
+      '男子',
+      '女子',
+      '混合',
+    ]);
   });
 });

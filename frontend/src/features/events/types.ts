@@ -9,6 +9,9 @@ export type EventState = 'open' | 'full' | 'closed' | 'ongoing' | 'ended' | 'can
 
 export type TargetLevel = 'inexperienced' | 'beginner' | 'experienced';
 
+/** 募集の種別（docs/11の2-1、docs/06の4-19）。任意で、未選択は null。種別での絞り込みは作らない。 */
+export type EventKind = 'men' | 'women' | 'mixed';
+
 /**
  * 愛知県の市町村（docs/11の2-1、docs/06の4-19）。並びは全国地方公共団体コードの順。
  * 名古屋市は区まで選ぶ（NagoyaWard）。
@@ -104,6 +107,7 @@ export interface PublicEvent {
   endsAt: string;
   area: EventArea;
   targetLevels: TargetLevel[];
+  kind: EventKind | null;
   description: string | null;
   belongings: string | null;
   capacity: number;
@@ -165,6 +169,7 @@ export interface CreateEventInput {
   endsAt: string;
   area: EventArea;
   targetLevels: TargetLevel[];
+  kind: EventKind | null;
   description: string | null;
   belongings: string | null;
   capacity: number;

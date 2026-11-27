@@ -21,6 +21,7 @@ const VALID: EventFormValues = {
   municipality: 'nagoya',
   ward: 'nakamura',
   targetLevels: ['beginner'],
+  kind: '',
   capacity: '12',
   fee: '500',
   description: '',
@@ -52,6 +53,7 @@ describe('入力の検証', () => {
         endsAt: '2026-12-05T07:00:00.000Z',
         area: { municipality: 'nagoya', ward: 'nakamura' },
         targetLevels: ['beginner'],
+        kind: null,
         description: null,
         belongings: null,
         capacity: 12,
@@ -132,6 +134,12 @@ describe('入力の検証', () => {
     // 名古屋市以外では区を持たない。欄に区が残っていても送らない
     const outside = validateEventForm({ ...VALID, municipality: 'toyota' }, NOW, 'request-1');
     expect(outside.ok && outside.input.area).toEqual({ municipality: 'toyota', ward: null });
+  });
+
+  it('種別は任意。選んだ種別をそのまま送る', () => {
+    const result = validateEventForm({ ...VALID, kind: 'women' }, NOW, 'request-1');
+    expect(result.ok && result.input.kind).toBe('women');
+    expect(errorsOf({ kind: '' }).kind).toBeUndefined();
   });
 
   it('対象レベルは1つ以上', () => {

@@ -1,5 +1,5 @@
 import { textLength } from '../../lib/text';
-import type { CreateEventInput, Municipality, NagoyaWard, TargetLevel } from './types';
+import type { CreateEventInput, EventKind, Municipality, NagoyaWard, TargetLevel } from './types';
 
 /** 募集の入力の上限（docs/11の2-1・3-3・4-5）。数値はここだけで管理する。 */
 export const EVENT_LIMITS = {
@@ -122,6 +122,13 @@ export function checkArea(area: { municipality: unknown; ward: unknown }) {
 
 export const TARGET_LEVELS: readonly TargetLevel[] = ['inexperienced', 'beginner', 'experienced'];
 
+/** 募集の種別（docs/11の2-1）。選択肢の並び順でもある。 */
+export const EVENT_KINDS: readonly EventKind[] = ['men', 'women', 'mixed'];
+
+export function isEventKind(value: unknown): value is EventKind {
+  return (EVENT_KINDS as readonly unknown[]).includes(value);
+}
+
 export type EventField =
   | 'title'
   | 'startsAt'
@@ -129,6 +136,7 @@ export type EventField =
   | 'municipality'
   | 'ward'
   | 'targetLevels'
+  | 'kind'
   | 'capacity'
   | 'fee'
   | 'description'
@@ -219,6 +227,10 @@ export function checkEventInput(input: CreateEventInput, now: Date): EventFieldE
       input.targetLevels.every((level) => TARGET_LEVELS.includes(level))
       ? undefined
       : '1つ以上選んでください。',
+  );
+  set(
+    'kind',
+    input.kind === null || isEventKind(input.kind) ? undefined : '種別を選び直してください。',
   );
   set('capacity', checkCapacity(input.capacity));
   set('fee', checkFee(input.fee));

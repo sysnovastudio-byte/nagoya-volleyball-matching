@@ -17,6 +17,7 @@ const EVENT: EventDetail = {
   endsAt: '2026-12-05T07:00:00Z',
   area: { municipality: 'nagoya', ward: 'nakamura' },
   targetLevels: ['beginner'],
+  kind: 'mixed',
   description: '説明の文章',
   belongings: null,
   capacity: 12,
@@ -128,7 +129,9 @@ describe('募集詳細（未ログイン）', () => {
       '残り枠',
       '参加費',
       '対象レベル',
+      '種別',
     ]);
+    expect(screen.getByText('混合')).toBeInTheDocument();
   });
 
   it('住所は、承認された人だけに表示することを示す', async () => {

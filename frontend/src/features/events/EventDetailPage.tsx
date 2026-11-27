@@ -20,7 +20,7 @@ import { restrictedReason } from '../auth/RestrictedNotice';
 import { isMemberViewer, useViewer } from '../auth/sessionContext';
 import { CancelEventAction } from './CancelEventAction';
 import { EventStateBadge } from './EventStateBadge';
-import { areaLabel, formatDateTimeRange, formatFee, levelsLabel } from './format';
+import { areaLabel, formatDateTimeRange, formatFee, kindLabel, levelsLabel } from './format';
 import type { EventDetail as EventDetailData, EventState, PublicEvent } from './types';
 import { useEvent } from './useEvent';
 import { useEventLocation } from './useEventLocation';
@@ -200,6 +200,8 @@ function EventFacts({ event }: { event: PublicEvent }) {
       </Fact>
       <Fact term="参加費">{formatFee(event.fee)}</Fact>
       <Fact term="対象レベル">{levelsLabel(event.targetLevels)}</Fact>
+      {/* 種別は任意。選ばれていない募集では示さない */}
+      {event.kind && <Fact term="種別">{kindLabel(event.kind)}</Fact>}
     </dl>
   );
 }

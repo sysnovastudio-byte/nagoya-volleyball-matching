@@ -1,4 +1,11 @@
-import type { EventArea, EventState, Municipality, NagoyaWard, TargetLevel } from './types';
+import type {
+  EventArea,
+  EventKind,
+  EventState,
+  Municipality,
+  NagoyaWard,
+  TargetLevel,
+} from './types';
 
 const TIME_ZONE = 'Asia/Tokyo';
 
@@ -164,6 +171,16 @@ export function areaLabel(area: EventArea) {
   return area.ward === null
     ? municipalityLabel(area.municipality)
     : `${municipalityLabel(area.municipality)}${wardLabel(area.ward)}`;
+}
+
+const KIND_LABELS: Record<EventKind, string> = {
+  men: '男子',
+  women: '女子',
+  mixed: '混合',
+};
+
+export function kindLabel(kind: EventKind) {
+  return KIND_LABELS[kind];
 }
 
 export function levelLabel(level: TargetLevel) {

@@ -1,5 +1,12 @@
 import { checkCapacity, checkEventInput, checkFee, type EventField } from './eventRules';
-import type { CreateEventInput, EventArea, Municipality, NagoyaWard, TargetLevel } from './types';
+import type {
+  CreateEventInput,
+  EventArea,
+  EventKind,
+  Municipality,
+  NagoyaWard,
+  TargetLevel,
+} from './types';
 
 /** 募集作成の入力欄の値。入力の途中の値も持てるよう、すべて文字列で持つ。 */
 export interface EventFormValues {
@@ -13,6 +20,8 @@ export interface EventFormValues {
   municipality: Municipality | '';
   ward: NagoyaWard | '';
   targetLevels: TargetLevel[];
+  /** 種別。任意で、未選択は空 */
+  kind: EventKind | '';
   capacity: string;
   fee: string;
   description: string;
@@ -30,6 +39,7 @@ export const EMPTY_EVENT_FORM: EventFormValues = {
   municipality: '',
   ward: '',
   targetLevels: [],
+  kind: '',
   capacity: '',
   fee: '',
   description: '',
@@ -128,6 +138,7 @@ export function validateEventForm(
       ward: values.municipality === 'nagoya' ? values.ward : null,
     } as EventArea,
     targetLevels: values.targetLevels,
+    kind: values.kind === '' ? null : values.kind,
     description: optionalText(values.description),
     belongings: optionalText(values.belongings),
     capacity: capacity ?? Number.NaN,
