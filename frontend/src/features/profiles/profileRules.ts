@@ -2,7 +2,7 @@ import { textLength } from '../../lib/text';
 import type { AgeCategory } from '../auth/types';
 import type { AgeGroup, ExperienceLevel, ProfileInput } from './types';
 
-/** 上限（docs/11の3-3）。紛らわしいニックネームの拒否（DB-21、承認済み）は、まだ作っていない。 */
+/** 上限（docs/11の3-3）。 */
 export const PROFILE_LIMITS = {
   nicknameMax: 20,
   bioMax: 500,
@@ -42,6 +42,32 @@ export function selectableAgeGroups(ageCategory: AgeCategory): readonly AgeGroup
   return ageCategory === 'minor' ? ['teens'] : AGE_GROUPS;
 }
 
+/**
+ * 運営・管理者になりすませる語（DB-21、docs/11の3-3）。本番では save_profile も同じ一覧で拒否する。
+ * - 日本語の語：含むものを拒否する
+ * - 英字の語：名前全体が一致するものだけ拒否する（「badminton」が「admin」を含むため）
+ * 保存済みの名前は変えない。完全には防げないため、通報で補う。
+ */
+export const CONFUSING_NICKNAME_WORDS = {
+  contains: ['運営', '管理者', '事務局', '公式', '退会したユーザー'],
+  exact: ['admin', 'administrator', 'official', 'staff', 'support', 'moderator'],
+} as const;
+
+/** 比べるための形。全角・半角をそろえ（NFKC）、小文字にし、空白を除く（docs/06の11-1-3）。 */
+function normalizeNickname(nickname: string) {
+  return nickname.normalize('NFKC').toLowerCase().replace(/\s+/gu, '');
+}
+
+/** 運営・管理者などと紛らわしいニックネームか（DB-21）。 */
+export function isConfusingNickname(nickname: string) {
+  const normalized = normalizeNickname(nickname);
+  return (
+    CONFUSING_NICKNAME_WORDS.contains.some((word) =>
+      normalized.includes(normalizeNickname(word)),
+    ) || CONFUSING_NICKNAME_WORDS.exact.some((word) => normalized === word)
+  );
+}
+
 export interface ProfileFormValues {
   nickname: string;
   experienceLevel: ExperienceLevel | null;
@@ -64,6 +90,7 @@ export type ProfileFormResult =
 
 /**
  * ニックネームは前後の空白を除いて1〜20文字。空白だけは認めない（docs/06の4-2）。
+ * 運営・管理者などと紛らわしい語は使えない（DB-21）。
  * 年代は任意。18歳未満の人は「10代」か未選択だけ（DB-22）。
  */
 export function validateProfileForm(
@@ -77,6 +104,8 @@ export function validateProfileForm(
   if (nickname === '') errors.nickname = 'ニックネームを入力してください。';
   else if (textLength(nickname) > PROFILE_LIMITS.nicknameMax) {
     errors.nickname = `ニックネームは${PROFILE_LIMITS.nicknameMax}文字以内にしてください。`;
+  } else if (isConfusingNickname(nickname)) {
+    errors.nickname = '運営・管理者などと紛らわしいため、このニックネームは使えません。';
   }
   if (values.experienceLevel === null) errors.experienceLevel = '経験レベルを選んでください。';
   if (textLength(bio) > PROFILE_LIMITS.bioMax) {
