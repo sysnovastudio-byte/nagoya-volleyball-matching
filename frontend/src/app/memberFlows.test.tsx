@@ -355,6 +355,17 @@ describe('募集作成', () => {
     expect(publish.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('「公開する」「やめる」は下に固定せず、フォームの一番下に置く', async () => {
+    renderApp('/events/new', { userId: 'dev-user-a' });
+
+    const publish = await screen.findByRole('button', { name: '公開する' });
+    const privateSection = screen.getByRole('region', { name: '承認された人だけに見せる項目' });
+    expect(
+      privateSection.compareDocumentPosition(publish) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(publish.closest('.sticky')).toBeNull();
+  });
+
   it('公開する項目と、承認された人だけの項目を分けて示す', async () => {
     renderApp('/events/new', { userId: 'dev-user-a' });
 

@@ -456,8 +456,9 @@ function CreateEventForm() {
           </FormField>
         </FieldSection>
 
-        {/* スマートフォンでは下部の移動の上に固定し、重ねない */}
-        <div className="sticky bottom-(--member-nav-h) z-10 -mx-4 border-t border-line bg-surface px-4 py-3 lg:static lg:mx-0 lg:mb-8 lg:rounded-2xl lg:border">
+        {/* 下に固定せず、フォームの一番下に置く（2026-11-27 ユーザーの決定）。
+            やめる前の確認は、出したときに「入力を続ける」へ移り、画面に入る */}
+        <div className="mb-8">
           {submitError && (
             <p
               ref={submitErrorRef}
