@@ -20,6 +20,7 @@ import { AuthRepositoryContext } from '../features/auth/repositoryContext';
 import { ConversationRepositoryContext } from '../features/conversations/repositoryContext';
 import type { ConversationRepository } from '../features/conversations/types';
 import { EventRepositoryContext } from '../features/events/repositoryContext';
+import type { AuthRepository } from '../features/auth/types';
 import type { EventRepository } from '../features/events/types';
 import { NotificationRepositoryContext } from '../features/notifications/repositoryContext';
 import { ProfileRepositoryContext } from '../features/profiles/repositoryContext';
@@ -34,12 +35,14 @@ export function renderApp(
     mfaVerified = true,
     events,
     conversations,
+    auth,
   }: {
     userId?: string | null;
     /** 管理者（ダミー）の多要素認証 */
     mfaVerified?: boolean;
     events?: Partial<EventRepository>;
     conversations?: Partial<ConversationRepository>;
+    auth?: Partial<AuthRepository>;
   } = {},
 ) {
   const db = createDevDatabase(new Date());
@@ -49,9 +52,10 @@ export function renderApp(
     ...createDevConversationRepository({ db, session }),
     ...conversations,
   };
+  const authRepository = { ...createDevAuthRepository({ db, session }), ...auth };
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
   render(
-    <AuthRepositoryContext value={createDevAuthRepository({ db, session })}>
+    <AuthRepositoryContext value={authRepository}>
       <EventRepositoryContext value={eventRepository}>
         <ApplicationRepositoryContext value={createDevApplicationRepository({ db, session })}>
           <ProfileRepositoryContext value={createDevProfileRepository({ db, session })}>

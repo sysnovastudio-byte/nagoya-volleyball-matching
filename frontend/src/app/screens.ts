@@ -58,6 +58,13 @@ export const SCREENS: readonly Screen[] = [
   { path: '/signup/sent', name: 'メール認証', parent: { to: () => '/signup', name: '新規登録' } },
   { path: '/auth/confirm', name: 'メール認証', parent: HOME },
   {
+    path: '/password-reset',
+    name: 'パスワード再設定',
+    parent: { to: () => '/login', name: 'ログイン' },
+  },
+  // メールのリンクから開くため、前の画面がない
+  { path: '/password-reset/confirm', name: 'パスワード再設定', parent: HOME },
+  {
     path: '/terms',
     name: '利用規約・プライバシーポリシー',
     parent: { to: () => '/signup', name: '新規登録' },

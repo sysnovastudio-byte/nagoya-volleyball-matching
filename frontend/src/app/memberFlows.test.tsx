@@ -1171,12 +1171,14 @@ describe('ログイン（SCR-001）', () => {
     ).toBeInTheDocument();
   });
 
-  it('パスワード再設定は、準備中と示すだけ', async () => {
+  it('パスワード再設定（SCR-004）へ移れ、Bot対策は置き場所と未接続の表示だけ', async () => {
     renderApp('/login');
 
-    expect(
-      await screen.findByText('パスワードを忘れた場合の再設定は、準備中です。'),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'パスワードを忘れた場合' })).toHaveAttribute(
+      'href',
+      '/password-reset',
+    );
+    expect(screen.getByRole('group', { name: 'Bot対策の確認' })).toHaveTextContent('未接続');
     // 上部の帯とログイン画面の両方にある
     for (const link of screen.getAllByRole('link', { name: '新規登録' })) {
       expect(link).toHaveAttribute('href', '/signup');

@@ -40,9 +40,25 @@ export interface SignUpInput {
 export type SignUpResult =
   { status: 'confirmationSent' } | { status: 'rejected'; reason: 'invalid' | 'outdatedAgreement' };
 
-/** メール認証の結果（AUTH-02）。リンクは1時間有効（docs/11のQ-49）。 */
-export type VerifyEmailResult =
+/** メールのリンクを確かめた結果。リンクは1時間有効（docs/11のQ-49）。 */
+export type EmailLinkResult =
   { status: 'verified' } | { status: 'rejected'; reason: 'expired' | 'invalid' };
+
+/** メール認証の結果（AUTH-02）。 */
+export type VerifyEmailResult = EmailLinkResult;
+
+/**
+ * メールを送る申し込みの結果（認証メールの再送・パスワード再設定）。
+ * 登録の有無・認証の有無を見分けられないよう、受け付けたら同じ結果を返す（docs/07の3章）。
+ * 本番で Supabase Auth が回数の制限（同じ利用者に60秒の間隔、docs/05の3-3）で断った場合も、
+ * 登録済みの人だけが断られるため、同じ結果にする。間隔は画面が守る。
+ */
+export type EmailRequestResult =
+  { status: 'sent' } | { status: 'rejected'; reason: 'invalid' | 'notLoggedIn' };
+
+/** 新しいパスワードの設定（CND-01）の結果。expired：再設定のリンクを開いた状態でない・期限が切れた。 */
+export type UpdatePasswordResult =
+  { status: 'updated' } | { status: 'rejected'; reason: 'invalid' | 'expired' };
 
 /**
  * ログイン状態の窓口。将来は Supabase Auth に置き換える。
@@ -58,5 +74,21 @@ export interface AuthRepository {
   signUp(input: SignUpInput): Promise<SignUpResult>;
   /** 認証メールのリンクを確かめる。認証できたら、ログインした状態にする。 */
   verifyEmail(token: string): Promise<VerifyEmailResult>;
+  /** 認証メールを再送する（AUTH-05）。認証待ちでないアドレスでも、同じ結果を返す。 */
+  resendVerification(input: { email: string }): Promise<EmailRequestResult>;
+  /** 未ログインで、パスワード再設定のメールを申し込む（CND-01）。未登録のアドレスでも、同じ結果を返す。 */
+  requestPasswordReset(input: { email: string }): Promise<EmailRequestResult>;
+  /**
+   * ログイン中に、パスワードの変更を申し込む（Q-50）。再設定と同じメールを、ログイン中の人の
+   * 登録しているアドレスへ送る。宛先は窓口がログイン状態から決め、画面から受け取らない。
+   */
+  requestPasswordChange(): Promise<EmailRequestResult>;
+  /**
+   * 再設定のメールのリンクを確かめる。確かめられたら、そのアカウントでログインした状態にする
+   * （本番は Supabase Auth の再設定用のセッション）。
+   */
+  verifyPasswordReset(token: string): Promise<EmailLinkResult>;
+  /** リンクを確かめた後に、新しいパスワードを設定する。 */
+  updatePassword(input: { password: string }): Promise<UpdatePasswordResult>;
   signOut(): Promise<void>;
 }

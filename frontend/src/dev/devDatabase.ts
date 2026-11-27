@@ -41,6 +41,10 @@ export interface DevDatabase {
   agreements: { userId: string; document: AgreementDocument; version: string; agreedAt: Date }[];
   /** 新規登録して、メール認証を待っている利用者のID。新しいものが後ろ */
   pendingVerifications: string[];
+  /** パスワード再設定のメールを申し込んだ利用者のID。新しいものが後ろ。メールは送らない */
+  pendingPasswordResets: string[];
+  /** 再設定のリンクを開いて、新しいパスワードを設定できる利用者のID（本番は再設定用のセッション） */
+  passwordRecoveryUserId: string | null;
   /** 会話（docs/06の4-7）とメッセージ（4-8） */
   conversations: DevConversationRecord[];
   messages: DevMessageRecord[];
@@ -74,6 +78,8 @@ export function createDevDatabase(now: Date): DevDatabase {
     eventCreations: [],
     agreements: [],
     pendingVerifications: [],
+    pendingPasswordResets: [],
+    passwordRecoveryUserId: null,
     conversations,
     messages,
     notifications: createDevNotifications({ users, events, applications }, now),

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS } from '../../components/ui/FormField';
-import { AuthLayout, DevNotice, FormError } from './AuthLayout';
+import { AuthLayout, BotCheckSlot, DevNotice, FormError } from './AuthLayout';
 import { checkSignInForm, type SignInFieldErrors, type SignInFormValues } from './authRules';
 import { afterSignInPath, NEXT_PARAM, safeNextPath } from './loginRedirect';
 import { AuthNotConnectedError } from './repository';
@@ -15,7 +15,7 @@ const REJECTED_MESSAGE =
 
 /**
  * SCR-001 ログイン（AUTH-03）。ログインしたら元の画面に戻る（docs/11の追加-10）。
- * 必須プロフィールが未登録なら、先に SCR-014 へ移る（Q-40）。Bot対策（SAFE-10）は作らない。
+ * 必須プロフィールが未登録なら、先に SCR-014 へ移る（Q-40）。Bot対策（SAFE-10）は、置き場所と「未接続」の表示だけ。
  */
 export function LoginPage() {
   const [searchParams] = useSearchParams();
@@ -112,6 +112,7 @@ function LoginForm() {
             />
           )}
         </FormField>
+        <BotCheckSlot />
         <Button type="submit" disabled={submitting}>
           {submitting ? 'ログインしています' : 'ログイン'}
         </Button>
@@ -124,8 +125,12 @@ function LoginForm() {
             新規登録
           </Link>
         </p>
-        {/* パスワード再設定（CND-01）は、まだ作らない */}
-        <p className="text-muted">パスワードを忘れた場合の再設定は、準備中です。</p>
+        {/* パスワード再設定（CND-01、SCR-004） */}
+        <p>
+          <Link to="/password-reset" className="font-bold text-main-strong underline">
+            パスワードを忘れた場合
+          </Link>
+        </p>
       </div>
     </AuthLayout>
   );

@@ -7,6 +7,10 @@ import { ApplicantsPage } from '../features/applications/ApplicantsPage';
 import { AgreementsPage } from '../features/auth/AgreementsPage';
 import { ConfirmEmailPage, VerificationSentPage } from '../features/auth/EmailVerificationPages';
 import { LoginPage } from '../features/auth/LoginPage';
+import {
+  PasswordResetConfirmPage,
+  PasswordResetRequestPage,
+} from '../features/auth/PasswordResetPages';
 import { RequireLogin } from '../features/auth/RequireLogin';
 import { RequireProfile } from '../features/auth/RequireProfile';
 import { SessionProvider } from '../features/auth/SessionProvider';
@@ -44,6 +48,9 @@ export const appRoutes = createRoutesFromElements(
     <Route path="signup" element={<SignUpPage />} />
     <Route path="signup/sent" element={<VerificationSentPage />} />
     <Route path="auth/confirm" element={<ConfirmEmailPage />} />
+    {/* パスワード再設定（SCR-004）。ログイン中はパスワードの変更として使う（Q-50） */}
+    <Route path="password-reset" element={<PasswordResetRequestPage />} />
+    <Route path="password-reset/confirm" element={<PasswordResetConfirmPage />} />
     <Route path="terms" element={<AgreementsPage />} />
 
     {/* 要ログインの画面。仮の画面は、作るときに置き換える */}

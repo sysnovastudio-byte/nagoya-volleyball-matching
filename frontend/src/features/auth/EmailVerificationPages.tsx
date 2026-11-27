@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router';
+import { useCooldown } from '../../app/useCooldown';
 import { Button, ButtonLink } from '../../components/ui/Button';
-import { AuthLayout, DevNotice } from './AuthLayout';
+import { FormField, INPUT_CLASS } from '../../components/ui/FormField';
+import { AuthLayout, DevEmailLinks, FormError } from './AuthLayout';
+import { emailError } from './authRules';
 import { profileEditPath } from './loginRedirect';
 import { AuthNotConnectedError } from './repository';
 import { useAuthRepository } from './repositoryContext';
@@ -10,9 +13,31 @@ import type { VerifyEmailResult } from './types';
 /** 認証メールのリンクの有効期間（docs/11のQ-49）。 */
 const LINK_VALID_HOURS = 1;
 
+/** 認証メールの再送の間隔（docs/11の3-4、docs/05の3-3）。 */
+export const RESEND_INTERVAL_SECONDS = 60;
+
+/** 開発用のメールのリンク。src/dev/devAuthRepository.ts の DEV_VERIFY_TOKENS と同じ値 */
+const DEV_VERIFY_LINKS = [
+  { token: 'dev-verify-success', label: '認証に成功するリンク' },
+  { token: 'dev-verify-expired', label: '期限切れのリンク' },
+  { token: 'dev-verify-invalid', label: '不正なリンク' },
+].map(({ token, label }) => ({
+  to: `/auth/confirm?${new URLSearchParams({ token }).toString()}`,
+  label,
+}));
+
+function DevVerifyLinks() {
+  return (
+    <DevEmailLinks
+      description="メールは送っていません。次のリンクで、認証の結果の表示を確かめられます。"
+      links={DEV_VERIFY_LINKS}
+    />
+  );
+}
+
 /**
- * SCR-003 メール認証：認証メールの案内（AUTH-02）。
- * 認証メールの再送（AUTH-05）は、サイクル1では作らない。
+ * SCR-003 メール認証：認証メールの案内（AUTH-02）と再送（AUTH-05）。
+ * 登録の直後に送っているため、再送は60秒たってからできる。
  */
 export function VerificationSentPage() {
   return (
@@ -22,40 +47,127 @@ export function VerificationSentPage() {
           入力したメールアドレスに、認証メールを送りました。メールのリンクを開くと、登録が完了します。
         </p>
         <p>リンクの有効期限は、送ってから{LINK_VALID_HOURS}時間です。</p>
-        <p className="text-muted">
-          届かない場合は、迷惑メールのフォルダも確かめてください。認証メールの再送は、準備中です。
-        </p>
+        <p className="text-muted">届かない場合は、迷惑メールのフォルダも確かめてください。</p>
       </div>
+      <div className="mt-6">{import.meta.env.DEV && <DevVerifyLinks />}</div>
+      <ResendVerificationForm initiallyWaiting />
       <div className="mt-6">
-        {import.meta.env.DEV && (
-          <DevNotice>
-            <p className="mb-2">
-              メールは送っていません。次のリンクで、認証の結果の表示を確かめられます。
-            </p>
-            <ul className="flex flex-col">
-              {[
-                // src/dev/devAuthRepository.ts の DEV_VERIFY_TOKENS と同じ値
-                { token: 'dev-verify-success', label: '認証に成功するリンク' },
-                { token: 'dev-verify-expired', label: '期限切れのリンク' },
-                { token: 'dev-verify-invalid', label: '不正なリンク' },
-              ].map((link) => (
-                <li key={link.token}>
-                  <Link
-                    to={`/auth/confirm?${new URLSearchParams({ token: link.token }).toString()}`}
-                    className="inline-flex min-h-11 items-center font-bold underline"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </DevNotice>
-        )}
+        <ButtonLink to="/" variant="secondary">
+          募集一覧へ
+        </ButtonLink>
       </div>
-      <ButtonLink to="/" variant="secondary">
-        募集一覧へ
-      </ButtonLink>
     </AuthLayout>
+  );
+}
+
+/**
+ * 認証メールの再送（AUTH-05）。メールアドレスは画面に残していないため、入力してもらう。
+ * 認証待ちでないアドレスでも同じ文を示し、登録の有無を見分けられないようにする（docs/07の3章）。
+ */
+function ResendVerificationForm({
+  initiallyWaiting = false,
+  showDevLinks = false,
+}: {
+  /** 直前にメールを送った画面では、開いた時点から60秒待つ */
+  initiallyWaiting?: boolean;
+  /** 再送した後に、開発用のメールのリンクを示す（まだ示していない画面だけ） */
+  showDevLinks?: boolean;
+}) {
+  const repository = useAuthRepository();
+  const cooldown = useCooldown(RESEND_INTERVAL_SECONDS, initiallyWaiting);
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | undefined>();
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (status === 'sending' || cooldown.remaining > 0) return;
+    setSubmitError(null);
+    const found = emailError(email);
+    setError(found);
+    if (found) {
+      document.getElementById('resend-email')?.focus();
+      return;
+    }
+    setStatus('sending');
+    try {
+      const result = await repository.resendVerification({ email: email.trim() });
+      if (result.status === 'sent') {
+        cooldown.start();
+        setStatus('sent');
+        return;
+      }
+      setError('メールアドレスの形式で入力してください。');
+      setStatus('idle');
+    } catch (caught) {
+      setSubmitError(
+        caught instanceof AuthNotConnectedError
+          ? '今は再送できません。認証の仕組みに接続していません。'
+          : '再送できませんでした。通信の状態を確認して、もう一度お試しください。',
+      );
+      setStatus('idle');
+    }
+  };
+
+  return (
+    <section aria-labelledby="resend-heading" className="mt-6 border-t border-line pt-5">
+      <h2 id="resend-heading" className="mb-2 text-lg font-bold">
+        認証メールの再送
+      </h2>
+      <p className="mb-4 text-muted">
+        登録したメールアドレスを入力してください。再送は、{RESEND_INTERVAL_SECONDS}
+        秒以上あけてできます。
+      </p>
+      <form
+        noValidate
+        aria-label="認証メールの再送"
+        onSubmit={(event) => {
+          void onSubmit(event);
+        }}
+        className="flex flex-col gap-4"
+      >
+        <FormError message={submitError} />
+        {status === 'sent' && (
+          <p role="status" className="rounded-xl border border-line px-4 py-3">
+            入力したメールアドレスが認証待ちであれば、認証メールを再送しました。リンクの有効期限は、送ってから
+            {LINK_VALID_HOURS}時間です。
+          </p>
+        )}
+        <FormField id="resend-email" label="メールアドレス" required error={error}>
+          {(control) => (
+            <input
+              {...control}
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (error) setError(emailError(event.target.value));
+              }}
+              className={INPUT_CLASS}
+            />
+          )}
+        </FormField>
+        <Button
+          type="submit"
+          variant="secondary"
+          disabled={status === 'sending' || cooldown.remaining > 0}
+        >
+          {status === 'sending'
+            ? '再送しています'
+            : cooldown.remaining > 0
+              ? `あと${cooldown.remaining}秒で再送できます`
+              : '認証メールを再送する'}
+        </Button>
+      </form>
+      {import.meta.env.DEV && showDevLinks && status === 'sent' && (
+        <div className="mt-4">
+          <DevVerifyLinks />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -65,7 +177,7 @@ type ConfirmState =
   | { status: 'error'; notConnected: boolean };
 
 /**
- * SCR-003 メール認証：認証の結果・期限切れ・不正なリンク（AUTH-02）。
+ * SCR-003 メール認証：認証の結果・期限切れ・不正なリンク（AUTH-02）。期限切れでは再送できる（AUTH-05）。
  * 認証できたらログインした状態になり、必須プロフィールの入力へ進む（docs/11のQ-40）。
  */
 export function ConfirmEmailPage() {
@@ -151,7 +263,10 @@ export function ConfirmEmailPage() {
       <AuthLayout title="リンクの有効期限が切れています">
         <div role="alert" className="flex flex-col gap-4">
           <p>認証メールのリンクは、送ってから{LINK_VALID_HOURS}時間で使えなくなります。</p>
-          <p className="text-muted">認証メールの再送は、準備中です。</p>
+          <p>認証メールを再送して、新しいリンクを開いてください。</p>
+        </div>
+        <ResendVerificationForm showDevLinks />
+        <div className="mt-6">
           <ButtonLink to="/" variant="secondary">
             募集一覧へ
           </ButtonLink>
