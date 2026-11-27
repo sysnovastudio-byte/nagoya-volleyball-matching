@@ -98,7 +98,7 @@ export type EventArea =
 
 /**
  * 未ログインにも公開する募集の情報（docs/03のFR-05、docs/11の2-1）。
- * くわしい住所・主催者のID・連絡先は、この型に加えない。住所は getLocation で別に取得する。
+ * 開催場所住所・主催者のID・連絡先は、この型に加えない。住所は getLocation で別に取得する。
  */
 export interface PublicEvent {
   id: string;
@@ -207,7 +207,7 @@ export interface EventRepository {
   listEvents(cursor?: string, filter?: EventFilter): Promise<EventListResult>;
   /** 見られる募集を返す。ない場合と、見られない場合は、どちらも null を返す。 */
   getEvent(id: string): Promise<EventDetail | null>;
-  /** くわしい住所。見てよい人（主催者と承認済みの参加者、docs/06の5-4）以外には null を返す。 */
+  /** 開催場所住所。見てよい人（主催者と承認済みの参加者、docs/06の5-4）以外には null を返す。 */
   getLocation(eventId: string): Promise<EventLocation | null>;
   /** 募集と住所を作成する。通信の失敗は例外、条件による拒否は結果で返す。 */
   createEvent(input: CreateEventInput): Promise<CreateEventResult>;

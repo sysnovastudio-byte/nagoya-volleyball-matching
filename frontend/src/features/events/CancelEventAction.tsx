@@ -69,7 +69,7 @@ export function CancelEventAction({ event, onChanged }: CancelEventActionProps) 
                 ? `承認待ち・承認済みの${notified}人に通知します。`
                 : '承認待ち・承認済みの人はいないため、通知は送りません。'}
             </li>
-            <li>参加者は、くわしい住所を見られなくなります。</li>
+            <li>参加者は、開催場所住所を見られなくなります。</li>
             <li>新しい申請と、承認・却下はできなくなります。</li>
           </ul>
           <div className="flex flex-wrap gap-2">

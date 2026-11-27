@@ -81,7 +81,7 @@ export function OwnApplicationActions({
         >
           <p className="mb-2 font-bold">
             {isCancel
-              ? 'キャンセルすると、くわしい住所を見られなくなり、主催者に知らせます。キャンセルしますか？'
+              ? 'キャンセルすると、開催場所住所を見られなくなり、主催者に知らせます。キャンセルしますか？'
               : '取り下げると、この申請は主催者に判断されません。取り下げますか？'}
           </p>
           <p className="mb-3 text-sub">

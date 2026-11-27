@@ -140,7 +140,7 @@ function EventDetail({ event, onChanged }: EventDetailProps) {
               <LocationSection eventId={event.id} isHost={event.isHost} />
             ) : (
               <section className="rounded-2xl border border-line bg-surface p-4">
-                <h2 className="text-lg font-bold">くわしい住所</h2>
+                <h2 className="text-lg font-bold">開催場所住所</h2>
                 <p className="text-muted">参加が承認された人だけに表示されます。</p>
               </section>
             )}
@@ -343,7 +343,7 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
     switch (mine.status) {
       case 'approved':
         return canSeeLocation(event)
-          ? '参加が承認されました。くわしい住所を表示しています。'
+          ? '参加が承認されました。開催場所住所を表示しています。'
           : '参加が承認されていました。';
       case 'pending':
         return started || event.state === 'cancelled'
@@ -493,7 +493,7 @@ function LocationSection({ eventId, isHost }: LocationSectionProps) {
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h2 id="event-location-heading" className="text-lg font-bold">
-          くわしい住所
+          開催場所住所
         </h2>
         <Badge tone="accent">承認された人だけ</Badge>
       </div>

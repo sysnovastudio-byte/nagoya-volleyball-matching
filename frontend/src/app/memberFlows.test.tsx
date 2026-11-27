@@ -35,7 +35,7 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByLabelText('初心者'));
   await user.type(screen.getByLabelText(/募集人数/), '8');
   await user.type(screen.getByLabelText(/参加費/), '300');
-  await user.type(screen.getByLabelText(/くわしい住所/), 'ダミー住所Q（架空）');
+  await user.type(screen.getByLabelText(/開催場所住所/), 'ダミー住所Q（架空）');
   await user.type(screen.getByLabelText(/施設名/), 'ダミー体育館Q');
 }
 
@@ -203,7 +203,7 @@ describe('募集作成', () => {
     const title = screen.getByLabelText(/タイトル/);
     expect(title).toHaveFocus();
     expect(title).toHaveAccessibleDescription(/入力してください。/);
-    expect(screen.getByLabelText(/くわしい住所/)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText(/開催場所住所/)).toHaveAttribute('aria-invalid', 'true');
     expect(createEvent).not.toHaveBeenCalled();
   });
 
@@ -246,7 +246,7 @@ describe('募集作成', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('公開できませんでした');
     expect(screen.getByLabelText(/タイトル/)).toHaveValue('日曜の練習会');
-    expect(screen.getByLabelText(/くわしい住所/)).toHaveValue('ダミー住所Q（架空）');
+    expect(screen.getByLabelText(/開催場所住所/)).toHaveValue('ダミー住所Q（架空）');
     expect(screen.getByRole('button', { name: '公開する' })).toBeEnabled();
   });
 
@@ -360,8 +360,8 @@ describe('募集作成', () => {
 
     const publicSection = await screen.findByRole('region', { name: '全員に公開する項目' });
     const privateSection = screen.getByRole('region', { name: '承認された人だけに見せる項目' });
-    expect(within(publicSection).queryByLabelText(/くわしい住所/)).not.toBeInTheDocument();
-    expect(within(privateSection).getByLabelText(/くわしい住所/)).toBeInTheDocument();
+    expect(within(publicSection).queryByLabelText(/開催場所住所/)).not.toBeInTheDocument();
+    expect(within(privateSection).getByLabelText(/開催場所住所/)).toBeInTheDocument();
   });
 
   it('プロフィール未登録の人は、入力画面へ移り、保存すると募集作成に戻る', async () => {
@@ -506,7 +506,7 @@ describe('募集詳細（申請者）', () => {
     expect(screen.queryByText('ダミー住所A（架空）')).not.toBeInTheDocument();
   });
 
-  it('承認済みなら、くわしい住所を示す', async () => {
+  it('承認済みなら、開催場所住所を示す', async () => {
     renderApp('/events/dev-family-morning', { userId: 'dev-user-a' });
 
     expect(await screen.findByText('ダミー住所E（架空）')).toBeInTheDocument();
@@ -703,7 +703,7 @@ describe('キャンセル・取り下げ・再申請（SCR-006）', () => {
     await user.click(await findFirstButton('参加をキャンセルする'));
     const [group] = screen.getAllByRole('group', { name: '参加のキャンセルの確認' });
     if (!group) throw new Error('確認がありません。');
-    expect(group).toHaveTextContent('くわしい住所を見られなくなり、主催者に知らせます');
+    expect(group).toHaveTextContent('開催場所住所を見られなくなり、主催者に知らせます');
     await user.click(within(group).getByRole('button', { name: '参加をキャンセルする' }));
 
     expect(await findToast()).toHaveTextContent('参加をキャンセルしました。');

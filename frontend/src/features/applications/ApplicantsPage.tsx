@@ -697,7 +697,7 @@ function RevokeActions({
     >
       <p className="mb-2 font-bold">
         取り消すと、{name}
-        さんはくわしい住所を見られなくなり、この募集にもう申請できません。{name}さんに通知します。
+        さんは開催場所住所を見られなくなり、この募集にもう申請できません。{name}さんに通知します。
       </p>
       <fieldset className="mb-3">
         <legend className="mb-1 font-bold">

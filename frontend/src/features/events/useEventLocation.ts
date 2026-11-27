@@ -5,7 +5,7 @@ import type { EventLocation } from './types';
 type LocationResult =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; location: EventLocation | null };
 
-/** くわしい住所。見てよいかは取得の窓口が決め、許可されない場合は null が返る。 */
+/** 開催場所住所。見てよいかは取得の窓口が決め、許可されない場合は null が返る。 */
 export function useEventLocation(eventId: string, enabled: boolean) {
   const repository = useEventRepository();
   const [attempt, setAttempt] = useState(0);

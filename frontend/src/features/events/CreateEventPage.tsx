@@ -399,7 +399,7 @@ function CreateEventForm() {
         >
           <FormField
             id="event-address"
-            label="くわしい住所"
+            label="開催場所住所"
             required
             error={errors.address}
             counter={{ value: values.address, max: EVENT_LIMITS.addressMax }}

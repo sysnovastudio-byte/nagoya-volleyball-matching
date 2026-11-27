@@ -14,7 +14,7 @@ interface EventCardProps {
   event: PublicEvent;
 }
 
-/** 募集一覧の一件（docs/10の11-3）。くわしい住所は扱わない。 */
+/** 募集一覧の一件（docs/10の11-3）。開催場所住所は扱わない。 */
 export function EventCard({ event }: EventCardProps) {
   const start = toDateParts(event.startsAt);
   const isOpen = event.state === 'open';
