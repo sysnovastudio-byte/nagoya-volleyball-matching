@@ -6,7 +6,7 @@ import type {
 } from '../features/conversations/types';
 import type { PublicProfile } from '../features/profiles/types';
 import type { DevConversationRecord, DevMessageRecord } from './devConversations';
-import { findDevUser, isBlockedBetween, type DevDatabase } from './devDatabase';
+import { findDevMember, findDevUser, isBlockedBetween, type DevDatabase } from './devDatabase';
 import { toPublicProfile } from './devProfileRepository';
 import { conversationStartLimitReached, messageLimitReached } from './devRateLimits';
 import type { DevSession } from './devSession';
@@ -32,7 +32,8 @@ export function createDevConversationRepository({
   session,
   now = () => new Date(),
 }: DevConversationRepositoryOptions): ConversationRepository {
-  const currentUser = () => findDevUser(db, session.getUserId());
+  // 一般の操作ができる人だけ。管理者・利用停止中の人は、未ログインと同じに扱う
+  const currentUser = () => findDevMember(db, session.getUserId());
   const isParty = (conversation: DevConversationRecord, userId: string) =>
     conversation.hostId === userId || conversation.inquirerId === userId;
 
@@ -145,7 +146,8 @@ export function createDevConversationRepository({
         return Promise.resolve({ status: 'rejected', reason: 'rateLimited' });
       }
       // どちらかが相手をブロックしていれば開始できない（docs/06の5-3）。理由は示さない
-      if (isBlockedBetween(db, user.id, record.hostId)) {
+      // 主催者が利用停止中の場合も、理由を分けずに断る
+      if (isBlockedBetween(db, user.id, record.hostId) || !findDevMember(db, record.hostId)) {
         return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
       }
 
@@ -182,8 +184,8 @@ export function createDevConversationRepository({
       const allowed =
         latest?.id === application.id &&
         (application.status === 'pending' || application.status === 'approved') &&
-        // 退会した人とは始めない
-        findDevUser(db, application.userId) !== undefined &&
+        // 退会した人・利用停止中の人とは始めない
+        findDevMember(db, application.userId) !== undefined &&
         // 送信できる期間内で、非表示でない（DB-10）
         !record.hidden &&
         current <= sendableUntil(record.endsAt);
@@ -274,9 +276,8 @@ export function createDevConversationRepository({
       }
       const partnerId =
         conversation.hostId === user.id ? conversation.inquirerId : conversation.hostId;
-      // 相手の事情（docs/06の5-7の6）。相手の退会と、双方向のブロック。どれで断っても理由は示さない（Q-20）。
-      // 【未実装】利用停止（SAFE-05）の判定は、サイクル4でここに加える
-      if (!findDevUser(db, partnerId) || isBlockedBetween(db, user.id, partnerId)) {
+      // 相手の事情（docs/06の5-7の6）。相手の退会・利用停止と、双方向のブロック。どれで断っても理由は示さない（Q-20）
+      if (!findDevMember(db, partnerId) || isBlockedBetween(db, user.id, partnerId)) {
         return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
       }
 

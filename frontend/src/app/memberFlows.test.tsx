@@ -1,87 +1,13 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
-import { createDevApplicationRepository } from '../dev/devApplicationRepository';
 import { createDevConversationRepository } from '../dev/devConversationRepository';
-import { createDevAuthRepository } from '../dev/devAuthRepository';
-import { createDevBlockRepository } from '../dev/devBlockRepository';
-import { createDevDatabase } from '../dev/devDatabase';
-import { createDevEventRepository } from '../dev/devEventRepository';
-import { createDevNotificationRepository } from '../dev/devNotificationRepository';
-import { createDevProfileRepository } from '../dev/devProfileRepository';
-import { createDevSession } from '../dev/devSession';
-import { ApplicationRepositoryContext } from '../features/applications/repositoryContext';
-import { AuthRepositoryContext } from '../features/auth/repositoryContext';
-import { ConversationRepositoryContext } from '../features/conversations/repositoryContext';
 import type { ConversationRepository } from '../features/conversations/types';
-import { EventRepositoryContext } from '../features/events/repositoryContext';
-import { NotificationRepositoryContext } from '../features/notifications/repositoryContext';
 import type { EventRepository } from '../features/events/types';
-import { ProfileRepositoryContext } from '../features/profiles/repositoryContext';
-import { BlockRepositoryContext } from '../features/safety/repositoryContext';
-import { appRoutes } from './App';
+import { chooseFromMenu, findToast, renderApp } from '../test/renderApp';
 
 const HOST = 'dev-user-b';
 const HOSTED_EVENT = 'dev-beginner-afternoon';
-
-/** 開発用の窓口を、テストごとの新しいデータとログイン状態でつなぐ。 */
-function renderApp(
-  path: string,
-  {
-    userId = null,
-    events,
-    conversations,
-  }: {
-    userId?: string | null;
-    events?: Partial<EventRepository>;
-    conversations?: Partial<ConversationRepository>;
-  } = {},
-) {
-  const db = createDevDatabase(new Date());
-  const session = createDevSession(userId);
-  const eventRepository = { ...createDevEventRepository({ db, session }), ...events };
-  const conversationRepository = {
-    ...createDevConversationRepository({ db, session }),
-    ...conversations,
-  };
-  render(
-    <AuthRepositoryContext value={createDevAuthRepository({ db, session })}>
-      <EventRepositoryContext value={eventRepository}>
-        <ApplicationRepositoryContext value={createDevApplicationRepository({ db, session })}>
-          <ProfileRepositoryContext value={createDevProfileRepository({ db, session })}>
-            <ConversationRepositoryContext value={conversationRepository}>
-              <NotificationRepositoryContext
-                value={createDevNotificationRepository({ db, session })}
-              >
-                <BlockRepositoryContext value={createDevBlockRepository({ db, session })}>
-                  <RouterProvider
-                    router={createMemoryRouter(appRoutes, { initialEntries: [path] })}
-                  />
-                </BlockRepositoryContext>
-              </NotificationRepositoryContext>
-            </ConversationRepositoryContext>
-          </ProfileRepositoryContext>
-        </ApplicationRepositoryContext>
-      </EventRepositoryContext>
-    </AuthRepositoryContext>,
-  );
-  const switchUser = (next: string | null) => {
-    act(() => {
-      session.setUserId(next);
-    });
-  };
-  return { db, session, switchUser };
-}
-
-/** 自動的に消える通知（aria-live の「お知らせ」）。中身が入るまで待つ。 */
-async function findToast() {
-  const region = screen.getByRole('status', { name: 'お知らせ' });
-  await waitFor(() => {
-    expect(region).not.toBeEmptyDOMElement();
-  });
-  return region;
-}
 
 /** 日本時間で、今日から数えた日を「YYYY-MM-DD」の形で返す。 */
 function jstDate(daysFromNow: number) {
@@ -1337,7 +1263,13 @@ describe('指摘の不具合', () => {
     const user = userEvent.setup();
     const { db, session } = renderApp('/signup');
     // 先に18歳未満の利用者が登録・認証を済ませている
-    db.users.push({ id: 'dev-registered-1', ageCategory: 'minor', profile: null });
+    db.users.push({
+      id: 'dev-registered-1',
+      role: 'user',
+      status: 'active',
+      ageCategory: 'minor',
+      profile: null,
+    });
 
     await user.type(await screen.findByLabelText(/メールアドレス/), 'test@example.com');
     await user.type(screen.getByLabelText(/パスワード/), 'abcdefghij');
@@ -2012,7 +1944,7 @@ describe('ブロックと解除（SAFE-04・CND-06）', () => {
     const user = userEvent.setup();
     const { db } = renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
 
-    await user.click(await screen.findByRole('button', { name: 'そらさんをブロックする' }));
+    await chooseFromMenu(user, 'そらさんへの操作', 'ブロックする');
     const confirm = screen.getByRole('group', { name: 'ブロックの確認' });
     expect(confirm).toHaveTextContent('相手に、ブロックしたことは知らされません。');
     expect(confirm).toHaveTextContent(
@@ -2024,18 +1956,24 @@ describe('ブロックと解除（SAFE-04・CND-06）', () => {
     expect(db.blocks).toMatchObject([{ blockerId: 'dev-user-a', blockedId: 'dev-user-b' }]);
     expect(screen.getByText('この相手をブロックしています。')).toBeInTheDocument();
 
+    // ブロック中は、メニューに通報だけを出す
+    await user.click(screen.getByRole('button', { name: 'そらさんへの操作' }));
+    expect(screen.queryByRole('button', { name: 'ブロックする' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '通報する' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
     await user.click(screen.getByRole('button', { name: 'ブロックを解除する' }));
-    expect(
-      await screen.findByRole('button', { name: 'そらさんをブロックする' }),
-    ).toBeInTheDocument();
+    expect(await findToast()).toHaveTextContent('ブロックを解除しました。');
     expect(db.blocks).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'そらさんへの操作' }));
+    expect(screen.getByRole('button', { name: 'ブロックする' })).toBeInTheDocument();
   });
 
   it('ブロックの確認は、やめると何もしない', async () => {
     const user = userEvent.setup();
     const { db } = renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
 
-    await user.click(await screen.findByRole('button', { name: 'そらさんをブロックする' }));
+    await chooseFromMenu(user, 'そらさんへの操作', 'ブロックする');
     await user.click(screen.getByRole('button', { name: 'やめる' }));
 
     expect(screen.queryByRole('group', { name: 'ブロックの確認' })).not.toBeInTheDocument();
@@ -2046,16 +1984,16 @@ describe('ブロックと解除（SAFE-04・CND-06）', () => {
     renderApp('/users/dev-user-a', { userId: 'dev-user-a' });
 
     expect(await screen.findByRole('heading', { level: 1, name: 'あおい' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /ブロック/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ブロック|への操作/ })).not.toBeInTheDocument();
   });
 
   it('ブロックされた側のプロフィールには、ブロックされたことを示さない', async () => {
     const { db } = renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
     db.blocks.push({ blockerId: 'dev-user-b', blockedId: 'dev-user-a', createdAt: new Date() });
+    const user = userEvent.setup();
 
-    expect(
-      await screen.findByRole('button', { name: 'そらさんをブロックする' }),
-    ).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'そらさんへの操作' }));
+    expect(screen.getByRole('button', { name: 'ブロックする' })).toBeInTheDocument();
     expect(screen.queryByText(/ブロックしています|ブロックされ/)).not.toBeInTheDocument();
   });
 
@@ -2063,7 +2001,7 @@ describe('ブロックと解除（SAFE-04・CND-06）', () => {
     const user = userEvent.setup();
     const { db } = renderApp('/conversations/dev-conv-question', { userId: 'dev-user-a' });
 
-    await user.click(await screen.findByRole('button', { name: 'そらさんをブロックする' }));
+    await chooseFromMenu(user, 'この会話の操作', 'ブロックする');
     await user.click(
       within(screen.getByRole('group', { name: 'ブロックの確認' })).getByRole('button', {
         name: 'ブロックする',

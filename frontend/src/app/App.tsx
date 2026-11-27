@@ -1,4 +1,7 @@
 import { createRoutesFromElements, Route } from 'react-router';
+import { RequireAdmin } from '../features/admin/AdminParts';
+import { ReportDetailPage, ReportListPage } from '../features/admin/ReportAdminPages';
+import { UserDetailPage, UserSearchPage } from '../features/admin/UserAdminPages';
 import { ActivityPage } from '../features/applications/ActivityPage';
 import { ApplicantsPage } from '../features/applications/ApplicantsPage';
 import { AgreementsPage } from '../features/auth/AgreementsPage';
@@ -12,6 +15,7 @@ import { CreateEventPage } from '../features/events/CreateEventPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventListPage } from '../features/events/EventListPage';
 import { ProfileEditPage } from '../features/profiles/ProfileEditPage';
+import { ReportPage } from '../features/reports/ReportPage';
 import { MyProfilePage, UserProfilePage } from '../features/profiles/ProfilePages';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { ConversationsPage } from '../features/conversations/ConversationsPage';
@@ -56,9 +60,18 @@ export const appRoutes = createRoutesFromElements(
       <Route path="profile" element={<MyProfilePage />} />
       <Route path="profile/edit" element={<ProfileEditPage />} />
       <Route path="users/:userId" element={<UserProfilePage />} />
+      {/* 通報（SCR-019）。管理者・利用停止中の人は RequireLogin が案内を示す */}
+      <Route path="report/:kind/:targetId" element={<ReportPage />} />
     </Route>
     {/* 要ログイン。ログアウトの後の移動先が違うため、画面の中で確認する */}
     <Route path="settings" element={<SettingsPage />} />
+    {/* 管理の画面（SCR-021・022）。入口は設定だけ（docs/11の4-1）。権限は窓口が確かめる */}
+    <Route path="admin" element={<RequireAdmin />}>
+      <Route path="reports" element={<ReportListPage />} />
+      <Route path="reports/:reportId" element={<ReportDetailPage />} />
+      <Route path="users" element={<UserSearchPage />} />
+      <Route path="users/:userId" element={<UserDetailPage />} />
+    </Route>
 
     <Route path="*" element={<NotFoundPage />} />
   </Route>,

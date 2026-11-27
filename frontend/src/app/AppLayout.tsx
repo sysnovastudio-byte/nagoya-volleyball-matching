@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router';
-import { useSession } from '../features/auth/sessionContext';
+import { isMemberViewer, useSession } from '../features/auth/sessionContext';
 import { UnreadNotificationsProvider } from '../features/notifications/UnreadNotificationsProvider';
 import { BackButton } from './BackButton';
 import { MemberNav } from './MemberNav';
@@ -16,8 +16,18 @@ const DevBar = import.meta.env.DEV ? lazy(() => import('../dev/DevBar')) : null;
 export function AppLayout() {
   const { pathname } = useLocation();
   const session = useSession();
-  const isMember = session.status === 'ready' && session.viewer !== null;
-  const mode = session.status === 'loading' ? 'loading' : isMember ? 'member' : 'guest';
+  const viewer = session.status === 'ready' ? session.viewer : null;
+  // 管理者・利用停止中の人には、一般の利用者の移動を出さない（docs/11の4-1・4-2）
+  const isMember = isMemberViewer(viewer);
+  const mode =
+    session.status === 'loading'
+      ? 'loading'
+      : isMember
+        ? 'member'
+        : viewer
+          ? 'restricted'
+          : 'guest';
+  const suspended = viewer?.role === 'user' && viewer.status === 'suspended';
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -46,6 +56,12 @@ export function AppLayout() {
             </Suspense>
           )}
           <PublicHeader mode={mode} />
+          {/* 本人への表示（docs/11の4-2）。案内の帯（docs/10の11-5） */}
+          {suspended && (
+            <p className="border-b border-danger bg-surface px-4 py-2 text-center font-bold text-danger">
+              利用停止中です。公開されている募集の閲覧と、ログアウトだけができます。
+            </p>
+          )}
           <main
             id="main"
             tabIndex={-1}

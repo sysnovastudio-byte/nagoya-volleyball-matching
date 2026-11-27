@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AGE_GROUPS,
   ageGroupLabel,
+  isConfusingNickname,
   selectableAgeGroups,
   validateProfileForm,
 } from './profileRules';
@@ -82,4 +83,38 @@ describe('プロフィールの入力', () => {
       errors: { bio: '自己紹介は500文字以内にしてください。' },
     });
   });
+});
+
+describe('紛らわしいニックネーム（DB-21）', () => {
+  const error = '運営・管理者などと紛らわしいため、このニックネームは使えません。';
+
+  it.each([
+    '運営',
+    '公式アカウント',
+    'バレー管理者',
+    'サークル管理人',
+    '事務局です',
+    '退会したユーザー',
+    '運 営',
+    '運　営',
+  ])('日本語の語を含む「%s」は使えない', (nickname) => {
+    expect(validateProfileForm({ ...VALID, nickname }, 'adult')).toMatchObject({
+      ok: false,
+      errors: { nickname: error },
+    });
+  });
+
+  it.each(['admin', 'Admin', 'ＡＤＭＩＮ', 'ad min', 'Official', 'STAFF', 'moderator', 'support'])(
+    '英字の語と一致する「%s」は使えない',
+    (nickname) => {
+      expect(isConfusingNickname(nickname)).toBe(true);
+    },
+  );
+
+  it.each(['badminton', 'admin123', 'staffing', 'ななみ', '運動好き', '管理栄養士'])(
+    '英字の語を含むだけ・関係のない「%s」は使える',
+    (nickname) => {
+      expect(isConfusingNickname(nickname)).toBe(false);
+    },
+  );
 });

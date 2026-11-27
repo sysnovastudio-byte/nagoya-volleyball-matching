@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { useToast } from '../../app/toastContext';
 import { StartConversationButton } from '../conversations/StartConversationButton';
 import { useFlashToast } from '../../app/useFlashToast';
@@ -16,7 +16,8 @@ import {
 import { useApplicationRepository } from '../applications/repositoryContext';
 import { MAX_ATTEMPTS, type ApplyRejection } from '../applications/types';
 import { loginPath } from '../auth/loginRedirect';
-import { useViewer } from '../auth/sessionContext';
+import { restrictedReason } from '../auth/RestrictedNotice';
+import { isMemberViewer, useViewer } from '../auth/sessionContext';
 import { CancelEventAction } from './CancelEventAction';
 import { EventStateBadge } from './EventStateBadge';
 import { areaLabel, formatDateTimeRange, formatFee, levelsLabel } from './format';
@@ -143,6 +144,7 @@ function EventDetail({ event, onChanged }: EventDetailProps) {
                 <p className="text-muted">参加が承認された人だけに表示されます。</p>
               </section>
             )}
+            <ReportEventLink event={event} />
           </div>
         </div>
       </div>
@@ -154,6 +156,25 @@ function EventDetail({ event, onChanged }: EventDetailProps) {
         </div>
       </div>
     </article>
+  );
+}
+
+/**
+ * 募集の通報（SAFE-02）への入口。ログイン中の、主催者以外の人だけ（docs/10の6-6）。
+ * 操作が通報だけのため、文字のリンクで置く。通報できるかは窓口（本番はDB）が決める。
+ */
+function ReportEventLink({ event }: { event: EventDetailData }) {
+  const viewer = useViewer();
+  if (!isMemberViewer(viewer) || event.isHost) return null;
+  return (
+    <p className="text-right">
+      <Link
+        to={`/report/event/${event.id}`}
+        className="inline-flex min-h-11 items-center text-sub underline"
+      >
+        この募集を通報する
+      </Link>
+    </p>
   );
 }
 
@@ -276,6 +297,9 @@ interface ApplyActionsProps extends EventActionsProps {
 function ApplyActions({ event, apply, label = '参加を申請する' }: ApplyActionsProps) {
   const viewer = useViewer();
   if (!viewer) return <GuestActions eventId={event.id} />;
+  // 管理者・利用停止中の人は申請できない（docs/11の4-1・4-2）。断るのは窓口（本番はDB）
+  if (!isMemberViewer(viewer))
+    return <p className="text-center text-sub">{restrictedReason(viewer)}</p>;
   if (!viewer.profile) {
     return (
       <div className="flex flex-col gap-2">

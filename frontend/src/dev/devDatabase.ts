@@ -12,6 +12,12 @@ import {
   type DevConversationRecord,
   type DevMessageRecord,
 } from './devConversations';
+import {
+  createDevModerationActions,
+  createDevReports,
+  type DevModerationActionRecord,
+  type DevReportRecord,
+} from './devModeration';
 import { createDevNotifications, type DevNotificationRecord } from './devNotifications';
 import { createDevUsers, type DevUser } from './devUsers';
 import { markDevModule } from './marker';
@@ -42,6 +48,10 @@ export interface DevDatabase {
   notifications: DevNotificationRecord[];
   /** ブロック（docs/06の4-9）。最初は空。帯で利用者を切り替えて、画面から作る */
   blocks: DevBlockRecord[];
+  /** 通報（docs/06の4-10）。状態ごとのダミーがある */
+  reports: DevReportRecord[];
+  /** 措置の記録（docs/06の4-12）。追加だけで、変えない */
+  moderationActions: DevModerationActionRecord[];
 }
 
 /** 【開発専用】保存されているブロックの形（docs/06の4-9）。 */
@@ -68,11 +78,23 @@ export function createDevDatabase(now: Date): DevDatabase {
     messages,
     notifications: createDevNotifications({ users, events, applications }, now),
     blocks: [],
+    reports: createDevReports(now),
+    moderationActions: createDevModerationActions(now),
   };
 }
 
 export function findDevUser(db: DevDatabase, userId: string | null) {
   return userId === null ? undefined : db.users.find((user) => user.id === userId);
+}
+
+/**
+ * 一般の操作ができる人（docs/06の6-3の require_member のうち、役割と状態）。
+ * 管理者と利用停止中の人は、未ログインと同じに扱う（docs/11の4-1・4-2）。
+ * 本番では、DB関数が users をロックしてから確かめる。
+ */
+export function findDevMember(db: DevDatabase, userId: string | null) {
+  const user = findDevUser(db, userId);
+  return user?.role === 'user' && user.status === 'active' ? user : undefined;
 }
 
 /**

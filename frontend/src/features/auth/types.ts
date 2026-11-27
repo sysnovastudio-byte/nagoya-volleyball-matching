@@ -6,6 +6,10 @@ export type AgeCategory = 'adult' | 'minor';
  * 権限の判定は、取得の窓口（将来はDB）が行う。画面の判定は表示のためだけのもの。
  */
 export interface Viewer {
+  /** 管理者は、一般の操作（申請・作成・送信など）をしない。管理の画面の入口は設定だけ（docs/11の4-1） */
+  role: 'user' | 'admin';
+  /** 利用停止中は、公開情報の閲覧・ログアウト・退会だけができる（docs/11の4-2） */
+  status: 'active' | 'suspended';
   ageCategory: AgeCategory;
   /** 必須プロフィールが未登録の場合は null（docs/06の4-2、docs/11の3-4） */
   profile: { nickname: string } | null;

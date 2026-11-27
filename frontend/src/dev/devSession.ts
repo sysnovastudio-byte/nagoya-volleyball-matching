@@ -12,10 +12,20 @@ export interface DevSession {
   subscribe: (listener: () => void) => () => void;
   /** 利用者は同じまま、プロフィールなどが変わったことを知らせる */
   notify: () => void;
+  /**
+   * 管理者（ダミー）の多要素認証が済んでいるか（本番では Supabase Auth の aal2）。帯で「済・未」を選ぶ。
+   * **本物の多要素認証ではない。**
+   */
+  getMfaVerified: () => boolean;
+  setMfaVerified: (verified: boolean) => void;
 }
 
-export function createDevSession(initialUserId: string | null = null): DevSession {
+export function createDevSession(
+  initialUserId: string | null = null,
+  { mfaVerified: initialMfa = true }: { mfaVerified?: boolean } = {},
+): DevSession {
   let userId = initialUserId;
+  let mfaVerified = initialMfa;
   const listeners = new Set<() => void>();
 
   const notify = () => {
@@ -30,6 +40,12 @@ export function createDevSession(initialUserId: string | null = null): DevSessio
       notify();
     },
     notify,
+    getMfaVerified: () => mfaVerified,
+    setMfaVerified: (next) => {
+      if (next === mfaVerified) return;
+      mfaVerified = next;
+      notify();
+    },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {

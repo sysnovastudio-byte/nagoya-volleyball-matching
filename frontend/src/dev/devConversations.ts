@@ -93,6 +93,31 @@ const CONVERSATIONS: [
       ['inquirer', '先日はありがとうございました。また参加したいです。'],
     ],
   ],
+  // 通報されたメッセージがある会話（管理者の通報管理で、控えを確かめる。dev-report-3）
+  [
+    'dev-conv-reported',
+    'dev-weekday-night',
+    'dev-host-minato',
+    'dev-member-3',
+    2,
+    [
+      ['inquirer', '経験者向けとのことですが、ブランクがあっても参加できますか？'],
+      ['host', '練習とは別に、こちらの会にも入りませんか。会費は月払いです。'],
+    ],
+  ],
+  // 利用停止中の人が送ったメッセージがある会話（dev-report-4。停止中の人とは送受信できない）
+  [
+    'dev-conv-suspended',
+    'dev-easy-morning',
+    'dev-host-haru',
+    'dev-user-suspended',
+    5,
+    [
+      ['inquirer', '日曜の練習に興味があります。'],
+      ['host', 'ありがとうございます。申請をお待ちしています。'],
+      ['inquirer', '練習の後、二人で会えませんか。個別に連絡したいです。'],
+    ],
+  ],
   // 非表示になった募集の会話（一覧では開催日時だけを示す）
   [
     'dev-conv-hidden',

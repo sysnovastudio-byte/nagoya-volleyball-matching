@@ -29,11 +29,7 @@ export function conversationStartLimitReached(db: DevDatabase, userId: string, n
   return reachedLimit(startedAt, RATE_LIMITS.conversationStart, now);
 }
 
-/**
- * 通報（1日10件）。**判定の場所だけを用意する。** サイクル4の通報（SAFE-01〜03）で、受け付ける前に呼ぶ。
- * 数えるのは reports の reporter_id・created_at（docs/06の14-2）。開発用のデータに通報の表がまだないため、
- * 通報した人の通報の日時を受け取る。
- */
+/** 通報（1日10件）。数えるのは reports の reporter_id・created_at（docs/06の14-2）。通報した人の通報の日時を受け取る。 */
 export function reportLimitReached(reportedAt: readonly Date[], now: Date) {
   return reachedLimit(reportedAt, RATE_LIMITS.report, now);
 }

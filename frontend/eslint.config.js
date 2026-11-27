@@ -42,8 +42,8 @@ export default defineConfig([
     },
   },
   {
-    // 開発専用のデータ自身とテストは、直接読み込んでよい
-    files: ['src/**/dev/**', 'src/**/*.test.{ts,tsx}'],
+    // 開発専用のデータ自身とテスト（テスト用の部品を含む）は、直接読み込んでよい
+    files: ['src/**/dev/**', 'src/**/*.test.{ts,tsx}', 'src/test/**'],
     rules: { 'no-restricted-imports': 'off' },
   },
   {
