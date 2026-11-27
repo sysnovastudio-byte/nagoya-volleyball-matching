@@ -815,6 +815,53 @@ describe('申請と募集', () => {
     expect(within(section).getByRole('heading', { name: '終わった募集' })).toBeInTheDocument();
   });
 
+  it('参加する側を、申請の状態で絞り込める', async () => {
+    const user = userEvent.setup();
+    renderApp('/activity', { userId: 'dev-user-a' });
+
+    const section = await screen.findByRole('region', { name: '参加する側' });
+    await within(section).findByRole('link', { name: '平日夜にしっかり動く会' });
+    const filters = within(section).getByRole('group', { name: '申請の状態で絞り込む' });
+    expect(within(filters).getByRole('button', { name: /すべて/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(within(filters).getByRole('button', { name: /承認待ち/ }));
+    expect(
+      within(section).getByRole('link', { name: '平日夜にしっかり動く会' }),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole('link', { name: '家族や友人と楽しむ午前バレー' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(filters).getByRole('button', { name: /承認済み/ }));
+    expect(
+      within(section).getByRole('link', { name: '家族や友人と楽しむ午前バレー' }),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByRole('link', { name: '開催中の会（一覧に出ない）' }),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole('link', { name: '平日夜にしっかり動く会' }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(section).queryByRole('link', { name: '終了した会（見られない）' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(filters).getByRole('button', { name: /終わったもの/ }));
+    expect(
+      within(section).getByRole('link', { name: '終了した会（見られない）' }),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole('heading', { name: 'これからの募集' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(filters).getByRole('button', { name: /そのほか/ }));
+    expect(within(section).getByRole('link', { name: 'スパイク練習会' })).toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: '日曜朝のゆるバレー' })).toBeInTheDocument();
+  });
+
   it('承認済みの参加を、この画面からキャンセルできる', async () => {
     const user = userEvent.setup();
     renderApp('/activity', { userId: 'dev-user-a' });
