@@ -409,6 +409,326 @@ describe('主催者からの会話の開始（MSG-06）', () => {
   });
 });
 
+const A = 'dev-user-a';
+const B = 'dev-user-b';
+const MINUTE_MS = 60 * 1000;
+
+/** blocker が blocked をブロックする（窓口を通さずに記録する）。 */
+function block(db: ReturnType<typeof setup>['db'], blockerId: string, blockedId: string) {
+  db.blocks.push({ blockerId, blockedId, createdAt: NOW });
+}
+
+function send(repository: ReturnType<typeof setup>['repository'], conversationId: string) {
+  return repository.send({ conversationId, body: 'こんにちは', clientRequestId: requestId() });
+}
+
+describe('ブロックの影響（MSG-04、docs/11の3-1）', () => {
+  it.each([
+    ['自分が相手を', A, B],
+    ['相手が自分を', B, A],
+  ])('%sブロックすると、どちらからも送信できない', async (_, blockerId, blockedId) => {
+    const { db, session, repository } = setup(A);
+    block(db, blockerId, blockedId);
+    const count = db.messages.length;
+
+    expect(await send(repository, 'dev-conv-question')).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+    session.setUserId(B);
+    expect(await send(repository, 'dev-conv-question')).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+    expect(db.messages).toHaveLength(count);
+  });
+
+  it('ブロックの後も、これまでの会話を開いて読める', async () => {
+    const { db, repository } = setup(A);
+    block(db, B, A);
+
+    expect(await repository.startConversation('dev-beginner-afternoon')).toEqual({
+      status: 'opened',
+      conversationId: 'dev-conv-question',
+    });
+    expect((await repository.getMessages('dev-conv-question'))?.messages).toHaveLength(3);
+    expect((await repository.listMine()).map((item) => item.id)).toContain('dev-conv-question');
+  });
+
+  it('どちらかがブロックしていると、新しい会話を始められない', async () => {
+    const { db, repository } = setup(A);
+    // 利用者Bの満員の募集。利用者Aとの会話はまだない
+    block(db, B, A);
+
+    expect(await repository.startConversation('dev-b-full')).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+    db.blocks.length = 0;
+    expect((await repository.startConversation('dev-b-full')).status).toBe('opened');
+  });
+
+  it('主催者からも、ブロックの間は申請者との会話を始められない', async () => {
+    const { db, repository } = setup(B);
+    const application = db.applications.find(
+      (item) => item.userId === 'dev-user-minor' && item.eventId === 'dev-beginner-afternoon',
+    );
+    if (!application) throw new Error('申請がありません。');
+    block(db, 'dev-user-minor', B);
+
+    expect(await repository.startConversationWithApplicant(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+    db.blocks.length = 0;
+    expect((await repository.startConversationWithApplicant(application.id)).status).toBe('opened');
+  });
+
+  it('解除すると、また送信できる', async () => {
+    const { db, repository } = setup(A);
+    block(db, A, B);
+    expect((await send(repository, 'dev-conv-question')).status).toBe('rejected');
+
+    db.blocks.length = 0;
+    expect((await send(repository, 'dev-conv-question')).status).toBe('sent');
+  });
+
+  it('ほかの人との会話には影響しない', async () => {
+    const { db, repository } = setup(A);
+    block(db, B, A);
+
+    expect((await send(repository, 'dev-conv-approved')).status).toBe('sent');
+  });
+});
+
+describe('送信回数の上限（MSG-05）', () => {
+  it('1分間に10通まで。11通目は断り、1分たてば送れる', async () => {
+    const { db, repository, setNow } = setup(A);
+    for (let i = 0; i < 10; i += 1) {
+      expect((await send(repository, 'dev-conv-approved')).status).toBe('sent');
+    }
+    const count = db.messages.length;
+
+    expect(await send(repository, 'dev-conv-question')).toEqual({
+      status: 'rejected',
+      reason: 'rateLimited',
+    });
+    expect(db.messages).toHaveLength(count);
+    setNow(new Date(NOW.getTime() + MINUTE_MS + 1));
+    expect((await send(repository, 'dev-conv-question')).status).toBe('sent');
+  });
+
+  it('1時間に60通まで', async () => {
+    const { repository, setNow } = setup(A);
+    // 1分に6通ずつ、10分で60通
+    for (let i = 0; i < 60; i += 1) {
+      setNow(new Date(NOW.getTime() + Math.floor(i / 6) * MINUTE_MS));
+      expect((await send(repository, 'dev-conv-approved')).status).toBe('sent');
+    }
+
+    setNow(new Date(NOW.getTime() + 30 * MINUTE_MS));
+    expect(await send(repository, 'dev-conv-approved')).toEqual({
+      status: 'rejected',
+      reason: 'rateLimited',
+    });
+    setNow(new Date(NOW.getTime() + HOUR_MS + 1));
+    expect((await send(repository, 'dev-conv-approved')).status).toBe('sent');
+  });
+
+  it('送信できなかったものは数えない', async () => {
+    const { repository } = setup(A);
+    for (let i = 0; i < 10; i += 1) {
+      await repository.send({
+        conversationId: 'dev-conv-approved',
+        body: '　',
+        clientRequestId: requestId(),
+      });
+    }
+
+    expect((await send(repository, 'dev-conv-approved')).status).toBe('sent');
+  });
+
+  it('上限に達していても、同じ送信の繰り返しは前の結果を返す', async () => {
+    const { db, repository } = setup(A);
+    const first = await repository.send({
+      conversationId: 'dev-conv-approved',
+      body: '1通目',
+      clientRequestId: 'same-request',
+    });
+    for (let i = 0; i < 9; i += 1) await send(repository, 'dev-conv-approved');
+    const count = db.messages.length;
+
+    expect(
+      await repository.send({
+        conversationId: 'dev-conv-approved',
+        body: '1通目',
+        clientRequestId: 'same-request',
+      }),
+    ).toEqual(first);
+    expect(db.messages).toHaveLength(count);
+  });
+
+  it('回数はブロックより先に判定する（上限の案内から、ブロックを推測させない）', async () => {
+    const { db, repository } = setup(A);
+    for (let i = 0; i < 10; i += 1) await send(repository, 'dev-conv-approved');
+    block(db, B, A);
+
+    expect(await send(repository, 'dev-conv-question')).toEqual({
+      status: 'rejected',
+      reason: 'rateLimited',
+    });
+  });
+});
+
+describe('新しい会話の回数の上限（SAFE-09）', () => {
+  /** 直近24時間に利用者が始めた会話を、ダミーの会話も含めて count 件にする。 */
+  const startedRecently = (db: ReturnType<typeof setup>['db'], userId: string, count: number) => {
+    const existing = db.conversations.filter(
+      (item) => item.startedBy === userId && NOW.getTime() - item.createdAt.getTime() < DAY_MS,
+    ).length;
+    for (let i = existing; i < count; i += 1) {
+      db.conversations.push({
+        id: `dev-conv-recent-${userId}-${i}`,
+        eventId: 'dev-ongoing',
+        hostId: 'dev-host-haru',
+        inquirerId: userId,
+        startedBy: userId,
+        createdAt: new Date(NOW.getTime() - HOUR_MS),
+        lastMessageAt: null,
+        hostLastReadSeq: 0,
+        inquirerLastReadSeq: 0,
+      });
+    }
+  };
+
+  it('24時間に10件まで。11件目は断り、24時間たてば始められる', async () => {
+    const { db, repository, setNow } = setup(A);
+    startedRecently(db, A, 9);
+    expect((await repository.startConversation('dev-b-full')).status).toBe('opened');
+
+    expect(await repository.startConversation('dev-easy-morning')).toEqual({
+      status: 'rejected',
+      reason: 'rateLimited',
+    });
+    setNow(new Date(NOW.getTime() + DAY_MS));
+    expect((await repository.startConversation('dev-easy-morning')).status).toBe('opened');
+  });
+
+  it('上限に達していても、すでにある会話は開ける', async () => {
+    const { db, repository } = setup(A);
+    startedRecently(db, A, 10);
+
+    expect(await repository.startConversation('dev-beginner-afternoon')).toEqual({
+      status: 'opened',
+      conversationId: 'dev-conv-question',
+    });
+  });
+
+  it('主催者から始める会話も数える', async () => {
+    const { db, repository } = setup(B);
+    startedRecently(db, B, 10);
+    const application = db.applications.find(
+      (item) => item.userId === 'dev-user-minor' && item.eventId === 'dev-beginner-afternoon',
+    );
+    if (!application) throw new Error('申請がありません。');
+
+    expect(await repository.startConversationWithApplicant(application.id)).toEqual({
+      status: 'rejected',
+      reason: 'rateLimited',
+    });
+  });
+
+  it('相手が始めた会話は数えない', async () => {
+    const { db, repository } = setup(A);
+    for (let i = 0; i < 10; i += 1) {
+      db.conversations.push({
+        id: `dev-conv-by-other-${i}`,
+        eventId: 'dev-ongoing',
+        hostId: A,
+        inquirerId: `dev-member-${i + 1}`,
+        startedBy: `dev-member-${i + 1}`,
+        createdAt: new Date(NOW.getTime() - HOUR_MS),
+        lastMessageAt: null,
+        hostLastReadSeq: 0,
+        inquirerLastReadSeq: 0,
+      });
+    }
+
+    expect((await repository.startConversation('dev-b-full')).status).toBe('opened');
+  });
+});
+
+describe('「未読あり」（M-09）', () => {
+  const unread = async (repository: ReturnType<typeof setup>['repository']) =>
+    (await repository.listMine()).filter((item) => item.hasUnread).map((item) => item.id);
+
+  it('相手から、まだ開いていないメッセージがある会話にだけ付く', async () => {
+    const { repository, session } = setup(A);
+    expect(await unread(repository)).toEqual(['dev-conv-approved']);
+
+    session.setUserId(B);
+    expect(await unread(repository)).toEqual(['dev-conv-question']);
+  });
+
+  it('読んだことにすると消え、相手が送ると、また付く', async () => {
+    const { repository, session } = setup(B);
+    const detail = await repository.getMessages('dev-conv-question');
+    const last = detail?.messages.at(-1)?.seq ?? 0;
+
+    await repository.markRead('dev-conv-question', last);
+    expect(await unread(repository)).toEqual([]);
+    session.setUserId(A);
+    await send(repository, 'dev-conv-question');
+    session.setUserId(B);
+    expect(await unread(repository)).toEqual(['dev-conv-question']);
+  });
+
+  it('自分の送信では付かない', async () => {
+    const { repository } = setup(A);
+    await send(repository, 'dev-conv-question');
+
+    expect(await unread(repository)).toEqual(['dev-conv-approved']);
+  });
+
+  it('読んだ位置は、自分の側だけが変わり、相手の「未読あり」は変わらない', async () => {
+    const { repository, session } = setup(A);
+    const detail = await repository.getMessages('dev-conv-question');
+
+    await repository.markRead('dev-conv-question', detail?.messages.at(-1)?.seq ?? 0);
+    session.setUserId(B);
+    expect(await unread(repository)).toEqual(['dev-conv-question']);
+  });
+
+  it('読んだ位置は小さくならず、会話にあるメッセージより先にならない', async () => {
+    const { repository, session } = setup(A);
+    await repository.markRead('dev-conv-approved', Number.MAX_SAFE_INTEGER);
+    await repository.markRead('dev-conv-approved', 0);
+    expect(await unread(repository)).toEqual([]);
+
+    // 先の位置まで読んだことにはならないため、相手が送ったら付く
+    session.setUserId('dev-host-yui');
+    await send(repository, 'dev-conv-approved');
+    session.setUserId(A);
+    expect(await unread(repository)).toEqual(['dev-conv-approved']);
+  });
+
+  it('当事者でない人は、読んだ位置を変えられない', async () => {
+    const { db, repository } = setup('dev-user-minor');
+    const before = structuredClone(db.conversations);
+
+    await repository.markRead('dev-conv-approved', Number.MAX_SAFE_INTEGER);
+    expect(db.conversations).toEqual(before);
+  });
+
+  it('相手が読んだ位置は、画面に返さない', async () => {
+    const { repository } = setup(A);
+
+    for (const item of await repository.listMine()) {
+      expect(Object.keys(item).join()).not.toMatch(/lastRead|readSeq/i);
+    }
+  });
+});
+
 describe('ダミーの会話', () => {
   it('本文に、住所・電話番号・メールアドレスの形の文字を入れない', () => {
     const { db } = setup();

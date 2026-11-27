@@ -24,6 +24,11 @@ export interface ConversationSummary {
   withinSendPeriod: boolean;
   /** 送信できる期間の終わり */
   sendableUntil: string;
+  /**
+   * 相手から、まだ開いていないメッセージがあるか（M-09）。自分の未読だけを示す。
+   * 相手が読んだかどうかは返さない（docs/06の14-4）
+   */
+  hasUnread: boolean;
 }
 
 export interface Message {
@@ -44,10 +49,14 @@ export interface ConversationDetail {
 export type StartConversationResult =
   | { status: 'opened'; conversationId: string }
   /**
-   * 開始できない。理由は「送信できません」と同じく示さない（Q-20）。
-   * notLoggedIn・profileRequired だけは、画面でログイン・登録へ案内するために分ける
+   * 開始できない。期限・ブロックなどの理由は分けず、どれも「送信できません」と示す（Q-20）。
+   * notLoggedIn・profileRequired は、画面でログイン・登録へ案内するために分ける。
+   * rateLimited は、新しい会話の回数（1日10件）に達した。自分の操作の回数のため、案内してよい
    */
-  | { status: 'rejected'; reason: 'notLoggedIn' | 'profileRequired' | 'notAllowed' };
+  | {
+      status: 'rejected';
+      reason: 'notLoggedIn' | 'profileRequired' | 'notAllowed' | 'rateLimited';
+    };
 
 export interface SendMessageInput {
   conversationId: string;
@@ -58,8 +67,12 @@ export interface SendMessageInput {
 
 export type SendMessageResult =
   | { status: 'sent'; message: Message }
-  /** 理由は画面に示さない。どれも「送信できません」とする（docs/06の5-7、Q-20） */
-  | { status: 'rejected'; reason: 'notLoggedIn' | 'invalid' | 'notAllowed' };
+  /**
+   * notAllowed（期間・ブロック・相手の停止や退会）は、理由を分けずに「送信できません」とする（docs/06の5-7、Q-20）。
+   * rateLimited は、送信の回数（1分間に10通・1時間に60通）に達した。相手の事情より先に判定するため、
+   * 案内しても、ブロックなどを推測させない（docs/06の5-7の5・6、docs/10の11-3）
+   */
+  | { status: 'rejected'; reason: 'notLoggedIn' | 'invalid' | 'notAllowed' | 'rateLimited' };
 
 /**
  * 会話の窓口。将来は docs/06の6-5の関数を呼ぶ実装に置き換える。
@@ -67,6 +80,7 @@ export type SendMessageResult =
  * - listMine → get_my_conversations
  * - getMessages → messages の取得（当事者だけ、RLS）
  * - send → send_message
+ * - markRead → mark_conversation_read（docs/06の14-4）
  * ログイン中の人は窓口が内部で決める。画面から自分のID・送信者のIDを渡さない。
  */
 export interface ConversationRepository {
@@ -83,4 +97,9 @@ export interface ConversationRepository {
   getMessages(conversationId: string): Promise<ConversationDetail | null>;
   /** 送信する。送信者は、常にログイン中の人。 */
   send(input: SendMessageInput): Promise<SendMessageResult>;
+  /**
+   * 会話を seq のメッセージまで読んだことにする（M-09の「未読あり」を消す）。自分の側だけを変える。
+   * 値は小さくならず、その会話にあるメッセージの seq を超えない。当事者でない場合は何もしない。
+   */
+  markRead(conversationId: string, seq: number): Promise<void>;
 }

@@ -1,4 +1,5 @@
 import { textLength } from '../../lib/text';
+import { RATE_LIMITS } from '../safety/rateLimits';
 
 /** メッセージの上限（docs/11の3-3、docs/06の4-8）。 */
 export const MESSAGE_MAX_LENGTH = 1000;
@@ -22,3 +23,14 @@ export function checkMessageBody(body: string): string | null {
   }
   return null;
 }
+
+/**
+ * 送信・開始を断ったときの案内（docs/10の11-3）。
+ * 期間・ブロック・相手の停止や退会は理由を分けず、どれも「送信できません」とする（Q-20）。
+ * 回数の上限は自分の操作の回数のため、上限を示す。
+ */
+export const REJECTED_MESSAGES = {
+  notAllowed: '送信できません',
+  sendRateLimited: `送信は、1分間に${RATE_LIMITS.messagePerMinute.max}通・1時間に${RATE_LIMITS.messagePerHour.max}通までです。時間をおいてお試しください。`,
+  startRateLimited: `新しい会話を始められるのは、24時間に${RATE_LIMITS.conversationStart.max}件までです。時間をおいてお試しください。`,
+} as const;

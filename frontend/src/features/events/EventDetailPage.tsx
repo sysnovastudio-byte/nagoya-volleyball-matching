@@ -402,6 +402,8 @@ const APPLY_ERRORS: Record<ApplyRejection, string> = {
   attemptLimit: `同じ募集への申請は、合計${MAX_ATTEMPTS}回までです。`,
   notAccepting: '受付が終わったため、申請できませんでした。',
   rateLimited: '申請の回数の上限（1日20件）に達しました。時間をおいてお試しください。',
+  // ブロックで断った場合。理由は示さない（docs/11の3-1）
+  notAllowed: '申請できません',
   notFound: 'この募集は見つかりませんでした。',
 };
 

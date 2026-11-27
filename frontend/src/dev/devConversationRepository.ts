@@ -6,8 +6,9 @@ import type {
 } from '../features/conversations/types';
 import type { PublicProfile } from '../features/profiles/types';
 import type { DevConversationRecord, DevMessageRecord } from './devConversations';
-import { findDevUser, type DevDatabase } from './devDatabase';
+import { findDevUser, isBlockedBetween, type DevDatabase } from './devDatabase';
 import { toPublicProfile } from './devProfileRepository';
+import { conversationStartLimitReached, messageLimitReached } from './devRateLimits';
 import type { DevSession } from './devSession';
 import { markDevModule } from './marker';
 
@@ -41,6 +42,12 @@ export function createDevConversationRepository({
     return (user && toPublicProfile(user)) ?? { userId, isWithdrawn: true };
   };
 
+  /** 自分の側の、読んだ最後の seq。 */
+  const myLastReadSeq = (conversation: DevConversationRecord, userId: string) =>
+    conversation.hostId === userId
+      ? conversation.hostLastReadSeq
+      : conversation.inquirerLastReadSeq;
+
   const toSummary = (
     conversation: DevConversationRecord,
     userId: string,
@@ -49,6 +56,7 @@ export function createDevConversationRepository({
     if (!record) return null;
     const role = conversation.hostId === userId ? 'host' : 'inquirer';
     const until = sendableUntil(record.endsAt);
+    const lastRead = myLastReadSeq(conversation, userId);
     return {
       id: conversation.id,
       role,
@@ -66,7 +74,31 @@ export function createDevConversationRepository({
       lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
       withinSendPeriod: now() <= until,
       sendableUntil: until.toISOString(),
+      // 自分の読んだ位置より後に、相手が送ったメッセージがあるか（docs/06の14-4）。自分の送信では付かない
+      hasUnread: db.messages.some(
+        (message) =>
+          message.conversationId === conversation.id &&
+          message.senderId !== userId &&
+          message.seq > lastRead,
+      ),
     };
+  };
+
+  /** 新しい会話を作る。開始の回数は、この行の started_by・created_at で数える（docs/06の14-2）。 */
+  const createConversation = (
+    fields: Pick<DevConversationRecord, 'eventId' | 'hostId' | 'inquirerId' | 'startedBy'>,
+    createdAt: Date,
+  ) => {
+    const conversation: DevConversationRecord = {
+      id: `dev-conv-new-${db.conversations.length + 1}`,
+      ...fields,
+      createdAt,
+      lastMessageAt: null,
+      hostLastReadSeq: 0,
+      inquirerLastReadSeq: 0,
+    };
+    db.conversations.push(conversation);
+    return conversation;
   };
 
   const toMessage = (message: DevMessageRecord, userId: string): Message => ({
@@ -94,8 +126,6 @@ export function createDevConversationRepository({
       );
       if (existing) return Promise.resolve({ status: 'opened', conversationId: existing.id });
 
-      // 【未実装】ブロック（どちらかが相手をブロックしていれば開始できない）と、
-      // 新しい会話の回数（1日10件、docs/11の3-1）の判定は、ここに加える
       const current = now();
       const approved = db.applications.some(
         (application) =>
@@ -110,17 +140,19 @@ export function createDevConversationRepository({
           ? current <= sendableUntil(record.endsAt)
           : record.status !== 'cancelled' && current < new Date(record.startsAt));
       if (!allowed) return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
+      // 新しい会話の回数（1日10件）。自分の操作の回数のため、相手の事情（ブロック）より先に判定する
+      if (conversationStartLimitReached(db, user.id, current)) {
+        return Promise.resolve({ status: 'rejected', reason: 'rateLimited' });
+      }
+      // どちらかが相手をブロックしていれば開始できない（docs/06の5-3）。理由は示さない
+      if (isBlockedBetween(db, user.id, record.hostId)) {
+        return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
+      }
 
-      const conversation: DevConversationRecord = {
-        id: `dev-conv-new-${db.conversations.length + 1}`,
-        eventId,
-        hostId: record.hostId,
-        inquirerId: user.id,
-        startedBy: user.id,
-        createdAt: current,
-        lastMessageAt: null,
-      };
-      db.conversations.push(conversation);
+      const conversation = createConversation(
+        { eventId, hostId: record.hostId, inquirerId: user.id, startedBy: user.id },
+        current,
+      );
       return Promise.resolve({ status: 'opened', conversationId: conversation.id });
     },
 
@@ -142,7 +174,6 @@ export function createDevConversationRepository({
       );
       if (existing) return Promise.resolve({ status: 'opened', conversationId: existing.id });
 
-      // 【未実装】ブロックと、新しい会話の回数（1日10件）の判定は、ここに加える（サイクル3）
       const current = now();
       // 相手の最新の申請が、承認待ち・承認済みであること（docs/11の3-1）
       const latest = db.applications.findLast(
@@ -157,18 +188,24 @@ export function createDevConversationRepository({
         !record.hidden &&
         current <= sendableUntil(record.endsAt);
       if (!allowed) return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
+      // 回数を、ブロックより先に判定する（startConversation と同じ）
+      if (conversationStartLimitReached(db, user.id, current)) {
+        return Promise.resolve({ status: 'rejected', reason: 'rateLimited' });
+      }
+      if (isBlockedBetween(db, user.id, application.userId)) {
+        return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
+      }
 
-      const conversation: DevConversationRecord = {
-        id: `dev-conv-new-${db.conversations.length + 1}`,
-        eventId: record.id,
-        hostId: user.id,
-        inquirerId: application.userId,
-        // 始めた人の一覧だけに、メッセージのない会話を示す（DB-29）
-        startedBy: user.id,
-        createdAt: current,
-        lastMessageAt: null,
-      };
-      db.conversations.push(conversation);
+      const conversation = createConversation(
+        {
+          eventId: record.id,
+          hostId: user.id,
+          inquirerId: application.userId,
+          // 始めた人の一覧だけに、メッセージのない会話を示す（DB-29）
+          startedBy: user.id,
+        },
+        current,
+      );
       return Promise.resolve({ status: 'opened', conversationId: conversation.id });
     },
 
@@ -231,14 +268,17 @@ export function createDevConversationRepository({
       if (!record || current > sendableUntil(record.endsAt)) {
         return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
       }
+      // 送信回数（1分間に10通・1時間に60通）。相手の事情より先に判定する（docs/06の5-7の5）
+      if (messageLimitReached(db, user.id, current)) {
+        return Promise.resolve({ status: 'rejected', reason: 'rateLimited' });
+      }
       const partnerId =
         conversation.hostId === user.id ? conversation.inquirerId : conversation.hostId;
-      // 相手が退会している場合は送信できない
-      if (!findDevUser(db, partnerId)) {
+      // 相手の事情（docs/06の5-7の6）。相手の退会と、双方向のブロック。どれで断っても理由は示さない（Q-20）。
+      // 【未実装】利用停止（SAFE-05）の判定は、サイクル4でここに加える
+      if (!findDevUser(db, partnerId) || isBlockedBetween(db, user.id, partnerId)) {
         return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
       }
-      // 【未実装】送信回数（1分間に10通・1時間に60通）、ブロック、利用停止の判定は、ここに加える。
-      // どれで断っても、画面には「送信できません」とだけ示す（Q-20）
 
       const message: DevMessageRecord = {
         id: `dev-message-new-${db.messages.length + 1}`,
@@ -253,6 +293,22 @@ export function createDevConversationRepository({
       db.messages.push(message);
       conversation.lastMessageAt = current;
       return Promise.resolve({ status: 'sent', message: toMessage(message, user.id) });
+    },
+
+    markRead: (conversationId, seq) => {
+      const user = currentUser();
+      const conversation = db.conversations.find((item) => item.id === conversationId);
+      if (!user || !conversation || !isParty(conversation, user.id)) return Promise.resolve();
+      // その会話にある seq を超えない。値は小さくならない（docs/06の14-4）
+      const maxSeq = Math.max(
+        0,
+        ...db.messages.filter((item) => item.conversationId === conversationId).map((m) => m.seq),
+      );
+      const next = Math.max(myLastReadSeq(conversation, user.id), Math.min(seq, maxSeq));
+      // 自分の側だけを変える
+      if (conversation.hostId === user.id) conversation.hostLastReadSeq = next;
+      else conversation.inquirerLastReadSeq = next;
+      return Promise.resolve();
     },
   };
 }

@@ -10,7 +10,13 @@ import type {
   RevokeResult,
 } from '../features/applications/types';
 import { APPLICATION_LIMITS, MAX_ATTEMPTS, REVOKE_REASONS } from '../features/applications/types';
-import { countApplications, devEventState, findDevUser, type DevDatabase } from './devDatabase';
+import {
+  countApplications,
+  devEventState,
+  findDevUser,
+  isBlockedBetween,
+  type DevDatabase,
+} from './devDatabase';
 import type { DevApplicationRecord, DevEventRecord } from './devEvents';
 import { notifyParticipantChange } from './devNotifications';
 import { toPublicProfile } from './devProfileRepository';
@@ -205,6 +211,11 @@ export function createDevApplicationRepository({
       );
       if (recent.length >= APPLICATION_LIMITS.dailyApplyLimit) {
         return Promise.resolve({ status: 'rejected', reason: 'rateLimited' });
+      }
+      // どちらかが相手をブロックしていれば、新しい申請はできない（docs/06の5-3）。
+      // 自分の状態の判定より後に置き、ほかの理由からブロックを推測させない
+      if (isBlockedBetween(db, user.id, record.hostId)) {
+        return Promise.resolve({ status: 'rejected', reason: 'notAllowed' });
       }
 
       const application: DevApplicationRecord = {
