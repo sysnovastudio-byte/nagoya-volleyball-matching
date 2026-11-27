@@ -11,6 +11,12 @@ export interface DevConversationRecord {
   startedBy: string;
   createdAt: Date;
   lastMessageAt: Date | null;
+  /**
+   * それぞれが読んだ最後のメッセージの seq。まだ読んでいなければ0（docs/06の14-1・14-4）。
+   * 本番では相手の既読を見せないため、この2列を画面に返さない
+   */
+  hostLastReadSeq: number;
+  inquirerLastReadSeq: number;
 }
 
 /** 【開発専用】保存されているメッセージの形（docs/06の4-8）。 */
@@ -30,7 +36,8 @@ const DAY_MS = 24 * HOUR_MS;
 
 /**
  * 架空の会話。本文に住所・電話番号・メールアドレスの形の文字を入れない。
- * [会話のID, 募集のID, 主催者, 問い合わせた人, 始めてからの時間（何日前）, メッセージ（送った人, 本文）]
+ * [会話のID, 募集のID, 主催者, 問い合わせた人, 始めてからの時間（何日前）, メッセージ（送った人, 本文）,
+ *  最後のメッセージをまだ開いていない側（「未読あり」を確かめるため。省略すると両方とも読んだことにする）]
  */
 const CONVERSATIONS: [
   id: string,
@@ -39,6 +46,7 @@ const CONVERSATIONS: [
   inquirerId: string,
   daysAgo: number,
   messages: [sender: 'host' | 'inquirer', body: string][],
+  unreadBy?: 'host' | 'inquirer',
 ][] = [
   // 申請前の質問（利用者A → 利用者B）
   [
@@ -52,6 +60,8 @@ const CONVERSATIONS: [
       ['host', 'はじめまして。久しぶりの方も多いので大丈夫です。準備運動から一緒にやりましょう。'],
       ['inquirer', 'ありがとうございます。申請してみます。'],
     ],
+    // 利用者Bは、最後のメッセージをまだ開いていない（Bの一覧に「未読あり」）
+    'host',
   ],
   // 承認後の連絡（利用者Aは承認済み）
   [
@@ -65,6 +75,8 @@ const CONVERSATIONS: [
       ['inquirer', 'ありがとうございます。室内用のシューズを持っていきます。'],
       ['host', 'よろしくお願いします。飲み物も忘れずにお持ちください。'],
     ],
+    // 利用者Aは、最後のメッセージをまだ開いていない（Aの一覧に「未読あり」）
+    'inquirer',
   ],
   // メッセージのない会話（始めた利用者Aの一覧だけに出る、DB-29）
   ['dev-conv-empty', 'dev-weekday-night', 'dev-host-minato', 'dev-user-a', 0, []],
@@ -95,9 +107,13 @@ const CONVERSATIONS: [
 export function createDevConversations(now: Date) {
   const conversations: DevConversationRecord[] = [];
   const messages: DevMessageRecord[] = [];
-  for (const [id, eventId, hostId, inquirerId, daysAgo, items] of CONVERSATIONS) {
+  for (const [id, eventId, hostId, inquirerId, daysAgo, items, unreadBy] of CONVERSATIONS) {
     const createdAt = new Date(now.getTime() - daysAgo * DAY_MS - HOUR_MS);
     let last: Date | null = null;
+    // 読んだ位置：全部読んだ側は最後のメッセージ、まだ開いていない側はその1つ前
+    const lastSeq = messages.length + items.length;
+    const readSeq = (side: 'host' | 'inquirer') =>
+      items.length === 0 ? 0 : unreadBy === side ? lastSeq - 1 : lastSeq;
     items.forEach(([sender, body], index) => {
       const createdAtOfMessage = new Date(createdAt.getTime() + (index + 1) * 20 * MINUTE_MS);
       messages.push({
@@ -119,6 +135,8 @@ export function createDevConversations(now: Date) {
       startedBy: inquirerId,
       createdAt,
       lastMessageAt: last,
+      hostLastReadSeq: readSeq('host'),
+      inquirerLastReadSeq: readSeq('inquirer'),
     });
   }
   return { conversations, messages };

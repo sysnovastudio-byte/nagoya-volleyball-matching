@@ -34,6 +34,11 @@ export type ApplyRejection =
   /** 締切・開催開始後・中止・非表示 */
   | 'notAccepting'
   | 'rateLimited'
+  /**
+   * そのほかの理由で申請できない（どちらかが相手をブロックしている）。
+   * 画面には「申請できません」とだけ示し、ブロックを推測させない（docs/11の3-1）
+   */
+  | 'notAllowed'
   | 'notFound';
 
 export type ApplyResult = { status: 'applied' } | { status: 'rejected'; reason: ApplyRejection };

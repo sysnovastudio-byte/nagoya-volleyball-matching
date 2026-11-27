@@ -40,6 +40,15 @@ export interface DevDatabase {
   messages: DevMessageRecord[];
   /** 通知（docs/06の4-11） */
   notifications: DevNotificationRecord[];
+  /** ブロック（docs/06の4-9）。最初は空。帯で利用者を切り替えて、画面から作る */
+  blocks: DevBlockRecord[];
+}
+
+/** 【開発専用】保存されているブロックの形（docs/06の4-9）。 */
+export interface DevBlockRecord {
+  blockerId: string;
+  blockedId: string;
+  createdAt: Date;
 }
 
 export function createDevDatabase(now: Date): DevDatabase {
@@ -58,11 +67,24 @@ export function createDevDatabase(now: Date): DevDatabase {
     conversations,
     messages,
     notifications: createDevNotifications({ users, events, applications }, now),
+    blocks: [],
   };
 }
 
 export function findDevUser(db: DevDatabase, userId: string | null) {
   return userId === null ? undefined : db.users.find((user) => user.id === userId);
+}
+
+/**
+ * どちらか一方でも相手をブロックしているか（docs/06の5-3）。送信・会話の開始・申請は双方向に断る。
+ * 本番ではブロックの判定関数を利用者から直接呼べない。結果を画面に返さず、断る理由にも示さない。
+ */
+export function isBlockedBetween(db: DevDatabase, userId: string, otherId: string) {
+  return db.blocks.some(
+    (block) =>
+      (block.blockerId === userId && block.blockedId === otherId) ||
+      (block.blockerId === otherId && block.blockedId === userId),
+  );
 }
 
 /** 承認済みの人数。定員に数えるのは承認済みだけ（docs/06の5-1）。 */

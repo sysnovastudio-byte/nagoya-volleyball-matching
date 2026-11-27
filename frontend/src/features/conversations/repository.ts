@@ -10,6 +10,7 @@ const notConnectedRepository: ConversationRepository = {
   listMine: notConnected,
   getMessages: notConnected,
   send: notConnected,
+  markRead: notConnected,
 };
 
 /** 開発時だけ、ダミーデータの実装を動的に読み込む（events/repository.ts と同じ方法）。 */
@@ -25,6 +26,7 @@ function createRepository(): ConversationRepository {
       listMine: async () => (await repository()).listMine(),
       getMessages: async (id) => (await repository()).getMessages(id),
       send: async (input) => (await repository()).send(input),
+      markRead: async (id, seq) => (await repository()).markRead(id, seq),
     };
   }
   return notConnectedRepository;

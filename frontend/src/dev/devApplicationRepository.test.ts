@@ -742,3 +742,55 @@ describe('承認の取り消し（APP-11）', () => {
     });
   });
 });
+
+describe('ブロックの影響（docs/11の3-1）', () => {
+  it.each([
+    ['申請する人が主催者を', 'dev-user-a', HOST_ID],
+    ['主催者が申請する人を', HOST_ID, 'dev-user-a'],
+  ])('%sブロックしていると、新しく申請できない', async (_, blockerId, blockedId) => {
+    const { db, applications } = setup();
+    db.blocks.push({ blockerId, blockedId, createdAt: NOW });
+    const count = db.applications.length;
+
+    expect(await applications.applyToEvent(HOSTED_EVENT)).toEqual({
+      status: 'rejected',
+      reason: 'notAllowed',
+    });
+    expect(db.applications).toHaveLength(count);
+    // 通知も作らない
+    expect(db.notifications.filter((item) => item.createdAt === NOW)).toEqual([]);
+  });
+
+  it('解除すると、また申請できる', async () => {
+    const { db, applications } = setup();
+    db.blocks.push({ blockerId: HOST_ID, blockedId: 'dev-user-a', createdAt: NOW });
+    expect((await applications.applyToEvent(HOSTED_EVENT)).status).toBe('rejected');
+
+    db.blocks.length = 0;
+    expect(await applications.applyToEvent(HOSTED_EVENT)).toEqual({ status: 'applied' });
+  });
+
+  it('すでにある申請は変わらず、主催者は承認・却下・承認の取り消しができる', async () => {
+    const { db, session, applications } = setup();
+    await applications.applyToEvent(HOSTED_EVENT);
+    db.blocks.push({ blockerId: HOST_ID, blockedId: 'dev-user-a', createdAt: NOW });
+
+    session.setUserId(HOST_ID);
+    const mine = (await applicantsOf(applications, HOSTED_EVENT)).applicants.find(
+      (item) => item.profile.userId === 'dev-user-a',
+    );
+    expect(mine?.status).toBe('pending');
+    if (!mine) throw new Error('申請がありません。');
+    expect(await applications.approveApplication(mine.applicationId)).toEqual({ status: 'done' });
+    expect(await applications.revokeApproval(mine.applicationId, 'safety')).toEqual({
+      status: 'done',
+    });
+  });
+
+  it('ほかの主催者の募集には、申請できる', async () => {
+    const { db, applications } = setup();
+    db.blocks.push({ blockerId: HOST_ID, blockedId: 'dev-user-a', createdAt: NOW });
+
+    expect(await applications.applyToEvent('dev-easy-morning')).toEqual({ status: 'applied' });
+  });
+});

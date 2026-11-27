@@ -7,6 +7,8 @@
 - `PROJECT_HANDOVER.md` と `docs/` を必ず確認する
 - `PROJECT_HANDOVER.md` は会話の整理であり、確定仕様ではない。`docs/` と矛盾したら推測で直さず報告する
 - `docs/` の「未承認」「未決定」の項目（DB-17〜30、M-01〜M-14 など）を確定仕様として扱わない
+- 資料は、まず `docs/00_索引.md` で場所を調べ、必要な章だけを読む
+- `docs/` を更新したら、`docs/00_索引.md` も合わせて直す（同じコミットで）
 
 ## 技術構成（`docs/05_技術構成・開発環境.md` に従う）
 React + TypeScript（strict）+ Vite + Tailwind CSS、Node.js 26系LTS、npm
@@ -22,6 +24,7 @@ React + TypeScript（strict）+ Vite + Tailwind CSS、Node.js 26系LTS、npm
 
 ## 作業後の報告
 実装内容・テスト結果・未解決事項・リスク・次の推奨作業
+- テストやビルドの出力は、失敗した部分だけを示す（成功したものは件数だけでよい）
 
 ### 確認事項の書き出し（Codespaces のときだけ）
 - 環境変数 `CODESPACES` が `true` のときだけ、報告のうちユーザーの確認が必要なもの（決めてほしいこと・質問・確認できなかった項目）を、ターミナルに加えて `review/確認事項.md` にも書き出す

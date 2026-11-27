@@ -4,7 +4,7 @@ import { Button, ButtonLink } from '../../components/ui/Button';
 import { loginPath, profileEditPath } from '../auth/loginRedirect';
 import { useViewer } from '../auth/sessionContext';
 import type { EventDetail } from '../events/types';
-import { sendableUntil } from './messageRules';
+import { REJECTED_MESSAGES, sendableUntil } from './messageRules';
 import { useConversationRepository } from './repositoryContext';
 
 /**
@@ -57,8 +57,12 @@ export function StartConversationButton({ event }: { event: EventDetail }) {
         await navigate(`/conversations/${result.conversationId}`);
         return;
       }
-      // 理由は示さない（Q-20）
-      setError('今は会話を始められません。');
+      // 期限・ブロックなどの理由は示さない（Q-20）。回数の上限だけは案内する
+      setError(
+        result.reason === 'rateLimited'
+          ? REJECTED_MESSAGES.startRateLimited
+          : REJECTED_MESSAGES.notAllowed,
+      );
     } catch {
       setError('会話を開けませんでした。通信の状態を確認して、もう一度お試しください。');
     } finally {

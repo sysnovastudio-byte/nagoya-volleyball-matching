@@ -9,7 +9,7 @@ import { useConversationRepository } from './repositoryContext';
 /**
  * SCR-010 会話一覧・SCR-011 会話（MSG-01〜03）。
  * PC（1024px以上）は左に一覧、右に会話の2列。スマートフォンは一覧と会話を別の画面にする（docs/11の5-1）。
- * 自動更新（M-07、公開後）は作らず、手動で更新するボタンを置く。「未読あり」（M-09）はサイクル3で加える（docs/04の9-3）。
+ * 自動更新（M-07、公開後）は作らず、手動で更新するボタンを置く。一覧には会話ごとの「未読あり」（M-09）を示す。
  */
 export function ConversationsPage() {
   const { conversationId } = useParams();
