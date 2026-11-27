@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
-import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS, RequiredMark } from '../../components/ui/FormField';
 import { StatusMessage } from '../../components/ui/StatusMessage';
@@ -185,15 +184,6 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
         <RequiredMark required /> の項目は、入力が必要です。
       </p>
 
-      {/* 公開範囲を項目ごとに示す（docs/11の5-1） */}
-      <div className="mb-6 rounded-xl border border-line bg-surface px-4 py-3">
-        <p>
-          年代のほかの項目は、<strong>ログインしている利用者</strong>
-          に公開されます。年代は、本人と、申請した募集の主催者（終了日時まで）だけが見られます。
-        </p>
-        <p className="text-muted">メールアドレスは、ほかの利用者に公開されません。</p>
-      </div>
-
       <form
         noValidate
         aria-label={title}
@@ -215,7 +205,7 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
           id={fieldId('nickname')}
           label="ニックネーム"
           required
-          hint={<ScopeHint text="ほかの人と同じニックネームでも登録できます。" />}
+          hint="ほかの人と同じニックネームでも登録できます。"
           error={errors.nickname}
           counter={{ value: values.nickname.trim(), max: PROFILE_LIMITS.nicknameMax }}
         >
@@ -234,21 +224,13 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
         </FormField>
 
         <fieldset
-          aria-describedby={[
-            'profile-experienceLevel-hint',
-            errors.experienceLevel ? 'profile-experienceLevel-error' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
+          aria-describedby={errors.experienceLevel ? 'profile-experienceLevel-error' : undefined}
           className="flex flex-col gap-1"
         >
           <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
             経験レベル
             <RequiredMark required />
           </legend>
-          <p id="profile-experienceLevel-hint" className="text-muted">
-            <ScopeHint />
-          </p>
           <div className="flex flex-wrap gap-x-4">
             {EXPERIENCE_LEVELS.map((level, index) => (
               <label key={level} className="flex min-h-11 items-center gap-2">
@@ -275,12 +257,7 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
           )}
         </fieldset>
 
-        <FormField
-          id={fieldId('ageGroup')}
-          label="年代"
-          hint={<ScopeHint />}
-          error={errors.ageGroup}
-        >
+        <FormField id={fieldId('ageGroup')} label="年代" error={errors.ageGroup}>
           {(control) => (
             <select
               {...control}
@@ -303,14 +280,14 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
           )}
         </FormField>
 
-        <fieldset aria-describedby="profile-gender-hint" className="flex flex-col gap-1">
+        <fieldset
+          aria-describedby={errors.gender ? 'profile-gender-error' : undefined}
+          className="flex flex-col gap-1"
+        >
           <legend className="mb-1 flex flex-wrap items-center gap-2 font-bold">
             性別
             <RequiredMark />
           </legend>
-          <p id="profile-gender-hint" className="text-muted">
-            <ScopeHint />
-          </p>
           <div className="flex flex-wrap gap-x-4">
             {GENDERS.map((gender, index) => (
               <label key={gender} className="flex min-h-11 items-center gap-2">
@@ -329,13 +306,17 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
               </label>
             ))}
           </div>
-          {errors.gender && <p className="font-bold text-danger">{errors.gender}</p>}
+          {errors.gender && (
+            <p id="profile-gender-error" className="font-bold text-danger">
+              {errors.gender}
+            </p>
+          )}
         </fieldset>
 
         <FormField
           id={fieldId('bio')}
           label="自己紹介"
-          hint={<ScopeHint text="連絡先や住所は書かないでください。" />}
+          hint="連絡先や住所は書かないでください。"
           error={errors.bio}
           counter={{ value: values.bio.trim(), max: PROFILE_LIMITS.bioMax }}
         >
@@ -365,15 +346,5 @@ function ProfileForm({ initial, isFirstTime, laterPath, onSaved }: ProfileFormPr
         </div>
       </form>
     </div>
-  );
-}
-
-/** 項目ごとの公開範囲。 */
-function ScopeHint({ text }: { text?: string }) {
-  return (
-    <span className="flex flex-wrap items-center gap-x-2">
-      <Badge>ログインした人に公開</Badge>
-      {text && <span>{text}</span>}
-    </span>
   );
 }

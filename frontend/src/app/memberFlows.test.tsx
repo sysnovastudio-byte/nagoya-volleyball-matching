@@ -1234,13 +1234,14 @@ describe('プロフィール登録・編集（SCR-014）', () => {
     expect(screen.getByLabelText(/ニックネーム/)).toHaveFocus();
   });
 
-  it('項目ごとに公開範囲を示す', async () => {
+  it('公開範囲の文言を示さない（2026-11-27 ユーザーの決定）', async () => {
     renderApp('/profile/edit', { userId: 'dev-user-a' });
 
     await screen.findByRole('heading', { level: 1, name: 'プロフィールを編集' });
-    // ニックネーム・経験レベル・年代・性別・自己紹介。年代と性別もログインした人に公開する
-    expect(screen.getAllByText('ログインした人に公開')).toHaveLength(5);
-    expect(screen.queryByText('本人と申請先の主催者だけ')).not.toBeInTheDocument();
+    expect(screen.queryByText(/公開/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/だけが見られます/)).not.toBeInTheDocument();
+    // 公開範囲ではない注意は残す
+    expect(screen.getByText('連絡先や住所は書かないでください。')).toBeInTheDocument();
   });
 
   it('SCR-013 の「編集」から移り、今の内容を入れて始め、保存するとプロフィールに戻る', async () => {
