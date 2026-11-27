@@ -2,14 +2,21 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource, type Resource } from '../../app/useResource';
-import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
+import { COPY_FROM_PARAM } from '../events/eventForm';
 import { EventStateBadge } from '../events/EventStateBadge';
 import { formatDateTimeRange } from '../events/format';
 import { useEventRepository } from '../events/repositoryContext';
-import type { EventState, MyEvent } from '../events/types';
-import { APPLICATION_STATUS_LABELS } from './format';
+import type { MyEvent } from '../events/types';
+import { ApplicationStatusBadge } from './ApplicationStatusBadge';
 import { OwnApplicationActions } from './OwnApplicationActions';
+import {
+  isPast,
+  matchesParticipationFilter,
+  PARTICIPATION_FILTER_LABELS,
+  PARTICIPATION_FILTERS,
+  type ParticipationFilter,
+} from './participationFilter';
 import { useApplicationRepository } from './repositoryContext';
 import { SegmentedControl } from './SegmentedControl';
 import type { EventSummary, MyParticipation } from './types';
@@ -17,13 +24,6 @@ import type { EventSummary, MyParticipation } from './types';
 type Side = 'participant' | 'host';
 
 const HIDDEN_TITLE = '非表示になった募集';
-
-/** 終わった募集か。非表示の募集は状態を返さないため、終了日時で決める。 */
-function isPast(event: { hidden: true; endsAt: string } | { hidden: false; state: EventState }) {
-  return event.hidden
-    ? new Date(event.endsAt) < new Date()
-    : event.state === 'ended' || event.state === 'cancelled';
-}
 
 /** 開催前は日時の早い順、終了は新しい順に並べて分ける。 */
 function splitByTime<T>(items: T[], eventOf: (item: T) => EventSummary | MyEvent) {
@@ -39,6 +39,8 @@ function splitByTime<T>(items: T[], eventOf: (item: T) => EventSummary | MyEvent
 export function ActivityPage() {
   useDocumentTitle('申請と募集');
   const [side, setSide] = useState<Side>('participant');
+  // 読み込み直しても、選んだ絞り込みを保つ
+  const [filter, setFilter] = useState<ParticipationFilter>('all');
   const applications = useApplicationRepository();
   const events = useEventRepository();
   const participations = useResource('my-participations', () => applications.getMyParticipations());
@@ -70,7 +72,14 @@ export function ActivityPage() {
             参加する側
           </h2>
           <ResourceView resource={participations} onRetry={participations.retry}>
-            {(items) => <ParticipationList items={items} onChanged={participations.reload} />}
+            {(items) => (
+              <ParticipationList
+                items={items}
+                filter={filter}
+                onFilterChange={setFilter}
+                onChanged={participations.reload}
+              />
+            )}
           </ResourceView>
         </section>
 
@@ -136,10 +145,12 @@ function Group<T>({ title, items, render }: GroupProps<T>) {
 
 interface ParticipationListProps {
   items: MyParticipation[];
+  filter: ParticipationFilter;
+  onFilterChange: (filter: ParticipationFilter) => void;
   onChanged: () => void;
 }
 
-function ParticipationList({ items, onChanged }: ParticipationListProps) {
+function ParticipationList({ items, filter, onFilterChange, onChanged }: ParticipationListProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -150,29 +161,55 @@ function ParticipationList({ items, onChanged }: ParticipationListProps) {
       </div>
     );
   }
-  const { upcoming, past } = splitByTime(items, (item) => item.event);
+  const now = new Date();
+  const shown = items.filter((item) => matchesParticipationFilter(item, filter, now));
+  const { upcoming, past } = splitByTime(shown, (item) => item.event);
   const render = (item: MyParticipation) => (
     <ParticipationItem key={item.applicationId} item={item} onChanged={onChanged} />
   );
   return (
     <>
-      <Group title="これからの募集" items={upcoming} render={render} />
-      <Group title="終わった募集" items={past} render={render} />
+      {/* 状態で絞り込む（2026-11-27 ユーザーの決定）。幅360pxでは折り返す */}
+      <div role="group" aria-label="申請の状態で絞り込む" className="mb-4 flex flex-wrap gap-2">
+        {PARTICIPATION_FILTERS.map((item) => {
+          const count = items.filter((candidate) =>
+            matchesParticipationFilter(candidate, item, now),
+          ).length;
+          return (
+            <Button
+              key={item}
+              size="small"
+              variant={item === filter ? 'primary' : 'secondary'}
+              aria-pressed={item === filter}
+              onClick={() => {
+                onFilterChange(item);
+              }}
+            >
+              {PARTICIPATION_FILTER_LABELS[item]}
+              <span className="ml-1 font-normal">
+                {count}
+                <span className="sr-only">件</span>
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+      {shown.length === 0 ? (
+        <p className="py-6 text-center text-muted">
+          「{PARTICIPATION_FILTER_LABELS[filter]}」の申請はありません。
+        </p>
+      ) : (
+        <>
+          <Group title="これからの募集" items={upcoming} render={render} />
+          <Group title="終わった募集" items={past} render={render} />
+        </>
+      )}
     </>
   );
 }
 
 function ParticipationItem({ item, onChanged }: { item: MyParticipation; onChanged: () => void }) {
   const { event } = item;
-  // 開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3）
-  const label =
-    item.status === 'pending' &&
-    !event.hidden &&
-    event.state !== 'open' &&
-    event.state !== 'full' &&
-    event.state !== 'closed'
-      ? '受付終了'
-      : APPLICATION_STATUS_LABELS[item.status];
 
   return (
     <li className="rounded-2xl border border-line bg-surface p-4">
@@ -181,7 +218,8 @@ function ParticipationItem({ item, onChanged }: { item: MyParticipation; onChang
       {!event.hidden && (
         <p className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-sub">あなたの申請</span>
-          <Badge tone={item.status === 'approved' ? 'main' : 'neutral'}>{label}</Badge>
+          {/* 開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3） */}
+          <ApplicationStatusBadge status={item.status} eventState={event.state} />
         </p>
       )}
       {!event.hidden && (
@@ -232,9 +270,17 @@ function HostedItem({ item }: { item: MyEvent }) {
             {item.capacity}人・承認待ち{' '}
             <span className="font-bold text-ink">{item.pendingCount}</span>人
           </p>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <ButtonLink to={`/events/${item.id}/applicants`} variant="secondary" size="small">
               申請者を見る
+            </ButtonLink>
+            {/* 日時のほかの項目を入れて、募集作成を開く（2026-11-27 ユーザーの決定） */}
+            <ButtonLink
+              to={`/events/new?${new URLSearchParams({ [COPY_FROM_PARAM]: item.id }).toString()}`}
+              variant="secondary"
+              size="small"
+            >
+              複製して作る
             </ButtonLink>
           </div>
         </>

@@ -8,7 +8,7 @@ import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
-import { APPLICATION_STATUS_LABELS } from '../applications/format';
+import { ApplicationStatusBadge } from '../applications/ApplicationStatusBadge';
 import {
   canChangeOwnApplication,
   OwnApplicationActions,
@@ -140,7 +140,7 @@ function EventDetail({ event, onChanged }: EventDetailProps) {
               <LocationSection eventId={event.id} isHost={event.isHost} />
             ) : (
               <section className="rounded-2xl border border-line bg-surface p-4">
-                <h2 className="text-lg font-bold">くわしい住所</h2>
+                <h2 className="text-lg font-bold">開催場所住所</h2>
                 <p className="text-muted">参加が承認された人だけに表示されます。</p>
               </section>
             )}
@@ -180,20 +180,26 @@ function ReportEventLink({ event }: { event: EventDetailData }) {
 
 function EventFacts({ event }: { event: PublicEvent }) {
   const filledRatio = (event.capacity - event.remaining) / event.capacity;
+  // 満員は、受付中と色みを変えて示す（docs/11の5-2「状態の色」）
+  const full = event.state === 'full';
 
   return (
     <dl className="flex flex-col gap-3.5">
       <Fact term="開催日時">{formatDateTimeRange(event.startsAt, event.endsAt)}</Fact>
       <Fact term="開催地">{areaLabel(event.area)}</Fact>
       <Fact term="残り枠">
-        <span className="text-2xl text-main-strong">{event.remaining}枠</span>
+        <span className={`text-2xl ${full ? 'text-accent-ink' : 'text-main-strong'}`}>
+          {full ? '満員' : `${event.remaining}枠`}
+        </span>
         <span className="ml-2 font-normal text-sub">募集{event.capacity}人</span>
         <span
           aria-hidden="true"
-          className="mt-1 block h-2.5 overflow-hidden rounded-full bg-main-tint"
+          className={`mt-1 block h-2.5 overflow-hidden rounded-full ${
+            full ? 'bg-accent-tint' : 'bg-main-tint'
+          }`}
         >
           <span
-            className="block h-full rounded-full bg-main"
+            className={`block h-full rounded-full ${full ? 'bg-accent' : 'bg-main'}`}
             style={{ width: `${filledRatio * 100}%` }}
           />
         </span>
@@ -261,7 +267,7 @@ function EventActions({ event, apply }: EventActionsProps) {
   if (event.isHost) {
     // 編集（一般公開の前、M-02）と締切・再開（公開後、M-03）は、MVPでは置かない
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col items-center gap-2">
         {event.hostSummary && (
           <p className="text-center text-sub">
             承認待ち <span className="font-bold text-ink">{event.hostSummary.pendingCount}</span>
@@ -269,8 +275,14 @@ function EventActions({ event, apply }: EventActionsProps) {
             <span className="font-bold text-ink">{event.hostSummary.approvedCount}</span>人
           </p>
         )}
-        <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>
-        <CancelEventAction event={event} onChanged={apply.onChanged} />
+        {/* 「申請者を見る」は中央にそろえる（2026-11-27 ユーザーの決定） */}
+        <div className="flex w-full max-w-80 flex-col">
+          <ButtonLink to={`/events/${event.id}/applicants`}>申請者を見る</ButtonLink>
+        </div>
+        {/* 中止の確認は、影響の説明を読みやすいよう幅いっぱいに出す */}
+        <div className="w-full">
+          <CancelEventAction event={event} onChanged={apply.onChanged} />
+        </div>
       </div>
     );
   }
@@ -284,7 +296,9 @@ function EventActions({ event, apply }: EventActionsProps) {
     <div className="flex flex-col gap-2">
       {/* 満員でも申請でき、承認するかは主催者が判断する（docs/11の2-2） */}
       {event.state === 'full' && (
-        <p className="text-center font-bold text-sub">満員です。申請すると主催者が判断します。</p>
+        <p className="text-center font-bold text-accent-ink">
+          満員です。申請すると主催者が判断します。
+        </p>
       )}
       <ApplyActions event={event} apply={apply} />
     </div>
@@ -343,7 +357,7 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
     switch (mine.status) {
       case 'approved':
         return canSeeLocation(event)
-          ? '参加が承認されました。くわしい住所を表示しています。'
+          ? '参加が承認されました。開催場所住所を表示しています。'
           : '参加が承認されていました。';
       case 'pending':
         return started || event.state === 'cancelled'
@@ -359,10 +373,6 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
         return '申請を取り下げました。';
     }
   })();
-  const label =
-    mine.status === 'pending' && (started || event.state === 'cancelled')
-      ? '受付終了'
-      : APPLICATION_STATUS_LABELS[mine.status];
   const canReapplyNow = mine.canReapply && accepting;
   // キャンセル・取り下げの後で、申請が合計3回に達した場合
   const reachedLimit =
@@ -373,7 +383,7 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
       <div className="flex flex-col items-center gap-1 text-center">
         <p>
           <span className="sr-only">あなたの申請：</span>
-          <Badge tone={mine.status === 'approved' ? 'main' : 'neutral'}>{label}</Badge>
+          <ApplicationStatusBadge status={mine.status} eventState={event.state} />
         </p>
         <p className="font-bold text-sub">{text}</p>
         {reachedLimit && (
@@ -390,7 +400,7 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
       {canReapplyNow && (
         <>
           {event.state === 'full' && (
-            <p className="text-center font-bold text-sub">
+            <p className="text-center font-bold text-accent-ink">
               満員です。申請すると主催者が判断します。
             </p>
           )}
@@ -493,7 +503,7 @@ function LocationSection({ eventId, isHost }: LocationSectionProps) {
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h2 id="event-location-heading" className="text-lg font-bold">
-          くわしい住所
+          開催場所住所
         </h2>
         <Badge tone="accent">承認された人だけ</Badge>
       </div>

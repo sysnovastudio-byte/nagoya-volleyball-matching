@@ -5,7 +5,6 @@ import { NotFoundPage } from '../../app/NotFoundPage';
 import { PC_QUERY, useMediaQuery } from '../../app/useMediaQuery';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource } from '../../app/useResource';
-import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { StartApplicantConversationButton } from '../conversations/StartApplicantConversationButton';
@@ -15,7 +14,7 @@ import { ageGroupLabel, genderLabel } from '../profiles/profileRules';
 import { formatDateTimeRange } from '../events/format';
 import { Avatar } from '../profiles/Avatar';
 import { displayName, experienceLabel } from '../profiles/format';
-import { APPLICATION_STATUS_LABELS, formatAppliedAt, REVOKE_REASON_LABELS } from './format';
+import { formatAppliedAt, REVOKE_REASON_LABELS } from './format';
 import { useApplicationRepository } from './repositoryContext';
 import {
   REVOKE_REASONS,
@@ -26,6 +25,7 @@ import {
   type RevokeRejection,
 } from './types';
 import { SegmentedControl } from './SegmentedControl';
+import { ApplicationStatusBadge } from './ApplicationStatusBadge';
 
 type Tab = 'pending' | 'approved' | 'other';
 
@@ -430,7 +430,7 @@ function ApplicantCollection({ applicants, renderActions }: ApplicantCollectionP
                 {formatAppliedAt(applicant.appliedAt)}
               </td>
               <td className="px-4 py-3 whitespace-nowrap">
-                <StatusBadge applicant={applicant} />
+                <ApplicationStatusBadge status={applicant.status} />
               </td>
               <td className="w-64 px-4 py-3">
                 <div className="flex flex-col items-start gap-2">{renderActions(applicant)}</div>
@@ -479,14 +479,6 @@ function ApplicantBio({ applicant }: { applicant: Applicant }) {
   return profile.bio ?? <span className="text-muted">自己紹介はありません。</span>;
 }
 
-function StatusBadge({ applicant }: { applicant: Applicant }) {
-  return (
-    <Badge tone={applicant.status === 'approved' ? 'main' : 'neutral'}>
-      {APPLICATION_STATUS_LABELS[applicant.status]}
-    </Badge>
-  );
-}
-
 interface ApplicantCardProps {
   applicant: Applicant;
   /** 承認・却下の操作 */
@@ -503,7 +495,7 @@ function ApplicantCard({ applicant, children }: ApplicantCardProps) {
         <div className="min-w-0 grow">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <ApplicantName applicant={applicant} />
-            <StatusBadge applicant={applicant} />
+            <ApplicationStatusBadge status={applicant.status} />
           </div>
           <dl className="mt-1 text-sub">
             {experience && (
@@ -697,7 +689,7 @@ function RevokeActions({
     >
       <p className="mb-2 font-bold">
         取り消すと、{name}
-        さんはくわしい住所を見られなくなり、この募集にもう申請できません。{name}さんに通知します。
+        さんは開催場所住所を見られなくなり、この募集にもう申請できません。{name}さんに通知します。
       </p>
       <fieldset className="mb-3">
         <legend className="mb-1 font-bold">

@@ -267,7 +267,7 @@ describe('募集の詳細', () => {
   );
 });
 
-describe('くわしい住所', () => {
+describe('開催場所住所', () => {
   it('主催者にだけ返す', async () => {
     expect(await setup({ userId: HOST_ID }).repository.getLocation(HOSTED_EVENT)).toEqual({
       venueName: 'ダミー体育館A',

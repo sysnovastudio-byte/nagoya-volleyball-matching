@@ -1,10 +1,27 @@
+import type { BadgeTone } from '../../components/ui/Badge';
 import { toDateParts } from '../events/format';
+import type { ReportStatus } from '../reports/types';
 import type { AdminUserStatus, ModerationActionType } from './types';
 
 export const USER_STATUS_LABELS: Record<AdminUserStatus, string> = {
   active: '利用中',
   suspended: '利用停止中',
   withdrawn: '退会',
+};
+
+/** 通報の状態の色（docs/11の5-2「状態の色」）。 */
+export const REPORT_STATUS_TONES: Record<ReportStatus, BadgeTone> = {
+  open: 'accent',
+  inProgress: 'mainTint',
+  resolved: 'successTint',
+  dismissed: 'neutral',
+};
+
+/** 利用者の状態の色（docs/11の5-2「状態の色」）。 */
+export const USER_STATUS_TONES: Record<AdminUserStatus, BadgeTone> = {
+  active: 'successTint',
+  suspended: 'danger',
+  withdrawn: 'outline',
 };
 
 export const ACTION_LABELS: Record<ModerationActionType, string> = {
