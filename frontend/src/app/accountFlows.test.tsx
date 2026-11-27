@@ -1,6 +1,7 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { findDevUser } from '../dev/devDatabase';
 import { renderApp } from '../test/renderApp';
 
 const A = 'dev-user-a';
@@ -172,6 +173,106 @@ describe('認証メールの再送（AUTH-05、SCR-003）', () => {
     renderApp('/signup');
 
     expect(await screen.findByRole('group', { name: 'Bot対策の確認' })).toHaveTextContent('未接続');
+  });
+});
+
+describe('退会（SCR-017）', () => {
+  it('説明を読み、パスワードを再入力して退会する', async () => {
+    const user = userEvent.setup();
+    const { db, session } = renderApp('/settings/withdraw', { userId: A });
+
+    expect(await screen.findByRole('heading', { level: 1, name: '退会' })).toBeInTheDocument();
+    const effects = await screen.findByRole('region', { name: '退会すると' });
+    expect(effects).toHaveTextContent('開催場所住所を、すべて削除します');
+    expect(effects).toHaveTextContent('「退会したユーザー」として残ります');
+    expect(effects).toHaveTextContent('参加2件、承認待ちの申請1件');
+
+    await user.click(screen.getByRole('button', { name: '退会する' }));
+    expect(screen.getByText('パスワードを入力してください。')).toBeInTheDocument();
+    expect(session.getUserId()).toBe(A);
+
+    await user.type(screen.getByLabelText(/パスワード/), 'password');
+    await user.click(screen.getByRole('button', { name: '退会する' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '退会しました' }),
+    ).toBeInTheDocument();
+    expect(session.getUserId()).toBeNull();
+    expect(findDevUser(db, A)).toBeUndefined();
+    // ログアウトした状態の上部の帯になる
+    expect(screen.getAllByRole('link', { name: 'ログイン' }).length).toBeGreaterThan(0);
+  });
+
+  it('退会した人は、相手の会話で「退会したユーザー」と示す', async () => {
+    const user = userEvent.setup();
+    const { switchUser, router } = renderApp('/settings/withdraw', { userId: A });
+
+    await user.type(await screen.findByLabelText(/パスワード/), 'password');
+    await user.click(screen.getByRole('button', { name: '退会する' }));
+    await screen.findByRole('heading', { level: 1, name: '退会しました' });
+
+    switchUser(B);
+    await act(() => router.navigate('/conversations'));
+    const conversations = await screen.findByRole('list', { name: '会話の一覧' });
+    expect(within(conversations).getAllByText('退会したユーザー').length).toBeGreaterThan(0);
+  });
+
+  it('パスワードが違えば、退会しない', async () => {
+    const user = userEvent.setup();
+    const { session } = renderApp('/settings/withdraw', {
+      userId: A,
+      account: {
+        withdraw: () => Promise.resolve({ status: 'rejected', reason: 'wrongPassword' }),
+      },
+    });
+
+    await user.type(await screen.findByLabelText(/パスワード/), 'wrong-password');
+    await user.click(screen.getByRole('button', { name: '退会する' }));
+
+    expect(await screen.findByText('パスワードが違います。')).toBeInTheDocument();
+    expect(screen.getByLabelText(/パスワード/)).toHaveFocus();
+    expect(session.getUserId()).toBe(A);
+  });
+
+  it('開催前の募集を主催している人には、その募集を示し、申し込みの欄を出さない', async () => {
+    renderApp('/settings/withdraw', { userId: B });
+
+    const notice = await screen.findByRole('region', { name: '今は退会できません' });
+    expect(
+      within(notice).getByRole('link', { name: 'はじめて歓迎！土曜の午後バレー' }),
+    ).toHaveAttribute('href', '/events/dev-beginner-afternoon');
+    expect(screen.queryByLabelText(/パスワード/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '退会する' })).not.toBeInTheDocument();
+  });
+
+  it('利用停止中の人には、問い合わせで受け付けることを示す（M-06）', async () => {
+    renderApp('/settings/withdraw', { userId: 'dev-user-suspended' });
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: '利用停止中は、この画面から退会できません',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'プライバシーポリシー' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
+    expect(screen.queryByRole('button', { name: '退会する' })).not.toBeInTheDocument();
+  });
+
+  it('管理用のアカウントで退会の画面を開くと、退会できないと示す', async () => {
+    renderApp('/settings/withdraw', { userId: 'dev-admin' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '管理用のアカウントは退会できません' }),
+    ).toBeInTheDocument();
+  });
+
+  it('未ログインならログイン画面へ移る', async () => {
+    renderApp('/settings/withdraw');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'ログイン' })).toBeInTheDocument();
   });
 });
 

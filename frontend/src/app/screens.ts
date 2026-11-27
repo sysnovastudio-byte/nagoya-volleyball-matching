@@ -53,6 +53,7 @@ export const SCREENS: readonly Screen[] = [
   },
   { path: '/users/:userId', name: 'プロフィール', parent: HOME },
   { path: '/settings', name: '設定', parent: { to: () => '/profile', name: 'プロフィール' } },
+  { path: '/settings/withdraw', name: '退会', parent: { to: () => '/settings', name: '設定' } },
   { path: '/login', name: 'ログイン', parent: HOME },
   { path: '/signup', name: '新規登録', parent: HOME },
   { path: '/signup/sent', name: 'メール認証', parent: { to: () => '/signup', name: '新規登録' } },

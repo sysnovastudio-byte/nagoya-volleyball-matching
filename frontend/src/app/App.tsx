@@ -1,4 +1,5 @@
 import { createRoutesFromElements, Route } from 'react-router';
+import { WithdrawalPage } from '../features/account/WithdrawalPage';
 import { RequireAdmin } from '../features/admin/AdminParts';
 import { ReportDetailPage, ReportListPage } from '../features/admin/ReportAdminPages';
 import { UserDetailPage, UserSearchPage } from '../features/admin/UserAdminPages';
@@ -71,8 +72,9 @@ export const appRoutes = createRoutesFromElements(
       {/* 通報（SCR-019）。管理者・利用停止中の人は RequireLogin が案内を示す */}
       <Route path="report/:kind/:targetId" element={<ReportPage />} />
     </Route>
-    {/* 要ログイン。ログアウトの後の移動先が違うため、画面の中で確認する */}
+    {/* 要ログイン。ログアウト・退会の後の表示が違うため、画面の中で確認する */}
     <Route path="settings" element={<SettingsPage />} />
+    <Route path="settings/withdraw" element={<WithdrawalPage />} />
     {/* 管理の画面（SCR-021・022）。入口は設定だけ（docs/11の4-1）。権限は窓口が確かめる */}
     <Route path="admin" element={<RequireAdmin />}>
       <Route path="reports" element={<ReportListPage />} />

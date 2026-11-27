@@ -3,6 +3,7 @@ import type userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { expect } from 'vitest';
 import { appRoutes } from '../app/App';
+import { createDevAccountRepository } from '../dev/devAccountRepository';
 import { createDevAdminRepository } from '../dev/devAdminRepository';
 import { createDevApplicationRepository } from '../dev/devApplicationRepository';
 import { createDevAuthRepository } from '../dev/devAuthRepository';
@@ -14,6 +15,8 @@ import { createDevNotificationRepository } from '../dev/devNotificationRepositor
 import { createDevProfileRepository } from '../dev/devProfileRepository';
 import { createDevReportRepository } from '../dev/devReportRepository';
 import { createDevSession } from '../dev/devSession';
+import { AccountRepositoryContext } from '../features/account/repositoryContext';
+import type { AccountRepository } from '../features/account/types';
 import { AdminRepositoryContext } from '../features/admin/repositoryContext';
 import { ApplicationRepositoryContext } from '../features/applications/repositoryContext';
 import { AuthRepositoryContext } from '../features/auth/repositoryContext';
@@ -36,6 +39,7 @@ export function renderApp(
     events,
     conversations,
     auth,
+    account,
   }: {
     userId?: string | null;
     /** 管理者（ダミー）の多要素認証 */
@@ -43,6 +47,7 @@ export function renderApp(
     events?: Partial<EventRepository>;
     conversations?: Partial<ConversationRepository>;
     auth?: Partial<AuthRepository>;
+    account?: Partial<AccountRepository>;
   } = {},
 ) {
   const db = createDevDatabase(new Date());
@@ -53,6 +58,7 @@ export function renderApp(
     ...conversations,
   };
   const authRepository = { ...createDevAuthRepository({ db, session }), ...auth };
+  const accountRepository = { ...createDevAccountRepository({ db, session }), ...account };
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
   render(
     <AuthRepositoryContext value={authRepository}>
@@ -66,7 +72,9 @@ export function renderApp(
                 <BlockRepositoryContext value={createDevBlockRepository({ db, session })}>
                   <ReportRepositoryContext value={createDevReportRepository({ db, session })}>
                     <AdminRepositoryContext value={createDevAdminRepository({ db, session })}>
-                      <RouterProvider router={router} />
+                      <AccountRepositoryContext value={accountRepository}>
+                        <RouterProvider router={router} />
+                      </AccountRepositoryContext>
                     </AdminRepositoryContext>
                   </ReportRepositoryContext>
                 </BlockRepositoryContext>
