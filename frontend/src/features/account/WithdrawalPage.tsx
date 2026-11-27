@@ -139,7 +139,10 @@ function WithdrawalContent({ onStart, onFinish }: WithdrawalContentProps) {
   );
 }
 
-/** 退会で行うこと（docs/06の5-8、docs/11の3-4）。住所が消えることを必ず示す（DB-01）。 */
+/**
+ * 退会で行うこと（docs/06の5-8、docs/11の3-4）。住所が消えることを必ず示す（DB-01）。
+ * 取り消す参加・申請があれば、その件数も示す（2026-11-27の決定）。
+ */
 function WithdrawalExplanation({ check }: { check: WithdrawalCheck }) {
   const impact = check.status === 'available' ? check.impact : null;
   return (

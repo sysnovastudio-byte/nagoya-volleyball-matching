@@ -170,6 +170,30 @@ describe('認証メールの再送（AUTH-05、SCR-003）', () => {
     expect(screen.getByRole('link', { name: '認証に成功するリンク' })).toBeInTheDocument();
   });
 
+  it('ログイン画面の「認証メールが届かない場合」から再送できる', async () => {
+    const user = userEvent.setup();
+    renderApp('/login');
+
+    await user.click(await screen.findByRole('link', { name: '認証メールが届かない場合' }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '認証メールの再送' }),
+    ).toBeInTheDocument();
+    // 画面の見出しと同じ見出しを、もう1つ置かない
+    expect(
+      screen.queryByRole('heading', { level: 2, name: '認証メールの再送' }),
+    ).not.toBeInTheDocument();
+
+    const form = screen.getByRole('form', { name: '認証メールの再送' });
+    await user.type(within(form).getByLabelText(/メールアドレス/), 'test@example.com');
+    await user.click(within(form).getByRole('button', { name: '認証メールを再送する' }));
+
+    expect(await within(form).findByRole('status')).toHaveTextContent(
+      '入力したメールアドレスが認証待ちであれば、認証メールを再送しました。',
+    );
+    expect(screen.getByText('メールのリンクを開く（開発用）')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ログインに戻る' })).toBeInTheDocument();
+  });
+
   it('登録の画面にも、Bot対策の置き場所と未接続の表示がある', async () => {
     renderApp('/signup');
 

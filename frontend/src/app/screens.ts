@@ -59,6 +59,11 @@ export const SCREENS: readonly Screen[] = [
   { path: '/signup/sent', name: 'メール認証', parent: { to: () => '/signup', name: '新規登録' } },
   { path: '/auth/confirm', name: 'メール認証', parent: HOME },
   {
+    path: '/auth/resend',
+    name: '認証メールの再送',
+    parent: { to: () => '/login', name: 'ログイン' },
+  },
+  {
     path: '/password-reset',
     name: 'パスワード再設定',
     parent: { to: () => '/login', name: 'ログイン' },

@@ -31,7 +31,7 @@ export const CONSENTS: readonly ConsentItem[] = [
     label: '同意する',
     accessibleLabel: '利用規約・プライバシーポリシーに同意する',
     readLink: { to: '/terms', text: '利用規約・プライバシーポリシーを読む' },
-    // 「読む」のリンクは1つ（docs/11の7-2）。利用規約の画面から、プライバシーポリシーへ移れる
+    // 「読む」のリンクは1つ（docs/11の7-2）で、利用規約を開く。利用規約の画面から、プライバシーポリシーへ移れる（2026-11-27の決定）
     documents: ['terms', 'privacy'],
   },
   {

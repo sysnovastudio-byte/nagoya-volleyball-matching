@@ -51,7 +51,7 @@ export type VerifyEmailResult = EmailLinkResult;
  * メールを送る申し込みの結果（認証メールの再送・パスワード再設定）。
  * 登録の有無・認証の有無を見分けられないよう、受け付けたら同じ結果を返す（docs/07の3章）。
  * 本番で Supabase Auth が回数の制限（同じ利用者に60秒の間隔、docs/05の3-3）で断った場合も、
- * 登録済みの人だけが断られるため、同じ結果にする。間隔は画面が守る。
+ * 登録済みの人だけが断られるため、同じ結果にする。間隔は画面が守る（2026-11-27の決定）。
  */
 export type EmailRequestResult =
   { status: 'sent' } | { status: 'rejected'; reason: 'invalid' | 'notLoggedIn' };
@@ -88,7 +88,10 @@ export interface AuthRepository {
    * （本番は Supabase Auth の再設定用のセッション）。
    */
   verifyPasswordReset(token: string): Promise<EmailLinkResult>;
-  /** リンクを確かめた後に、新しいパスワードを設定する。 */
+  /**
+   * リンクを確かめた後に、新しいパスワードを設定する。本番では、変えたらほかの端末のログインを終わらせる
+   * （Supabase Auth の signOut の scope 'others'。本番に接続するときに入れる。2026-11-27の決定）。
+   */
   updatePassword(input: { password: string }): Promise<UpdatePasswordResult>;
   signOut(): Promise<void>;
 }

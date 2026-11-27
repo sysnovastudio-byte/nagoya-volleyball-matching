@@ -5,7 +5,11 @@ import { ReportDetailPage, ReportListPage } from '../features/admin/ReportAdminP
 import { UserDetailPage, UserSearchPage } from '../features/admin/UserAdminPages';
 import { ActivityPage } from '../features/applications/ActivityPage';
 import { ApplicantsPage } from '../features/applications/ApplicantsPage';
-import { ConfirmEmailPage, VerificationSentPage } from '../features/auth/EmailVerificationPages';
+import {
+  ConfirmEmailPage,
+  ResendVerificationPage,
+  VerificationSentPage,
+} from '../features/auth/EmailVerificationPages';
 import { LoginPage } from '../features/auth/LoginPage';
 import {
   PasswordResetConfirmPage,
@@ -49,6 +53,7 @@ export const appRoutes = createRoutesFromElements(
     <Route path="signup" element={<SignUpPage />} />
     <Route path="signup/sent" element={<VerificationSentPage />} />
     <Route path="auth/confirm" element={<ConfirmEmailPage />} />
+    <Route path="auth/resend" element={<ResendVerificationPage />} />
     {/* パスワード再設定（SCR-004）。ログイン中はパスワードの変更として使う（Q-50） */}
     <Route path="password-reset" element={<PasswordResetRequestPage />} />
     <Route path="password-reset/confirm" element={<PasswordResetConfirmPage />} />

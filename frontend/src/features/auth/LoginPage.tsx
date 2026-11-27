@@ -131,6 +131,12 @@ function LoginForm() {
             パスワードを忘れた場合
           </Link>
         </p>
+        {/* 認証メールの再送（AUTH-05、SCR-003）。メールを消してしまった人のため */}
+        <p>
+          <Link to="/auth/resend" className="font-bold text-main-strong underline">
+            認証メールが届かない場合
+          </Link>
+        </p>
       </div>
     </AuthLayout>
   );

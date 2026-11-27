@@ -84,6 +84,7 @@ export function SettingsPage() {
         )}
         <SettingsLinks
           links={[
+            // 利用停止中の人にも出す（アカウントの安全のための操作。2026-11-27の決定）
             { to: '/password-reset', label: 'パスワードの変更' },
             // 管理用のアカウントは退会できない（docs/06の5-8）。停止中の人には、問い合わせの案内を示す（M-06）
             ...(session.viewer.role === 'user'

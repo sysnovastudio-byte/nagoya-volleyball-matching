@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useCooldown } from '../../app/useCooldown';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS } from '../../components/ui/FormField';
@@ -61,17 +61,41 @@ export function VerificationSentPage() {
 }
 
 /**
+ * SCR-003 メール認証：認証メールの再送だけの画面（AUTH-05）。ログイン画面の「認証メールが届かない場合」から開く
+ * （メールを消してしまった人のため。2026-11-27の決定）。
+ */
+export function ResendVerificationPage() {
+  return (
+    <AuthLayout title="認証メールの再送">
+      <p className="mb-4">
+        登録の後に届く認証メールを、もう一度送ります。リンクの有効期限は、送ってから
+        {LINK_VALID_HOURS}時間です。
+      </p>
+      <ResendVerificationForm showDevLinks standalone />
+      <p className="mt-6 border-t border-line pt-5">
+        <Link to="/login" className="font-bold text-main-strong underline">
+          ログインへ戻る
+        </Link>
+      </p>
+    </AuthLayout>
+  );
+}
+
+/**
  * 認証メールの再送（AUTH-05）。メールアドレスは画面に残していないため、入力してもらう。
  * 認証待ちでないアドレスでも同じ文を示し、登録の有無を見分けられないようにする（docs/07の3章）。
  */
 function ResendVerificationForm({
   initiallyWaiting = false,
   showDevLinks = false,
+  standalone = false,
 }: {
   /** 直前にメールを送った画面では、開いた時点から60秒待つ */
   initiallyWaiting?: boolean;
   /** 再送した後に、開発用のメールのリンクを示す（まだ示していない画面だけ） */
   showDevLinks?: boolean;
+  /** 再送だけの画面に置く。画面の見出しがあるため、区切りの線と見出しを置かない */
+  standalone?: boolean;
 }) {
   const repository = useAuthRepository();
   const cooldown = useCooldown(RESEND_INTERVAL_SECONDS, initiallyWaiting);
@@ -111,10 +135,15 @@ function ResendVerificationForm({
   };
 
   return (
-    <section aria-labelledby="resend-heading" className="mt-6 border-t border-line pt-5">
-      <h2 id="resend-heading" className="mb-2 text-lg font-bold">
-        認証メールの再送
-      </h2>
+    <section
+      aria-labelledby={standalone ? undefined : 'resend-heading'}
+      className={standalone ? undefined : 'mt-6 border-t border-line pt-5'}
+    >
+      {!standalone && (
+        <h2 id="resend-heading" className="mb-2 text-lg font-bold">
+          認証メールの再送
+        </h2>
+      )}
       <p className="mb-4 text-muted">
         登録したメールアドレスを入力してください。再送は、{RESEND_INTERVAL_SECONDS}
         秒以上あけてできます。
