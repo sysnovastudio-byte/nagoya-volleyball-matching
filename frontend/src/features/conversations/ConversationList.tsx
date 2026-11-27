@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import type { Resource } from '../../app/useResource';
+import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
 import { formatDateTimeRange } from '../events/format';
@@ -95,7 +96,15 @@ function ConversationItem({
       <Avatar />
       <span className="flex min-w-0 grow flex-col">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate font-bold">{displayName(conversation.partner)}</span>
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate font-bold">{displayName(conversation.partner)}</span>
+            {/* 自分の未読だけ（M-09）。色だけに頼らず文字で示す */}
+            {conversation.hasUnread && (
+              <span className="shrink-0">
+                <Badge tone="accent">未読あり</Badge>
+              </span>
+            )}
+          </span>
           <span className="shrink-0 text-sm text-muted">
             {conversation.lastMessageAt
               ? shortDateTime(conversation.lastMessageAt)
@@ -106,7 +115,6 @@ function ConversationItem({
         <span className="text-sm text-muted">
           {formatDateTimeRange(event.startsAt, event.endsAt)}
         </span>
-        {/* 「未読あり」（M-09、MVPに含めると承認済み）は、サイクル3でこの行に札を置く */}
       </span>
     </Link>
   );

@@ -7,6 +7,7 @@ import { useResource } from '../../app/useResource';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
+import { BlockActions, useBlockState } from '../safety/BlockActions';
 import { Avatar } from './Avatar';
 import { displayName, experienceLabel } from './format';
 import { useProfileRepository } from './repositoryContext';
@@ -15,7 +16,8 @@ import type { AgeGroup, MyProfile, PublicProfile } from './types';
 
 /**
  * SCR-013 プロフィール（PROF-03）。ニックネーム・経験レベル・自己紹介と、画像の代わりの絵柄。
- * 年代は本人にだけ示す（主催者は申請者一覧で見る）。性別・活動地域（M-01）と、ブロック・通報は加えない。
+ * 年代は本人にだけ示す（主催者は申請者一覧で見る）。性別・活動地域（M-01）は加えない。
+ * ほかの人のプロフィールでは、ブロックと解除ができる（SAFE-04・CND-06）。通報はサイクル4で加える。
  */
 export function MyProfilePage() {
   const repository = useProfileRepository();
@@ -50,7 +52,28 @@ export function UserProfilePage() {
   if (result.status === 'loading') return <Loading />;
   if (result.status === 'error') return <LoadError onRetry={retry} />;
   const [profile] = result.value;
-  return profile ? <ProfileView profile={profile} /> : <NotFoundPage />;
+  if (!profile) return <NotFoundPage />;
+  return (
+    <ProfileView profile={profile}>
+      {/* 退会した人はブロックできない（相手がいない） */}
+      {!profile.isWithdrawn && <ProfileBlock userId={profile.userId} name={displayName(profile)} />}
+    </ProfileView>
+  );
+}
+
+/** 他人のプロフィールの、ブロックと解除。自分自身の場合は、窓口が状態を返さないため出さない。 */
+function ProfileBlock({ userId, name }: { userId: string; name: string }) {
+  const { blockedByMe, reload } = useBlockState(userId);
+  if (blockedByMe === null) return null;
+  return (
+    <BlockActions
+      userId={userId}
+      name={name}
+      blockedByMe={blockedByMe}
+      allowUnblock
+      onChanged={reload}
+    />
+  );
 }
 
 function Loading() {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '../../components/ui/Button';
-import { sendableUntil } from './messageRules';
+import { REJECTED_MESSAGES, sendableUntil } from './messageRules';
 import { useConversationRepository } from './repositoryContext';
 
 interface StartApplicantConversationButtonProps {
@@ -38,8 +38,12 @@ export function StartApplicantConversationButton({
         await navigate(`/conversations/${result.conversationId}`);
         return;
       }
-      // 理由は示さない（Q-20）
-      setError('今は会話を始められません。');
+      // 期限・ブロックなどの理由は示さない（Q-20）。回数の上限だけは案内する
+      setError(
+        result.reason === 'rateLimited'
+          ? REJECTED_MESSAGES.startRateLimited
+          : REJECTED_MESSAGES.notAllowed,
+      );
     } catch {
       setError('会話を開けませんでした。通信の状態を確認して、もう一度お試しください。');
     } finally {

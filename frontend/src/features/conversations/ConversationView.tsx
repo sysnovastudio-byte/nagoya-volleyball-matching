@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { useResource } from '../../app/useResource';
 import { Button } from '../../components/ui/Button';
@@ -8,18 +8,23 @@ import { textLength } from '../../lib/text';
 import { formatDateTimeRange } from '../events/format';
 import { Avatar } from '../profiles/Avatar';
 import { displayName } from '../profiles/format';
+import { BlockActions, useBlockState } from '../safety/BlockActions';
 import { conversationEventTitle, messageDay, messageTime } from './format';
-import { MESSAGE_MAX_LENGTH, checkMessageBody } from './messageRules';
+import { MESSAGE_MAX_LENGTH, REJECTED_MESSAGES, checkMessageBody } from './messageRules';
 import { useConversationRepository } from './repositoryContext';
 import type { ConversationDetail, Message } from './types';
 
 interface ConversationViewProps {
   conversationId: string;
-  /** 送信したときに、一覧の並びを更新する */
+  /** 送信したとき・読んだときに、一覧の並びと「未読あり」を更新する */
   onChanged: () => void;
 }
 
-/** SCR-011 会話。閲覧と送信。編集・削除はできない（docs/11の3-3）。 */
+/**
+ * SCR-011 会話。閲覧と送信。編集・削除はできない（docs/11の3-3）。
+ * 開いたら、表示したメッセージまで読んだことにする（M-09）。相手には既読を示さない。
+ * 相手のブロック（SAFE-04）もここでできる。解除は相手のプロフィールで行う（M-12）。
+ */
 export function ConversationView({ conversationId, onChanged }: ConversationViewProps) {
   const repository = useConversationRepository();
   const { result, retry, reload } = useResource(`conversation:${conversationId}`, () =>
@@ -56,6 +61,7 @@ export function ConversationView({ conversationId, onChanged }: ConversationView
     <Conversation
       detail={result.value}
       onRefresh={reload}
+      onRead={onChanged}
       onSent={() => {
         reload();
         onChanged();
@@ -67,12 +73,38 @@ export function ConversationView({ conversationId, onChanged }: ConversationView
 interface ConversationProps {
   detail: ConversationDetail;
   onRefresh: () => void;
+  /** 読んだことを記録した後に呼ぶ（一覧の「未読あり」を消す） */
+  onRead: () => void;
   onSent: () => void;
 }
 
-function Conversation({ detail, onRefresh, onSent }: ConversationProps) {
+function Conversation({ detail, onRefresh, onRead, onSent }: ConversationProps) {
+  const repository = useConversationRepository();
   const { conversation } = detail;
   const { event, partner } = conversation;
+  const partnerName = displayName(partner);
+  // 自分が相手をブロックしているか。退会した相手は null（操作を出さない）
+  const block = useBlockState(partner.userId);
+  const readSeq = detail.messages.at(-1)?.seq;
+  const { hasUnread } = conversation;
+  // 呼び出し元で毎回作られる関数のため、効果の依存に含めない
+  const notifyRead = useEffectEvent(onRead);
+
+  useEffect(() => {
+    // 未読がある場合だけ、表示した最後のメッセージまで読んだことにする
+    if (!hasUnread || readSeq === undefined) return;
+    let active = true;
+    repository.markRead(conversation.id, readSeq).then(
+      () => {
+        if (active) notifyRead();
+      },
+      // 記録できなくても、閲覧は続けられる。次に開いたときに、もう一度記録する
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, [repository, conversation.id, hasUnread, readSeq]);
   // 送信した直後は、読み込み直す前でも自分のメッセージを示す
   const [sent, setSent] = useState<Message[]>([]);
   const messages = [
@@ -98,10 +130,10 @@ function Conversation({ detail, onRefresh, onSent }: ConversationProps) {
           <div className="flex min-w-0 grow flex-col">
             <h1 id="conversation-heading" className="text-xl font-bold">
               {partner.isWithdrawn ? (
-                displayName(partner)
+                partnerName
               ) : (
                 <Link to={`/users/${partner.userId}`} className="text-main-strong underline">
-                  {displayName(partner)}
+                  {partnerName}
                 </Link>
               )}
             </h1>
@@ -123,6 +155,17 @@ function Conversation({ detail, onRefresh, onSent }: ConversationProps) {
             更新する
           </Button>
         </div>
+        {block.blockedByMe === false && (
+          <div className="mt-2 flex justify-end">
+            <BlockActions
+              userId={partner.userId}
+              name={partnerName}
+              blockedByMe={false}
+              allowUnblock={false}
+              onChanged={block.reload}
+            />
+          </div>
+        )}
       </header>
 
       <div className="grow px-4 py-4">
@@ -141,7 +184,7 @@ function Conversation({ detail, onRefresh, onSent }: ConversationProps) {
                   className="flex flex-col"
                 >
                   {newDay && <p className="my-2 text-center text-sm text-muted">{day}</p>}
-                  <MessageBubble message={message} partnerName={displayName(partner)} />
+                  <MessageBubble message={message} partnerName={partnerName} />
                 </li>
               );
             })}
@@ -149,7 +192,20 @@ function Conversation({ detail, onRefresh, onSent }: ConversationProps) {
         )}
       </div>
 
-      {conversation.withinSendPeriod ? (
+      {!conversation.withinSendPeriod ? (
+        <p className={FOOTER_NOTE_CLASS}>
+          送信できる期間（開催の終了から7日後まで）が過ぎたため、閲覧だけできます。
+        </p>
+      ) : block.blockedByMe ? (
+        // ブロックした本人にだけ示す。相手の画面では、送信したときに「送信できません」とだけ示す
+        <p className={FOOTER_NOTE_CLASS}>
+          この相手をブロックしているため、送信できません。解除は
+          <Link to={`/users/${partner.userId}`} className="font-bold text-main-strong underline">
+            相手のプロフィール
+          </Link>
+          でできます。
+        </p>
+      ) : (
         <Composer
           conversationId={conversation.id}
           onSent={(message) => {
@@ -157,14 +213,13 @@ function Conversation({ detail, onRefresh, onSent }: ConversationProps) {
             onSent();
           }}
         />
-      ) : (
-        <p className="sticky bottom-(--member-nav-h) border-t border-line bg-surface px-4 py-3 text-muted lg:rounded-b-2xl">
-          送信できる期間（開催の終了から7日後まで）が過ぎたため、閲覧だけできます。
-        </p>
       )}
     </section>
   );
 }
+
+const FOOTER_NOTE_CLASS =
+  'sticky bottom-(--member-nav-h) border-t border-line bg-surface px-4 py-3 text-muted lg:rounded-b-2xl';
 
 function MessageBubble({ message, partnerName }: { message: Message; partnerName: string }) {
   return (
@@ -229,8 +284,13 @@ function Composer({ conversationId, onSent }: ComposerProps) {
         requestId.current = newRequestId();
         onSent(result.message);
       } else {
-        // 理由は示さない（docs/11の3-1、Q-20）。入力した内容は残す
-        setError('送信できません');
+        // 期間・ブロックなどの理由は示さない（docs/11の3-1、Q-20）。回数の上限だけは案内する。
+        // 入力した内容は残す
+        setError(
+          result.reason === 'rateLimited'
+            ? REJECTED_MESSAGES.sendRateLimited
+            : REJECTED_MESSAGES.notAllowed,
+        );
       }
     } catch {
       setError('送信できませんでした。通信の状態を確認して、もう一度お試しください。');

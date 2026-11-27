@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDevApplicationRepository } from '../dev/devApplicationRepository';
 import { createDevConversationRepository } from '../dev/devConversationRepository';
 import { createDevAuthRepository } from '../dev/devAuthRepository';
+import { createDevBlockRepository } from '../dev/devBlockRepository';
 import { createDevDatabase } from '../dev/devDatabase';
 import { createDevEventRepository } from '../dev/devEventRepository';
 import { createDevNotificationRepository } from '../dev/devNotificationRepository';
@@ -18,6 +19,7 @@ import { EventRepositoryContext } from '../features/events/repositoryContext';
 import { NotificationRepositoryContext } from '../features/notifications/repositoryContext';
 import type { EventRepository } from '../features/events/types';
 import { ProfileRepositoryContext } from '../features/profiles/repositoryContext';
+import { BlockRepositoryContext } from '../features/safety/repositoryContext';
 import { appRoutes } from './App';
 
 const HOST = 'dev-user-b';
@@ -52,9 +54,11 @@ function renderApp(
               <NotificationRepositoryContext
                 value={createDevNotificationRepository({ db, session })}
               >
-                <RouterProvider
-                  router={createMemoryRouter(appRoutes, { initialEntries: [path] })}
-                />
+                <BlockRepositoryContext value={createDevBlockRepository({ db, session })}>
+                  <RouterProvider
+                    router={createMemoryRouter(appRoutes, { initialEntries: [path] })}
+                  />
+                </BlockRepositoryContext>
               </NotificationRepositoryContext>
             </ConversationRepositoryContext>
           </ProfileRepositoryContext>
@@ -2000,5 +2004,214 @@ describe('戻るボタン（docs/11の5-1）', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '入力を続ける' }));
     expect(screen.getByLabelText(/タイトル/)).toHaveValue('日曜の練習会');
+  });
+});
+
+describe('ブロックと解除（SAFE-04・CND-06）', () => {
+  it('相手のプロフィールで、影響を確かめてからブロックし、解除もできる', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('button', { name: 'そらさんをブロックする' }));
+    const confirm = screen.getByRole('group', { name: 'ブロックの確認' });
+    expect(confirm).toHaveTextContent('相手に、ブロックしたことは知らされません。');
+    expect(confirm).toHaveTextContent(
+      'すでにある申請・参加と、これまでの会話は、そのまま残ります。',
+    );
+    await user.click(within(confirm).getByRole('button', { name: 'ブロックする' }));
+
+    expect(await findToast()).toHaveTextContent('そらさんをブロックしました。');
+    expect(db.blocks).toMatchObject([{ blockerId: 'dev-user-a', blockedId: 'dev-user-b' }]);
+    expect(screen.getByText('この相手をブロックしています。')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'ブロックを解除する' }));
+    expect(
+      await screen.findByRole('button', { name: 'そらさんをブロックする' }),
+    ).toBeInTheDocument();
+    expect(db.blocks).toEqual([]);
+  });
+
+  it('ブロックの確認は、やめると何もしない', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('button', { name: 'そらさんをブロックする' }));
+    await user.click(screen.getByRole('button', { name: 'やめる' }));
+
+    expect(screen.queryByRole('group', { name: 'ブロックの確認' })).not.toBeInTheDocument();
+    expect(db.blocks).toEqual([]);
+  });
+
+  it('自分のプロフィールには、ブロックを出さない', async () => {
+    renderApp('/users/dev-user-a', { userId: 'dev-user-a' });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'あおい' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ブロック/ })).not.toBeInTheDocument();
+  });
+
+  it('ブロックされた側のプロフィールには、ブロックされたことを示さない', async () => {
+    const { db } = renderApp('/users/dev-user-b', { userId: 'dev-user-a' });
+    db.blocks.push({ blockerId: 'dev-user-b', blockedId: 'dev-user-a', createdAt: new Date() });
+
+    expect(
+      await screen.findByRole('button', { name: 'そらさんをブロックする' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ブロックしています|ブロックされ/)).not.toBeInTheDocument();
+  });
+
+  it('会話からもブロックでき、その後は送信の代わりに解除の場所を示す', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/conversations/dev-conv-question', { userId: 'dev-user-a' });
+
+    await user.click(await screen.findByRole('button', { name: 'そらさんをブロックする' }));
+    await user.click(
+      within(screen.getByRole('group', { name: 'ブロックの確認' })).getByRole('button', {
+        name: 'ブロックする',
+      }),
+    );
+
+    expect(
+      await screen.findByText(/この相手をブロックしているため、送信できません。/),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('メッセージ')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '相手のプロフィール' })).toHaveAttribute(
+      'href',
+      '/users/dev-user-b',
+    );
+    // 会話の中では解除しない（解除は相手のプロフィール、M-12）
+    expect(screen.queryByRole('button', { name: 'ブロックを解除する' })).not.toBeInTheDocument();
+    // これまでの会話は読める
+    expect(screen.getByText('ありがとうございます。申請してみます。')).toBeInTheDocument();
+    expect(db.blocks).toHaveLength(1);
+  });
+
+  it('ブロックされた側が送信すると、「送信できません」とだけ示す', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/conversations/dev-conv-question', { userId: 'dev-user-a' });
+    db.blocks.push({ blockerId: 'dev-user-b', blockedId: 'dev-user-a', createdAt: new Date() });
+
+    await user.type(await screen.findByLabelText('メッセージ'), 'こんにちは');
+    await user.click(screen.getByRole('button', { name: '送信' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^送信できません$/);
+    expect(screen.getByLabelText('メッセージ')).toHaveValue('こんにちは');
+  });
+
+  it('ブロックされた側が申請すると、「申請できません」とだけ示す', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp(`/events/${HOSTED_EVENT}`, { userId: 'dev-user-a' });
+    db.blocks.push({ blockerId: HOST, blockedId: 'dev-user-a', createdAt: new Date() });
+
+    await user.click(await findFirstButton('参加を申請する'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^申請できません$/);
+  });
+
+  it('ブロックの間は、新しく質問を始められず、「送信できません」とだけ示す', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/events/dev-b-full', { userId: 'dev-user-a' });
+    db.blocks.push({ blockerId: HOST, blockedId: 'dev-user-a', createdAt: new Date() });
+
+    await user.click(await screen.findByRole('button', { name: '主催者に質問する' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^送信できません$/);
+  });
+});
+
+describe('回数の上限（MSG-05・SAFE-09）', () => {
+  it('送信の上限に達したら、上限を示し、入力を残す', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/conversations/dev-conv-question', { userId: 'dev-user-a' });
+    for (let i = 0; i < 10; i += 1) {
+      db.messages.push({
+        id: `recent-${i}`,
+        seq: 1000 + i,
+        conversationId: 'dev-conv-approved',
+        senderId: 'dev-user-a',
+        body: 'よろしくお願いします',
+        clientRequestId: `recent-${i}`,
+        createdAt: new Date(),
+      });
+    }
+
+    await user.type(await screen.findByLabelText('メッセージ'), 'もう1通');
+    await user.click(screen.getByRole('button', { name: '送信' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '送信は、1分間に10通・1時間に60通までです。時間をおいてお試しください。',
+    );
+    expect(screen.getByLabelText('メッセージ')).toHaveValue('もう1通');
+  });
+
+  it('新しい会話の上限に達したら、上限を示す', async () => {
+    const user = userEvent.setup();
+    const { db } = renderApp('/events/dev-b-full', { userId: 'dev-user-a' });
+    for (let i = 0; i < 10; i += 1) {
+      db.conversations.push({
+        id: `recent-${i}`,
+        eventId: 'dev-ongoing',
+        hostId: HOST,
+        inquirerId: 'dev-user-a',
+        startedBy: 'dev-user-a',
+        createdAt: new Date(),
+        lastMessageAt: null,
+        hostLastReadSeq: 0,
+        inquirerLastReadSeq: 0,
+      });
+    }
+
+    await user.click(await screen.findByRole('button', { name: '主催者に質問する' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '新しい会話を始められるのは、24時間に10件までです。時間をおいてお試しください。',
+    );
+  });
+});
+
+describe('「未読あり」（M-09）', () => {
+  it('会話一覧に、相手から未読のメッセージがある会話だけ示し、開くと消える', async () => {
+    const user = userEvent.setup();
+    renderApp('/conversations', { userId: 'dev-user-a' });
+
+    const list = await screen.findByRole('list', { name: '会話の一覧' });
+    expect(within(list).getAllByText('未読あり')).toHaveLength(1);
+    const unread = within(list).getByRole('link', { name: /未読あり/ });
+    expect(unread).toHaveTextContent('ゆい');
+
+    await user.click(unread);
+    expect(await screen.findByRole('heading', { level: 1, name: 'ゆい' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '会話一覧に戻る' }));
+
+    const after = await screen.findByRole('list', { name: '会話の一覧' });
+    await waitFor(() => {
+      expect(within(after).queryByText('未読あり')).not.toBeInTheDocument();
+    });
+  });
+
+  it('PCでは、会話を開くと左の一覧からも消える', async () => {
+    asPc();
+    try {
+      renderApp('/conversations/dev-conv-approved', { userId: 'dev-user-a' });
+
+      const list = await screen.findByRole('list', { name: '会話の一覧' });
+      await waitFor(() => {
+        expect(within(list).queryByText('未読あり')).not.toBeInTheDocument();
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('相手には、自分が読んだかどうかを示さない', async () => {
+    const user = userEvent.setup();
+    const { switchUser } = renderApp('/conversations/dev-conv-approved', {
+      userId: 'dev-user-a',
+    });
+    await screen.findByRole('heading', { level: 1, name: 'ゆい' });
+
+    switchUser('dev-host-yui');
+    await user.click(await screen.findByRole('button', { name: '会話一覧に戻る' }));
+    await screen.findByRole('list', { name: '会話の一覧' });
+    expect(screen.queryByText(/既読|読みました/)).not.toBeInTheDocument();
   });
 });
