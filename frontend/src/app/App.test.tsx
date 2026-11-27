@@ -116,6 +116,30 @@ describe('募集一覧', () => {
     expect(list).toHaveBeenLastCalledWith(EVENT.id, EMPTY_FILTER);
     expect(screen.queryByRole('button', { name: '続きを読み込む' })).not.toBeInTheDocument();
   });
+
+  it('受付中と満員は、札と残り枠の文字で分けて示す', async () => {
+    const full: EventDetail = {
+      ...EVENT,
+      id: 'event-full',
+      title: '満員の募集',
+      remaining: 0,
+      state: 'full',
+    };
+    renderApp(
+      '/',
+      createRepository({
+        listEvents: () => Promise.resolve({ items: [EVENT, full], nextCursor: null }),
+      }),
+    );
+
+    const openCard = (await screen.findByRole('link', { name: EVENT.title })).closest('article');
+    const fullCard = screen.getByRole('link', { name: full.title }).closest('article');
+    if (!openCard || !fullCard) throw new Error('募集のカードがありません');
+    expect(within(openCard).getByText('受付中')).toBeInTheDocument();
+    expect(within(openCard).getByText('残り3／12人')).toBeInTheDocument();
+    expect(within(fullCard).getByText('満員')).toBeInTheDocument();
+    expect(within(fullCard).getByText('満員（募集12人）')).toBeInTheDocument();
+  });
 });
 
 describe('募集詳細（未ログイン）', () => {

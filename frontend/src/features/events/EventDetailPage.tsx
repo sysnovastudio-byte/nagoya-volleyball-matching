@@ -180,20 +180,26 @@ function ReportEventLink({ event }: { event: EventDetailData }) {
 
 function EventFacts({ event }: { event: PublicEvent }) {
   const filledRatio = (event.capacity - event.remaining) / event.capacity;
+  // 満員は、受付中と色みを変えて示す（docs/11の5-2「状態の色」）
+  const full = event.state === 'full';
 
   return (
     <dl className="flex flex-col gap-3.5">
       <Fact term="開催日時">{formatDateTimeRange(event.startsAt, event.endsAt)}</Fact>
       <Fact term="開催地">{areaLabel(event.area)}</Fact>
       <Fact term="残り枠">
-        <span className="text-2xl text-main-strong">{event.remaining}枠</span>
+        <span className={`text-2xl ${full ? 'text-accent-ink' : 'text-main-strong'}`}>
+          {full ? '満員' : `${event.remaining}枠`}
+        </span>
         <span className="ml-2 font-normal text-sub">募集{event.capacity}人</span>
         <span
           aria-hidden="true"
-          className="mt-1 block h-2.5 overflow-hidden rounded-full bg-main-tint"
+          className={`mt-1 block h-2.5 overflow-hidden rounded-full ${
+            full ? 'bg-accent-tint' : 'bg-main-tint'
+          }`}
         >
           <span
-            className="block h-full rounded-full bg-main"
+            className={`block h-full rounded-full ${full ? 'bg-accent' : 'bg-main'}`}
             style={{ width: `${filledRatio * 100}%` }}
           />
         </span>
@@ -284,7 +290,9 @@ function EventActions({ event, apply }: EventActionsProps) {
     <div className="flex flex-col gap-2">
       {/* 満員でも申請でき、承認するかは主催者が判断する（docs/11の2-2） */}
       {event.state === 'full' && (
-        <p className="text-center font-bold text-sub">満員です。申請すると主催者が判断します。</p>
+        <p className="text-center font-bold text-accent-ink">
+          満員です。申請すると主催者が判断します。
+        </p>
       )}
       <ApplyActions event={event} apply={apply} />
     </div>
@@ -386,7 +394,7 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
       {canReapplyNow && (
         <>
           {event.state === 'full' && (
-            <p className="text-center font-bold text-sub">
+            <p className="text-center font-bold text-accent-ink">
               満員です。申請すると主催者が判断します。
             </p>
           )}
