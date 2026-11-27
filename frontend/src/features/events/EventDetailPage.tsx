@@ -8,7 +8,7 @@ import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { StatusMessage } from '../../components/ui/StatusMessage';
-import { APPLICATION_STATUS_LABELS } from '../applications/format';
+import { ApplicationStatusBadge } from '../applications/ApplicationStatusBadge';
 import {
   canChangeOwnApplication,
   OwnApplicationActions,
@@ -359,10 +359,6 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
         return '申請を取り下げました。';
     }
   })();
-  const label =
-    mine.status === 'pending' && (started || event.state === 'cancelled')
-      ? '受付終了'
-      : APPLICATION_STATUS_LABELS[mine.status];
   const canReapplyNow = mine.canReapply && accepting;
   // キャンセル・取り下げの後で、申請が合計3回に達した場合
   const reachedLimit =
@@ -373,7 +369,7 @@ function MyApplicationStatus({ event, apply }: EventActionsProps) {
       <div className="flex flex-col items-center gap-1 text-center">
         <p>
           <span className="sr-only">あなたの申請：</span>
-          <Badge tone={mine.status === 'approved' ? 'main' : 'neutral'}>{label}</Badge>
+          <ApplicationStatusBadge status={mine.status} eventState={event.state} />
         </p>
         <p className="font-bold text-sub">{text}</p>
         {reachedLimit && (

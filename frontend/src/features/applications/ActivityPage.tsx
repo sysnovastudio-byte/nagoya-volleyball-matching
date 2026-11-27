@@ -2,13 +2,12 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useDocumentTitle } from '../../app/useDocumentTitle';
 import { useResource, type Resource } from '../../app/useResource';
-import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { EventStateBadge } from '../events/EventStateBadge';
 import { formatDateTimeRange } from '../events/format';
 import { useEventRepository } from '../events/repositoryContext';
 import type { EventState, MyEvent } from '../events/types';
-import { APPLICATION_STATUS_LABELS } from './format';
+import { ApplicationStatusBadge } from './ApplicationStatusBadge';
 import { OwnApplicationActions } from './OwnApplicationActions';
 import { useApplicationRepository } from './repositoryContext';
 import { SegmentedControl } from './SegmentedControl';
@@ -164,15 +163,6 @@ function ParticipationList({ items, onChanged }: ParticipationListProps) {
 
 function ParticipationItem({ item, onChanged }: { item: MyParticipation; onChanged: () => void }) {
   const { event } = item;
-  // 開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3）
-  const label =
-    item.status === 'pending' &&
-    !event.hidden &&
-    event.state !== 'open' &&
-    event.state !== 'full' &&
-    event.state !== 'closed'
-      ? '受付終了'
-      : APPLICATION_STATUS_LABELS[item.status];
 
   return (
     <li className="rounded-2xl border border-line bg-surface p-4">
@@ -181,7 +171,8 @@ function ParticipationItem({ item, onChanged }: { item: MyParticipation; onChang
       {!event.hidden && (
         <p className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-sub">あなたの申請</span>
-          <Badge tone={item.status === 'approved' ? 'main' : 'neutral'}>{label}</Badge>
+          {/* 開始後に残った承認待ちは「受付終了」と示す（docs/10の5-3） */}
+          <ApplicationStatusBadge status={item.status} eventState={event.state} />
         </p>
       )}
       {!event.hidden && (

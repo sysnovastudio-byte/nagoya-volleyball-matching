@@ -14,13 +14,9 @@ import {
 } from '../reports/reportRules';
 import type { ReportReason } from '../reports/types';
 import { AdminDenied, AdminPage, LoadError, Loading } from './AdminParts';
-import { ACTION_LABELS, USER_STATUS_LABELS, adminDateTime } from './format';
+import { ACTION_LABELS, USER_STATUS_LABELS, USER_STATUS_TONES, adminDateTime } from './format';
 import { useAdminRepository } from './repositoryContext';
-import type { AdminActionResult, AdminUserDetail, AdminUserStatus, SuspendResult } from './types';
-
-function statusTone(status: AdminUserStatus) {
-  return status === 'suspended' ? 'accent' : 'neutral';
-}
+import type { AdminActionResult, AdminUserDetail, SuspendResult } from './types';
 
 /**
  * SCR-022 利用者管理の検索（SAFE-05・CND-07）。ニックネームの一部で探し、1回20件まで示す。
@@ -76,7 +72,9 @@ export function UserSearchPage() {
                 className="flex min-h-11 flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-4 hover:bg-canvas"
               >
                 <span className="font-bold break-words">{user.nickname}</span>
-                <Badge tone={statusTone(user.status)}>{USER_STATUS_LABELS[user.status]}</Badge>
+                <Badge tone={USER_STATUS_TONES[user.status]}>
+                  {USER_STATUS_LABELS[user.status]}
+                </Badge>
               </Link>
             </li>
           ))}
@@ -131,7 +129,7 @@ function UserDetail({
       <section className="rounded-2xl border border-line bg-surface p-4">
         <h2 className="mb-2 flex flex-wrap items-center gap-2 text-xl font-bold break-words">
           {name}
-          <Badge tone={statusTone(user.status)}>{USER_STATUS_LABELS[user.status]}</Badge>
+          <Badge tone={USER_STATUS_TONES[user.status]}>{USER_STATUS_LABELS[user.status]}</Badge>
         </h2>
         {reportId && (
           <p className="text-sub">

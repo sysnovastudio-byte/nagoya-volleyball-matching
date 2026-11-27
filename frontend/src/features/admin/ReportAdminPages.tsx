@@ -6,7 +6,8 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { FormField, INPUT_CLASS } from '../../components/ui/FormField';
 import { StatusMessage } from '../../components/ui/StatusMessage';
-import { formatDateTimeRange, levelLabel, stateLabel } from '../events/format';
+import { EventStateBadge } from '../events/EventStateBadge';
+import { formatDateTimeRange, levelLabel } from '../events/format';
 import {
   REPORT_DETAIL_MAX,
   REPORT_REASONS,
@@ -18,7 +19,14 @@ import {
 } from '../reports/reportRules';
 import type { ReportReason, ReportStatus } from '../reports/types';
 import { AdminDenied, AdminPage, LoadError, Loading } from './AdminParts';
-import { USER_STATUS_LABELS, adminDateTime, elapsedSince, isOverdue } from './format';
+import {
+  REPORT_STATUS_TONES,
+  USER_STATUS_LABELS,
+  USER_STATUS_TONES,
+  adminDateTime,
+  elapsedSince,
+  isOverdue,
+} from './format';
 import { useAdminRepository } from './repositoryContext';
 import type {
   AdminActionResult,
@@ -43,10 +51,6 @@ function filterLabel(filter: ReportStatus | 'all') {
 
 function isFilter(value: string | null): value is ReportStatus | 'all' {
   return FILTERS.includes(value as ReportStatus | 'all');
-}
-
-function statusTone(status: ReportStatus) {
-  return status === 'open' ? 'accent' : status === 'inProgress' ? 'main' : 'neutral';
 }
 
 /**
@@ -118,12 +122,14 @@ function ReportList({
             className="flex flex-col gap-1 rounded-2xl border border-line bg-surface p-4 hover:bg-canvas"
           >
             <span className="flex flex-wrap items-center gap-2">
-              <Badge tone={statusTone(report.status)}>{REPORT_STATUS_LABELS[report.status]}</Badge>
+              <Badge tone={REPORT_STATUS_TONES[report.status]}>
+                {REPORT_STATUS_LABELS[report.status]}
+              </Badge>
               <span className="font-bold">
                 {REPORT_TARGET_LABELS[report.kind]}の通報：{reportReasonLabel(report.reason)}
               </span>
               {report.status === 'open' && isOverdue(report.createdAt, now) && (
-                <Badge tone="accent">1日以上経過</Badge>
+                <Badge tone="dangerTint">1日以上経過</Badge>
               )}
             </span>
             <span className="text-sub">
@@ -175,7 +181,9 @@ function ReportDetail({ report, onChanged }: { report: AdminReportDetail; onChan
       <Section title="受け付けた内容">
         <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[8rem_1fr]">
           <Term label="状態">
-            <Badge tone={statusTone(report.status)}>{REPORT_STATUS_LABELS[report.status]}</Badge>
+            <Badge tone={REPORT_STATUS_TONES[report.status]}>
+              {REPORT_STATUS_LABELS[report.status]}
+            </Badge>
           </Term>
           <Term label="受付">{adminDateTime(report.createdAt)}</Term>
           <Term label="対象">{REPORT_TARGET_LABELS[report.kind]}</Term>
@@ -188,7 +196,9 @@ function ReportDetail({ report, onChanged }: { report: AdminReportDetail; onChan
           <Term label="通報された人">
             <span className="flex flex-wrap items-center gap-2">
               <span className="font-bold">{subjectName}</span>
-              <Badge tone="neutral">{USER_STATUS_LABELS[report.subject.status]}</Badge>
+              <Badge tone={USER_STATUS_TONES[report.subject.status]}>
+                {USER_STATUS_LABELS[report.subject.status]}
+              </Badge>
               <Link
                 to={`/admin/users/${report.subject.userId}?${new URLSearchParams({ report: report.id }).toString()}`}
                 className="inline-flex min-h-11 items-center font-bold text-main-strong underline"
@@ -296,9 +306,11 @@ function EventView({ event }: { event: AdminEventView }) {
   return (
     <dl className="flex flex-col gap-2">
       <Term label="状態">
-        <Badge tone="neutral">
-          {event.state === 'hidden' ? '非表示' : stateLabel(event.state)}
-        </Badge>
+        {event.state === 'hidden' ? (
+          <Badge tone="violetTint">非表示</Badge>
+        ) : (
+          <EventStateBadge state={event.state} />
+        )}
       </Term>
       <Term label="タイトル">{event.title}</Term>
       <Term label="開催日時">{formatDateTimeRange(event.startsAt, event.endsAt)}</Term>

@@ -19,6 +19,13 @@
   --color-accent-ink: #8a5a10;
   --color-danger: #b3261e;
 
+  /* 状態の色（docs/11の5-2「状態の色」）。基本配色にない補助の色 */
+  --color-danger-tint: #fbe9e7;
+  --color-success: #256b43;
+  --color-success-tint: #e8f4ed;
+  --color-violet: #6b3fa0;
+  --color-violet-tint: #f1ebf9;
+
   /* 書体は未定（R-07）のため、端末の標準を使う */
   --font-sans:
     system-ui, -apple-system, 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', 'Noto Sans JP', sans-serif;
